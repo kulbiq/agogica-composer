@@ -38,4 +38,8 @@ struct Acoustics
     // Longest delay any stage asks the History for: the longest reflection path
     // (geometry::maxImageDistance) plus the tail pre-delay, with margin.
     static constexpr double maxDelaySeconds = 0.5;
+
+    // Longest audible tail after the input stops: the longest reverb (Church, 4 s) plus the
+    // longest delay. Reported to the host; also how long a silent track keeps processing.
+    static constexpr double tailSeconds = 5.0;
 };

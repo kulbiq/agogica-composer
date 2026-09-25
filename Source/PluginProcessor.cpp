@@ -153,6 +153,27 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
     acoustics.hall = &halls[(size_t) juce::jlimit (0, (int) halls.size() - 1, (int) audioParams.hall->load())];
 
+    // A track silent for longer than the tail produces silence: skip all the work. When
+    // sound returns, everything inside is silent too, so stages jump straight to the
+    // current position instead of fading from where they were.
+    if (peak <= 0.0f)
+    {
+        if (silentFor >= skipAfter)
+        {
+            buffer.clear();
+            return;
+        }
+
+        silentFor += buffer.getNumSamples();
+    }
+    else
+    {
+        if (silentFor >= skipAfter)
+            std::apply ([] (auto&... stage) { (stage.jumpToTargets(), ...); }, stages);
+
+        silentFor = 0;
+    }
+
     std::apply ([&] (auto&... stage) { (stage.setAcoustics (acoustics), ...); }, stages);
 
     const auto numInputs = getTotalNumInputChannels();
@@ -178,6 +199,8 @@ void ComposerProcessor::prepareToPlay (double sampleRate, int)
 {
     history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
     std::apply ([&] (auto&... stage) { (stage.prepare (sampleRate), ...); }, stages);
+    skipAfter = (int) (Acoustics::tailSeconds * sampleRate);
+    silentFor = 0;
 }
 
 juce::AudioProcessorEditor* ComposerProcessor::createEditor()

@@ -79,6 +79,9 @@ public:
         return a + dsp::fadeGain (fade) * (b - a);
     }
 
+    // The next target is taken as-is (after silence, when there's nothing to fade).
+    void jumpToTarget() noexcept { snap = true; }
+
     // The delay currently heard (the one being faded from, during a fade).
     float current() const noexcept { return from; }
 

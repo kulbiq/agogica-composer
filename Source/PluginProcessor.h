@@ -4,6 +4,7 @@
 #include "stage/StageRegistry.h"
 #include "dsp/DirectPath.h"
 #include "dsp/EarlyReflections.h"
+#include "dsp/ReverbTail.h"
 
 class ComposerProcessor final : public juce::AudioProcessor
 {
@@ -24,7 +25,7 @@ public:
     bool acceptsMidi() const override                   { return false; }
     bool producesMidi() const override                  { return false; }
     bool isMidiEffect() const override                  { return false; }
-    double getTailLengthSeconds() const override        { return Acoustics::maxDelaySeconds; }
+    double getTailLengthSeconds() const override        { return Acoustics::tailSeconds; }
 
     int getNumPrograms() override                       { return 1; }
     int getCurrentProgram() override                    { return 0; }
@@ -100,7 +101,10 @@ private:
 
     // The processing chain: every stage reads `history` and adds its stereo output.
     // Plug a stage in or out here.
-    std::tuple<DirectPath, EarlyReflections> stages;
+    std::tuple<DirectPath, EarlyReflections, ReverbTail> stages;
+
+    // Samples of silent input so far; a track silent for longer than the tail skips all work.
+    int silentFor = 0, skipAfter = 0;
 
     juce::String trackName, trackColour;
 

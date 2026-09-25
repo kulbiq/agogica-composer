@@ -14,6 +14,12 @@ public:
     void prepare (double sampleRate);
     void setAcoustics (const Acoustics&) noexcept;
     void processSample (const History&, float& left, float& right) noexcept;
+    void jumpToTargets() noexcept
+    {
+        for (auto& r : reflections)
+            r.delay.jumpToTarget();
+        snap = true;
+    }
 
 private:
     struct Reflection
