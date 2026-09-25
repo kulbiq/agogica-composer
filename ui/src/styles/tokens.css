@@ -1,0 +1,99 @@
+/* Design tokens copied from the Agogica website app/globals.css (branch staging) - keep in sync. */
+
+:root {
+  /* Let the browser theme native controls (scrollbars, form UI, etc.) */
+  color-scheme: light dark;
+
+  /* Palette – cool slate monochrome + a single warm "live pulse" accent.
+     Light theme is the default; the dark theme below mirrors every token so
+     components only ever reference vars (never raw hex). */
+  --paper: #f1f5f9; /* Paper White  – surface / canvas        */
+  --ink: #0f172a; /* Ink Black    – type / primary          */
+  --ink-light: #334155; /* Ink Light    – body copy               */
+  --ink-lighter: #64748b; /* Ink Lighter  – labels / meta           */
+  --ink-faint: #94a3b8; /* Ink Faint    – secondary tags          */
+  --surface: #ffffff; /* card / input surface                   */
+
+  --signal-amber: #c2772e; /* live pulse only – never on chrome/type */
+  --pulse-cyan: #2e8b9e; /* alternate signal temperature           */
+  --levare-coral: #c25b47; /* alternate signal temperature           */
+
+  /* Hairline borders */
+  --line: rgba(15, 23, 42, 0.1);
+  --line-strong: rgba(15, 23, 42, 0.2);
+  --line-input: rgba(15, 23, 42, 0.18);
+
+  /* Canvas stroke/fill base as an RGB triplet – read by standbyScene.ts so the
+     ambient animation tracks the theme. Light: ink on paper. */
+  --ink-rgb: 15, 23, 42;
+
+  /* Type families (bundled woff2, see fonts.css) */
+  --font-display: "Space Grotesk", sans-serif;
+  --font-body: "Hanken Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Radius – hard / mechanical */
+  --radius-button: 0px;
+  --radius-input: 2px;
+  --radius-chip: 3px;
+}
+
+/* Dark theme – auto-applied when the OS/browser prefers dark.
+   The slate inverts: deep-slate paper, light-slate ink. The warm accent is
+   unchanged (it only ever appears on the live pulse). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0b1120; /* deep slate – surface / canvas         */
+    --ink: #e2e8f0; /* light slate – type / primary           */
+    --ink-light: #cbd5e1; /* body copy                              */
+    --ink-lighter: #94a3b8; /* labels / meta                          */
+    --ink-faint: #64748b; /* secondary tags                         */
+    --surface: #111827; /* card / input surface                   */
+
+    --line: rgba(226, 232, 240, 0.12);
+    --line-strong: rgba(226, 232, 240, 0.24);
+    --line-input: rgba(226, 232, 240, 0.2);
+
+    --ink-rgb: 226, 232, 240; /* light strokes on dark canvas */
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The pulse dot – breathes rather than ticks */
+@keyframes ag-blink {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Plugin editor: the page is the whole window, never scrolls. */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}

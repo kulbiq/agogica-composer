@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Validate the installed Composer plugins: auval + pluginval (strictness 10).
+# Usage: scripts/pluginval.sh   (build first; COPY_PLUGIN_AFTER_BUILD installs them)
+set -euo pipefail
+
+version=v1.0.4
+tools="$(cd "$(dirname "$0")/.." && pwd)/build/tools"
+pluginval="$tools/pluginval.app/Contents/MacOS/pluginval"
+plugins="$HOME/Library/Audio/Plug-Ins"
+
+if [[ ! -x "$pluginval" ]]; then
+    mkdir -p "$tools"
+    curl -fsSL -o "$tools/pluginval.zip" \
+        "https://github.com/Tracktion/pluginval/releases/download/$version/pluginval_macOS.zip"
+    unzip -qo "$tools/pluginval.zip" -d "$tools"
+    xattr -dr com.apple.quarantine "$tools/pluginval.app" || true
+fi
+
+# Make the AU registrar pick up the freshly copied component.
+killall -9 AudioComponentRegistrar 2>/dev/null || true
+
+auval -v aufx Cmps Agog
+
+for plugin in "$plugins/VST3/Composer.vst3" "$plugins/Components/Composer.component"; do
+    "$pluginval" --strictness-level 10 \
+        --timeout-ms 120000 --validate "$plugin"
+done
