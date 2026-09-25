@@ -20,24 +20,6 @@ const settings = {
 };
 let centre = 0;
 
-// One-Euro filter (Casiez et al. 2012): smooth when still, responsive when moving.
-class OneEuro {
-  private x?: number;
-  private dx = 0;
-  constructor(private minCutoff = 1.0, private beta = 0.02, private dCutoff = 1.0) {}
-  private static alpha(cutoff: number, dt: number) {
-    const tau = 1 / (2 * Math.PI * cutoff);
-    return 1 / (1 + tau / dt);
-  }
-  filter(value: number, dt: number) {
-    if (this.x === undefined) return (this.x = value);
-    const dx = (value - this.x) / dt;
-    this.dx += OneEuro.alpha(this.dCutoff, dt) * (dx - this.dx);
-    const cutoff = this.minCutoff + this.beta * Math.abs(this.dx);
-    return (this.x += OneEuro.alpha(cutoff, dt) * (value - this.x));
-  }
-}
-
 const wrap = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 
 function setStatus(text: string, live: boolean) {
@@ -51,59 +33,43 @@ function show(yaw: number) {
 }
 
 // ---- Output ----------------------------------------------------------------------------------
-// Past its range the model loses the head. Near the edge we hold the last angle (instead of
-// swinging the scene back to the front); lost near the centre means the listener left.
-const holdEdgeDegrees = 35;
-const holdSeconds = 3;
+// The app's temporal gate (tracker/engines/HeadFilter.h) already smooths, rejects the model's
+// jumps and holds through short losses; here only Invert and Recenter apply (after the gate:
+// the model's front/back error happens in the camera's frame).
 
 class Output {
-  private filter = new OneEuro();
-  private unwrapped = 0;
-  private lastWrapped = 0;
-  private lastTime = performance.now();
-  private lastYaw = 0;
-  private lostSince?: number;
   private recent: { t: number; raw: number }[] = [];
   range = { min: 0, max: 0 };
-  lastRaw = 0;
+  lastOutput = 0;
   frames = 0;
   dropouts = 0;
 
-  // `raw`: the yaw with Invert applied, before Recenter; undefined = lost.
-  feed(raw: number | undefined, pitch: number, roll: number) {
+  feed(e: { found: boolean; output: number; measured?: boolean; yaw?: number; pitch?: number; roll?: number; reacquiring?: boolean }) {
     const now = performance.now();
     this.frames++;
+    if (!e.measured) this.dropouts++;
 
-    if (raw === undefined) {
-      this.dropouts++;
-      this.lostSince ??= now;
-      const holding = Math.abs(this.lastYaw) >= holdEdgeDegrees && now - this.lostSince < holdSeconds * 1000;
-      setStatus(holding ? "Holding (turned away)" : "No head", holding);
-      void sendPose(holding ? this.lastYaw : 0, 0, 0, holding);
+    if (!e.found) {
+      setStatus("No head", false);
+      void sendPose(0, 0, 0, false);
       return;
     }
-    this.lostSince = undefined;
-    this.lastRaw = raw;
-    this.recent = [...this.recent.filter((r) => now - r.t < 2000), { t: now, raw }];
 
-    const dt = Math.max(1e-3, (now - this.lastTime) / 1000);
-    this.lastTime = now;
-    const wrapped = wrap(raw - centre);
-    this.unwrapped += wrap(wrapped - this.lastWrapped);
-    this.lastWrapped = wrapped;
-    const head = wrap(this.filter.filter(this.unwrapped, dt));
-    this.range.min = Math.min(this.range.min, head);
-    this.range.max = Math.max(this.range.max, head);
+    const sign = settings.invert ? -1 : 1;
+    if (e.measured && e.yaw !== undefined)
+      this.recent = [...this.recent.filter((r) => now - r.t < 2000), { t: now, raw: sign * e.yaw }];
 
-    const yaw = head;
-    this.lastYaw = yaw;
+    this.lastOutput = sign * e.output;
+    const yaw = wrap(this.lastOutput - centre);
+    this.range.min = Math.min(this.range.min, yaw);
+    this.range.max = Math.max(this.range.max, yaw);
 
-    setStatus("Tracking", true);
+    setStatus(e.reacquiring ? "Tracking (re-acquiring)" : e.measured ? "Tracking" : "Holding", true);
     show(yaw);
-    void sendPose(yaw, pitch, roll, true);
+    void sendPose(yaw, e.pitch ?? 0, e.roll ?? 0, true);
   }
 
-  // Frame-to-frame noise of the raw yaw over the last 2 s (hold still to read the jitter).
+  // Frame-to-frame noise of the model's raw yaw over the last 2 s (hold still to read it).
   jitter() {
     const d = this.recent.slice(1).map((r, i) => wrap(r.raw - this.recent[i].raw));
     return d.length ? Math.sqrt(d.reduce((a, b) => a + b * b, 0) / d.length) : 0;
@@ -118,7 +84,7 @@ async function main() {
   camera.open = localStorage.getItem("cameraOpen") === "1";
   camera.ontoggle = () => localStorage.setItem("cameraOpen", camera.open ? "1" : "0");
 
-  $("recenter").onclick = () => (centre = output.lastRaw);
+  $("recenter").onclick = () => (centre = output.lastOutput);
   $("invert").setAttribute("aria-pressed", String(settings.invert));
   $("invert").onclick = () => {
     settings.invert = !settings.invert;
@@ -134,8 +100,8 @@ async function main() {
   let ms = 0;
   window.__JUCE__.backend.addEventListener("estimate", (payload) => {
     const e = payload as {
-      status: string; detail?: string; provider?: string; found?: boolean;
-      yaw?: number; pitch?: number; roll?: number; box?: number[]; detectMs?: number; poseMs?: number;
+      status: string; detail?: string; provider?: string; found: boolean; output: number; measured?: boolean;
+      yaw?: number; pitch?: number; roll?: number; box?: number[]; detectMs?: number; poseMs?: number; reacquiring?: boolean;
     };
     if (settings.paused) return;
 
@@ -149,7 +115,7 @@ async function main() {
     $("source").textContent = `${e.provider} · detect ${(e.detectMs ?? 0).toFixed(1)} ms · pose ${(e.poseMs ?? 0).toFixed(1)} ms`;
 
     const box = $("box");
-    if (e.found && e.box) {
+    if (e.measured && e.box) {
       const [x, y, w, h] = e.box;
       Object.assign(box.style, { left: `${(1 - x - w) * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` });
       box.hidden = false;
@@ -157,8 +123,7 @@ async function main() {
       box.hidden = true;
     }
 
-    const raw = e.found && e.yaw !== undefined ? (settings.invert ? -1 : 1) * e.yaw : undefined;
-    output.feed(raw, e.pitch ?? 0, e.roll ?? 0);
+    output.feed(e);
   });
 
   setStatus("Loading", false);

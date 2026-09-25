@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <juce_core/juce_core.h>
 #include "../tracker/engines/Decode.h"
 
 using Catch::Matchers::WithinAbs;
@@ -22,4 +23,192 @@ TEST_CASE ("head continuity: the head nearest to the previous one")
     CHECK (pickHead (heads, std::nullopt)->score > 0.8f);                    // first frame: the strongest
     CHECK (pickHead (heads, Box { 98, 0, 108, 10 })->box.x1 > 50.0f);         // then: the same person
     CHECK_FALSE (pickHead ({}, std::nullopt).has_value());
+}
+
+// ---- HeadFilter ------------------------------------------------------------------------------
+
+#include "../tracker/engines/HeadFilter.h"
+#include <random>
+
+namespace
+{
+constexpr float dt = 1.0f / 30.0f;
+
+// Feeds `frames` measurements at `yaw` (confidence c); returns the last state.
+FilterState feed (HeadFilter& f, float yaw, int frames, float c = 1.0f)
+{
+    FilterState s;
+    for (int i = 0; i < frames; ++i)
+        s = f.update (Measurement { yaw, c }, dt);
+    return s;
+}
+} // namespace
+
+TEST_CASE ("head filter: still with noise - the output is much calmer than the input")
+{
+    HeadFilter f;
+    std::mt19937 rng (1);
+    std::normal_distribution<float> noise (0.0f, 4.0f);
+
+    feed (f, 30.0f, 30);
+    float rawJitter = 0, outJitter = 0, lastRaw = 30, lastOut = f.update (Measurement { 30, 1 }, dt).output;
+    for (int i = 0; i < 300; ++i)
+    {
+        const auto raw = 30.0f + noise (rng);
+        const auto out = f.update (Measurement { raw, 1 }, dt).output;
+        rawJitter += std::abs (raw - lastRaw);
+        outJitter += std::abs (out - lastOut);
+        lastRaw = raw, lastOut = out;
+    }
+    CHECK (outJitter < 0.5f * rawJitter);
+}
+
+TEST_CASE ("head filter: a single wild frame is ignored")
+{
+    HeadFilter f;
+    const auto before = feed (f, 180.0f, 30).output;
+    const auto s = feed (f, 10.0f, 1); // the user's example: 180 -> 10 for one frame
+    CHECK (std::abs (wrap (s.output - before)) < 2.0f);
+    CHECK (std::abs (wrap (feed (f, 180.0f, 10).output - 180.0f)) < 2.0f);
+}
+
+TEST_CASE ("head filter: a burst of mirrored readings (180 - z) is ignored")
+{
+    HeadFilter f;
+    feed (f, 110.0f, 30);
+    const auto s = feed (f, mirrorOf (110.0f), 3, 0.3f); // doubtful hemisphere, 3 frames
+    CHECK (std::abs (wrap (s.output - 110.0f)) < 3.0f);
+}
+
+TEST_CASE ("head filter: a new direction wins after confirmFrames, not before")
+{
+    FilterParams p;
+    p.confirmFrames = 6;
+    HeadFilter f (p);
+
+    feed (f, 0.0f, 30);
+    CHECK (std::abs (wrap (feed (f, 120.0f, p.confirmFrames / 2).estimate)) < 15.0f); // not yet
+
+    HeadFilter g (p);
+    feed (g, 0.0f, 30);
+    CHECK (std::abs (wrap (feed (g, 120.0f, p.confirmFrames).estimate - 120.0f)) < 15.0f); // now
+}
+
+TEST_CASE ("head filter: an accepted switch is approached slowly, never in a jump")
+{
+    HeadFilter f;
+    feed (f, 180.0f, 30);
+
+    float last = f.update (Measurement { 180, 1 }, dt).output, worst = 0;
+    bool arrived = false;
+    for (int i = 0; i < 90; ++i) // 3 s at the new direction
+    {
+        const auto s = f.update (Measurement { 10.0f, 1 }, dt);
+        worst = std::max (worst, std::abs (wrap (s.output - last)));
+        last = s.output;
+        arrived = arrived || std::abs (wrap (s.output - 10.0f)) < 2.0f;
+    }
+    CHECK (worst <= f.getParams().maxSpeed * dt + 1e-3f);     // never a jump
+    CHECK (worst <= f.getParams().reacquireSpeed * dt + 1e-3f); // re-acquired at the slow speed
+    CHECK (arrived);                                            // 170° at 90 °/s: under 2 s
+}
+
+TEST_CASE ("head filter: a fast genuine turn is followed without re-acquisition")
+{
+    HeadFilter f;
+    feed (f, 0.0f, 30);
+    FilterState s;
+    bool reacquired = false;
+    for (int i = 1; i <= 12; ++i) // 90° in 0.4 s: 225 °/s
+    {
+        s = f.update (Measurement { 90.0f * (float) i / 12.0f, 1 }, dt);
+        reacquired = reacquired || s.reacquiring;
+    }
+    s = feed (f, 90.0f, 6); // + 0.2 s
+    CHECK_FALSE (reacquired);
+    CHECK (std::abs (wrap (s.output - 90.0f)) < 5.0f);
+}
+
+TEST_CASE ("head filter: continuous turn across ±180 without a jump")
+{
+    HeadFilter f;
+    feed (f, 150.0f, 30);
+    float last = f.update (Measurement { 150, 1 }, dt).output, worst = 0;
+    for (int i = 1; i <= 60; ++i) // 150 -> 210 (= -150), 30 °/s
+    {
+        const auto s = f.update (Measurement { wrap (150.0f + (float) i), 1 }, dt);
+        worst = std::max (worst, std::abs (wrap (s.output - last)));
+        last = s.output;
+    }
+    CHECK (worst < 3.0f);
+    CHECK (std::abs (wrap (last + 150.0f)) < 5.0f);
+}
+
+TEST_CASE ("head filter: a lost head is held, then released")
+{
+    HeadFilter f;
+    feed (f, 120.0f, 30);
+    FilterState s;
+    for (int i = 0; i < 60; ++i) // 2 s without a head, turned away: held
+        s = f.update (std::nullopt, dt);
+    CHECK (s.tracking);
+    CHECK (std::abs (wrap (s.output - 120.0f)) < 5.0f);
+    for (int i = 0; i < 40; ++i) // past 3 s: released
+        s = f.update (std::nullopt, dt);
+    CHECK_FALSE (s.tracking);
+
+    HeadFilter g;
+    feed (g, 5.0f, 30);
+    for (int i = 0; i < 20; ++i) // facing the camera and gone for 0.67 s: the listener left
+        s = g.update (std::nullopt, dt);
+    CHECK_FALSE (s.tracking);
+}
+
+TEST_CASE ("hemisphere certainty: pitch/roll halfway means front/back is unknown")
+{
+    CHECK (hemisphereCertainty (3.8f, -13.9f) > 0.9f);     // facing the camera
+    CHECK (hemisphereCertainty (-175.6f, 174.9f) > 0.9f);  // facing away
+    CHECK (hemisphereCertainty (67.5f, 66.1f) < 0.2f);     // the recorded suspicious frames
+    CHECK (hemisphereCertainty (38.8f, 44.3f) < 0.6f);
+}
+
+// Replays a recorded session (tests/data/tracker-session-*.jsonl, 30 fps) and prints what the
+// filter did with it. Run: ComposerTests "[.replay]" -s
+TEST_CASE ("head filter: replay recorded sessions", "[.replay]")
+{
+    for (const auto& file : juce::File (COMPOSER_TEST_DATA).findChildFiles (juce::File::findFiles, false, "tracker-session-*.jsonl"))
+    {
+        HeadFilter f;
+        juce::StringArray lines;
+        file.readLines (lines);
+
+        int rawJumps = 0, outJumps = 0, frames = 0;
+        float lastRaw = 0, lastOut = 0, worstStep = 0, lagSum = 0;
+        bool first = true;
+
+        for (const auto& line : lines)
+        {
+            const auto v = juce::JSON::parse (line);
+            std::optional<Measurement> m;
+            if (v.hasProperty ("yaw"))
+                m = Measurement { (float) v["yaw"], hemisphereCertainty ((float) v["pitch"], (float) v["roll"]) };
+
+            const auto s = f.update (m, dt);
+            if (! m || ! s.tracking)
+                continue;
+
+            if (! first)
+            {
+                rawJumps += std::abs (wrap (m->yaw - lastRaw)) > 30.0f;
+                outJumps += std::abs (wrap (s.output - lastOut)) > 30.0f;
+                worstStep = std::max (worstStep, std::abs (wrap (s.output - lastOut)));
+            }
+            lagSum += std::abs (wrap (s.output - m->yaw));
+            lastRaw = m->yaw, lastOut = s.output, first = false, ++frames;
+        }
+
+        UNSCOPED_INFO (file.getFileName() << ": " << frames << " frames; steps > 30°: raw " << rawJumps << ", output " << outJumps
+                        << "; largest output step " << worstStep << "°; mean |output - raw| " << lagSum / (float) frames << "°");
+    }
+    CHECK (true);
 }

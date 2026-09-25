@@ -1,4 +1,5 @@
 #include "EngineHost.h"
+#include "engines/HeadFilter.h"
 
 EngineHost::EngineHost (juce::File dir, std::function<void (const juce::var&)> e)
     : juce::Thread ("head-pose engine"), modelsDir (std::move (dir)), emit (std::move (e))
@@ -99,6 +100,10 @@ void EngineHost::run()
     bool first = true;
     status ("starting camera");
 
+    // The temporal gate: 6DRepNet360's raw headings -> a stable output (see HeadFilter.h).
+    engines::HeadFilter filter;
+    auto lastFrame = juce::Time::getMillisecondCounterHiRes();
+
     while (! threadShouldExit())
     {
         if (! frameReady.wait (200))
@@ -122,21 +127,35 @@ void EngineHost::run()
             o->setProperty ("status", "running");
             o->setProperty ("provider", engine->provider());
 
-            if (const auto e = engine->estimate (frame))
+            const auto now = juce::Time::getMillisecondCounterHiRes();
+            const auto dt = (float) (now - std::exchange (lastFrame, now)) / 1000.0f;
+            const auto e = engine->estimate (frame);
+
+            std::optional<engines::Measurement> m;
+            if (e)
+                m = engines::Measurement { e->yaw, engines::hemisphereCertainty (e->pitch, e->roll) };
+
+            const auto s = filter.update (m, dt);
+
+            // "found" = the gate is tracking (it holds through short losses); raw values only
+            // when this frame had a head.
+            o->setProperty ("found", s.tracking);
+            o->setProperty ("output", s.output);
+            o->setProperty ("estimate", s.estimate);
+            o->setProperty ("certainty", s.certainty);
+            o->setProperty ("reacquiring", s.reacquiring);
+
+            if (e)
             {
-                o->setProperty ("found", true);
+                o->setProperty ("measured", true);
                 o->setProperty ("yaw", e->yaw);
                 o->setProperty ("rawYaw", e->rawYaw);
                 o->setProperty ("pitch", e->pitch);
                 o->setProperty ("roll", e->roll);
-                o->setProperty ("confidence", e->confidence);
+                o->setProperty ("confidence", m->confidence);
                 o->setProperty ("box", juce::Array<juce::var> { e->box.getX(), e->box.getY(), e->box.getWidth(), e->box.getHeight() });
                 o->setProperty ("detectMs", e->detectMs);
                 o->setProperty ("poseMs", e->poseMs);
-            }
-            else
-            {
-                o->setProperty ("found", false);
             }
             post (o);
         }
