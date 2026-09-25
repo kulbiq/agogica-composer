@@ -90,7 +90,7 @@ TEST_CASE ("pan: constant-power law")
         { -0.5f, std::cos (juce::MathConstants<double>::pi / 8), std::sin (juce::MathConstants<double>::pi / 8) },
     }));
 
-    s.setTarget (pan, 0.0f);
+    s.setTarget (pan * 90.0f, 0.0f); // pan -1..+1 = azimuth -90..+90
     const auto out = run (s, std::vector<float> (256, 1.0f));
     CHECK_THAT (out.left.back(), WithinAbs (expectedLeft, 1e-4));
     CHECK_THAT (out.right.back(), WithinAbs (expectedRight, 1e-4));
@@ -110,7 +110,7 @@ TEST_CASE ("stereo input is summed to mono")
 {
     Spatializer s;
     s.prepare (48000.0);
-    s.setTarget (-1.0f, 0.0f); // hard left: left = the mono sum
+    s.setTarget (-90.0f, 0.0f); // -90 = hard left: left = the mono sum
 
     std::vector<float> l (64, 1.0f), r (64, 0.0f), left (64), right (64);
     const float* in[] { l.data(), r.data() };
@@ -173,14 +173,14 @@ TEST_CASE ("after a delay change the output is exactly the input at the new dela
 {
     Spatializer s;
     s.prepare (48000.0);
-    s.setTarget (-1.0f, 100.0f / 48000.0f); // hard left: left = the delayed input
+    s.setTarget (-90.0f, 100.0f / 48000.0f); // hard left: left = the delayed input
 
     const auto noise = whiteNoise (20000, 7);
     Output out { std::vector<float> (noise.size()), std::vector<float> (noise.size()) };
     const float* first[] { noise.data() };
     s.process (first, 1, out.left.data(), out.right.data(), 1000);
 
-    s.setTarget (-1.0f, 700.0f / 48000.0f);
+    s.setTarget (-90.0f, 700.0f / 48000.0f);
     const float* rest[] { noise.data() + 1000 };
     s.process (rest, 1, out.left.data() + 1000, out.right.data() + 1000, 19000);
 
@@ -195,7 +195,7 @@ TEST_CASE ("a moving player keeps its delay until it stops (no fade chain)")
 {
     Spatializer s;
     s.prepare (48000.0);
-    s.setTarget (-1.0f, 100.0f / 48000.0f);
+    s.setTarget (-90.0f, 100.0f / 48000.0f);
 
     const auto noise = whiteNoise (48000, 11);
     std::vector<float> left (noise.size()), right (noise.size());
@@ -204,7 +204,7 @@ TEST_CASE ("a moving player keeps its delay until it stops (no fade chain)")
     for (size_t start = 0; start < noise.size(); start += 64)
     {
         const auto moving = start < 14400;
-        s.setTarget (-1.0f, (moving ? 100.0f + (float) start / 18.0f : 900.0f) / 48000.0f);
+        s.setTarget (-90.0f, (moving ? 100.0f + (float) start / 18.0f : 900.0f) / 48000.0f);
         const float* in[] { noise.data() + start };
         s.process (in, 1, left.data() + start, right.data() + start, 64);
     }
@@ -220,14 +220,14 @@ TEST_CASE ("a player moving for a long time still updates its delay every ~0.5 s
 {
     Spatializer s;
     s.prepare (48000.0);
-    s.setTarget (-1.0f, 100.0f / 48000.0f);
+    s.setTarget (-90.0f, 100.0f / 48000.0f);
 
     const auto noise = whiteNoise (48000, 13);
     std::vector<float> left (noise.size()), right (noise.size());
 
     for (size_t start = 0; start < noise.size(); start += 64)
     {
-        s.setTarget (-1.0f, (100.0f + (float) start / 60.0f) / 48000.0f); // never stops
+        s.setTarget (-90.0f, (100.0f + (float) start / 60.0f) / 48000.0f); // never stops
         const float* in[] { noise.data() + start };
         s.process (in, 1, left.data() + start, right.data() + start, 64);
     }
@@ -251,7 +251,7 @@ TEST_CASE ("block size doesn't change the result (1-sample blocks included)")
     {
         Spatializer s;
         s.prepare (44100.0);
-        s.setTarget (0.3f, 0.0123f);
+        s.setTarget (27.0f, 0.0123f);
         return run (s, noise, blockSize);
     };
 
@@ -306,4 +306,215 @@ TEST_CASE ("processBlock: position from parameters, clamped to the room, no allo
 
     const auto expected = std::hypot (5.0, 5.0) / 343.0 * sampleRate; // ~989.6 samples
     CHECK (std::abs ((double) peakIndex (left) - expected) <= 1.0);
+}
+
+// ---- Binaural ----------------------------------------------------------------
+
+#include "../Source/dsp/Hrtf.h"
+
+namespace
+{
+double rms (const float* v, size_t n)
+{
+    double sum = 0.0;
+    for (size_t i = 0; i < n; ++i)
+        sum += (double) v[i] * v[i];
+    return std::sqrt (sum / (double) n);
+}
+
+double db (double ratio) { return 20.0 * std::log10 (ratio); }
+
+Output render (Spatializer::Mode mode, float azimuth, const std::vector<float>& input, double sampleRate = 48000.0)
+{
+    Spatializer s;
+    s.prepare (sampleRate);
+    s.setMode (mode);
+    s.setTarget (azimuth, 0.0f);
+    return run (s, input);
+}
+
+size_t onset (const std::vector<float>& v)
+{
+    float peak = 0.0f;
+    for (auto x : v)
+        peak = std::max (peak, std::abs (x));
+
+    for (size_t i = 0; i < v.size(); ++i)
+        if (std::abs (v[i]) > 0.1f * peak)
+            return i;
+
+    return v.size();
+}
+
+// Largest sample-to-sample step within [from, to).
+float maxStep (const std::vector<float>& v, size_t from, size_t to)
+{
+    float step = 0.0f;
+    for (size_t i = from + 1; i < to; ++i)
+        step = std::max (step, std::abs (v[i] - v[i - 1]));
+    return step;
+}
+} // namespace
+
+TEST_CASE ("HRTF tables: every rate, 1-degree grid, right ear louder at +90")
+{
+    const auto [rate, taps] = GENERATE (table<double, int> ({
+        { 44100.0, 235 }, { 48000.0, 256 }, { 88200.0, 470 }, { 96000.0, 512 }, { 176400.0, 941 }, { 192000.0, 1024 },
+    }));
+
+    const auto& h = Hrtf::forSampleRate (rate);
+    CHECK_THAT (h.sampleRate(), WithinAbs (rate, 0.5));
+    CHECK (h.taps() == taps);
+
+    auto energy = [&] (int index, int ear)
+    {
+        return rms (h.reversedIr (index, ear), (size_t) h.taps());
+    };
+
+    CHECK (db (energy (Hrtf::nearestIndex (90.0f), 1) / energy (Hrtf::nearestIndex (90.0f), 0)) > 10.0);
+    CHECK (db (energy (Hrtf::nearestIndex (-90.0f), 0) / energy (Hrtf::nearestIndex (-90.0f), 1)) > 10.0);
+}
+
+TEST_CASE ("HRTF index wraps around the circle")
+{
+    CHECK (Hrtf::nearestIndex (0.0f) == 0);
+    CHECK (Hrtf::nearestIndex (90.0f) == 90);
+    CHECK (Hrtf::nearestIndex (-90.0f) == 270);
+    CHECK (Hrtf::nearestIndex (180.0f) == 180);
+    CHECK (Hrtf::nearestIndex (-180.0f) == 180);
+    CHECK (Hrtf::nearestIndex (359.6f) == 0);
+}
+
+TEST_CASE ("binaural at the front is as loud as stereo at centre")
+{
+    const auto noise = whiteNoise (96000, 21);
+    const auto stereo = render (Spatializer::Mode::stereo, 0.0f, noise);
+    const auto binaural = render (Spatializer::Mode::binaural, 0.0f, noise);
+
+    auto power = [] (const Output& o)
+    {
+        return rms (o.left.data() + 1024, o.left.size() - 1024) + rms (o.right.data() + 1024, o.right.size() - 1024);
+    };
+
+    CHECK (std::abs (db (power (binaural) / power (stereo))) < 1.0);
+}
+
+TEST_CASE ("binaural direction: level and arrival-time differences between the ears")
+{
+    const auto noise = whiteNoise (48000, 22);
+    const auto right = render (Spatializer::Mode::binaural, 90.0f, noise);
+    const auto left = render (Spatializer::Mode::binaural, -90.0f, noise);
+
+    CHECK (db (rms (right.right.data(), noise.size()) / rms (right.left.data(), noise.size())) > 6.0);
+    CHECK (db (rms (left.left.data(), noise.size()) / rms (left.right.data(), noise.size())) > 6.0);
+
+    // Interaural time difference: at +90 the right ear hears it > 0.3 ms earlier.
+    const auto click = render (Spatializer::Mode::binaural, 90.0f, impulse (1024));
+    CHECK ((double) onset (click.left) - (double) onset (click.right) > 0.0003 * 48000.0);
+}
+
+TEST_CASE ("binaural tells front from back")
+{
+    const auto noise = whiteNoise (48000, 23);
+    const auto front = render (Spatializer::Mode::binaural, 0.0f, noise);
+    const auto back = render (Spatializer::Mode::binaural, 180.0f, noise);
+
+    std::vector<float> difference (noise.size());
+    for (size_t i = 0; i < noise.size(); ++i)
+        difference[i] = front.left[i] - back.left[i];
+
+    CHECK (rms (difference.data(), difference.size()) > 0.2 * rms (front.left.data(), noise.size()));
+}
+
+TEST_CASE ("direction jumps and mode switches don't click")
+{
+    constexpr double sampleRate = 48000.0;
+    std::vector<float> sine (19200);
+    for (size_t i = 0; i < sine.size(); ++i)
+        sine[i] = std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * (float) i / (float) sampleRate);
+
+    Spatializer s;
+    s.prepare (sampleRate);
+    s.setMode (Spatializer::Mode::binaural);
+    s.setTarget (0.0f, 0.0f);
+
+    Output out { std::vector<float> (sine.size()), std::vector<float> (sine.size()) };
+    auto play = [&] (size_t from, size_t n)
+    {
+        const float* in[] { sine.data() + from };
+        s.process (in, 1, out.left.data() + from, out.right.data() + from, (int) n);
+    };
+
+    play (0, 4800);
+    s.setTarget (120.0f, 0.0f); // big direction jump: one 20 ms fade
+    play (4800, 4800);
+    s.setMode (Spatializer::Mode::stereo);
+    play (9600, 4800);
+    s.setMode (Spatializer::Mode::binaural);
+    play (14400, 4800);
+
+    // Steps during the transitions stay within what the steady signals do on either side.
+    for (auto* ear : { &out.left, &out.right })
+    {
+        const auto steady = std::max ({ maxStep (*ear, 1000, 4800), maxStep (*ear, 7000, 9600), maxStep (*ear, 12000, 14400) });
+        CHECK (maxStep (*ear, 4800, 7000) <= 1.2f * steady);
+        CHECK (maxStep (*ear, 9600, 12000) <= 1.2f * steady);
+        CHECK (maxStep (*ear, 14400, 16800) <= 1.2f * steady);
+    }
+}
+
+TEST_CASE ("binaural: block size doesn't change the result, no allocation")
+{
+    const auto noise = whiteNoise (8192, 24);
+
+    auto renderInBlocks = [&] (int blockSize)
+    {
+        Spatializer s;
+        s.prepare (48000.0);
+        s.setMode (Spatializer::Mode::binaural);
+        s.setTarget (-37.0f, 0.004f);
+
+        countAllocations = true;
+        auto out = run (s, noise, blockSize);
+        countAllocations = false;
+        return out;
+    };
+
+    allocations = 0;
+    const auto big = renderInBlocks (512);
+    const auto tiny = renderInBlocks (1);
+    CHECK (allocations <= 4); // run() allocates its two output vectors per call; process() nothing
+
+    for (size_t i = 0; i < noise.size(); ++i)
+        REQUIRE_THAT (big.right[i], WithinAbs (tiny.right[i], 0.0));
+}
+
+TEST_CASE ("binaural CPU: 32 players", "[.perf]")
+{
+    const auto sampleRate = GENERATE (48000.0, 96000.0);
+    constexpr int players = 32, block = 512;
+    const auto seconds = 10.0;
+
+    std::vector<Spatializer> spatializers (players);
+    for (int p = 0; p < players; ++p)
+    {
+        spatializers[(size_t) p].prepare (sampleRate);
+        spatializers[(size_t) p].setMode (Spatializer::Mode::binaural);
+        spatializers[(size_t) p].setTarget ((float) (p * 11 % 360) - 180.0f, 0.01f);
+    }
+
+    const auto noise = whiteNoise (block, 25);
+    std::vector<float> l (block), r (block);
+    const float* in[] { noise.data() };
+    const auto blocks = (int) (seconds * sampleRate / block);
+
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    for (int b = 0; b < blocks; ++b)
+        for (auto& s : spatializers)
+            s.process (in, 1, l.data(), r.data(), block);
+    const auto elapsed = (juce::Time::getMillisecondCounterHiRes() - start) / 1000.0;
+
+    const auto load = elapsed / seconds;
+    UNSCOPED_INFO (players << " binaural players at " << sampleRate << " Hz: " << juce::String (load * 100.0, 1) << " % of one core");
+    CHECK (load < (sampleRate < 50000.0 ? 0.10 : 0.40));
 }

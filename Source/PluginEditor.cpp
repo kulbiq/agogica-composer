@@ -54,6 +54,7 @@ juce::var getBuildInfo (const juce::AudioProcessor& processor)
     info->setProperty ("version", JucePlugin_VersionString);
     info->setProperty ("format", juce::AudioProcessor::getWrapperTypeDescription (processor.wrapperType));
     info->setProperty ("host", juce::File::getSpecialLocation (juce::File::hostApplicationPath).getFileNameWithoutExtension());
+    info->setProperty ("credits", "Binaural HRTF: SADIE II database, KU100 (University of York), Apache License 2.0");
     return info.release();
 }
 

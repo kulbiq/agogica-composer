@@ -56,6 +56,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createPar
         metres ("listenerY", "Listener Y", 0.0f),
         metres ("playerX", "Player X", 0.0f),
         metres ("playerY", "Player Y", 5.0f),
+        std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "outputMode", 1 },
+                                                      "Output",
+                                                      juce::StringArray { "Stereo", "Binaural" },
+                                                      0),
     };
 }
 
@@ -142,7 +146,8 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const auto listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, room);
     const auto player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, room);
 
-    spatializer.setTarget (geometry::pan (player, listener), geometry::delayMs (player, listener) / 1000.0f);
+    spatializer.setMode (audioParams.outputMode->load() > 0.5f ? Spatializer::Mode::binaural : Spatializer::Mode::stereo);
+    spatializer.setTarget (geometry::azimuthDegrees (player, listener), geometry::delayMs (player, listener) / 1000.0f);
     spatializer.process (buffer.getArrayOfReadPointers(),
                          getTotalNumInputChannels(),
                          buffer.getWritePointer (0),

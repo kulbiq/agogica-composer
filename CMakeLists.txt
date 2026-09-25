@@ -47,7 +47,8 @@ target_sources(Composer PRIVATE
     Source/PluginEditor.cpp
     Source/bridge/Stage.cpp
     Source/stage/StageRegistry.cpp
-    Source/dsp/Spatializer.cpp)
+    Source/dsp/Spatializer.cpp
+    Source/dsp/Hrtf.cpp)
 
 target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1
@@ -63,7 +64,7 @@ if(COMPOSER_UI_DEV_SERVER)
         $<$<CONFIG:Debug>:COMPOSER_UI_DEV_SERVER_URL="http://localhost:5173/">)
 endif()
 
-# --- Web UI: Vite build -> zip -> BinaryData --------------------------------
+# --- Embedded data: web UI (Vite build -> zip) + HRIR tables ----------------
 set(UI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 set(UI_ZIP ${CMAKE_CURRENT_BINARY_DIR}/ui.zip)
 
@@ -85,11 +86,13 @@ add_custom_command(
     COMMENT "Building web UI"
     VERBATIM)
 
-juce_add_binary_data(ComposerWebUI SOURCES ${UI_ZIP})
+# The web UI zip and the binaural HRIR tables (see Resources/hrir/NOTICE).
+file(GLOB HRIR_TABLES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Resources/hrir/*.bin)
+juce_add_binary_data(ComposerData SOURCES ${UI_ZIP} ${HRIR_TABLES})
 
 target_link_libraries(Composer
     PRIVATE
-        ComposerWebUI
+        ComposerData
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_gui_extra

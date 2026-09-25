@@ -50,6 +50,28 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
       </section>
 
       <section className={styles.section}>
+        <span className={styles.label}>Output</span>
+        <div className={styles.segments} role="radiogroup" aria-label="Output">
+          {(["stereo", "binaural"] as const).map((mode, i) => (
+            <button
+              key={mode}
+              className={styles.chip}
+              role="radio"
+              aria-checked={stage.outputMode === mode}
+              onClick={() => setParams(selfId, { outputMode: i })}
+            >
+              {mode === "stereo" ? "Stereo" : "Binaural"}
+            </button>
+          ))}
+        </div>
+        <p className={styles.note}>
+          {stage.outputMode === "stereo"
+            ? "For speakers. Players behind the listener are mirrored to the front."
+            : "For headphones: full 360°. HRTF: SADIE II, KU100 (University of York, Apache 2.0)."}
+        </p>
+      </section>
+
+      <section className={styles.section}>
         <RoomSize room={stage.room} selfId={selfId} />
       </section>
 
@@ -81,8 +103,12 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
               <dd>{player.derived.distance.toFixed(2)} m</dd>
               <dt className={styles.label}>Azimuth</dt>
               <dd>{player.derived.azimuth.toFixed(1)}°</dd>
-              <dt className={styles.label}>Pan</dt>
-              <dd>{formatPan(player.derived.pan)}</dd>
+              {stage.outputMode === "stereo" && (
+                <>
+                  <dt className={styles.label}>Pan</dt>
+                  <dd>{formatPan(player.derived.pan)}</dd>
+                </>
+              )}
               <dt className={styles.label}>Delay</dt>
               <dd>{player.derived.delayMs.toFixed(1)} ms</dd>
             </dl>

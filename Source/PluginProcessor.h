@@ -82,13 +82,15 @@ private:
         std::atomic<float>* listenerY;
         std::atomic<float>* playerX;
         std::atomic<float>* playerY;
+        std::atomic<float>* outputMode;
     };
 
     const AudioParams audioParams { state.getRawParameterValue ("roomSize"),
                                     state.getRawParameterValue ("listenerX"),
                                     state.getRawParameterValue ("listenerY"),
                                     state.getRawParameterValue ("playerX"),
-                                    state.getRawParameterValue ("playerY") };
+                                    state.getRawParameterValue ("playerY"),
+                                    state.getRawParameterValue ("outputMode") };
     Spatializer spatializer;
 
     juce::String trackName, trackColour;

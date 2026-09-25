@@ -11,7 +11,7 @@ namespace stage
 juce::var snapshot (ComposerProcessor& self);
 
 // One step of a user gesture from the UI: { phase: begin|change|end, target, param, value }.
-// playerX/Y land on the target instance; roomSize/listenerX/Y on every instance.
+// playerX/Y land on the target instance; roomSize/listenerX/Y/outputMode on every instance.
 // Unknown params or targets are ignored.
 void applyEdit (ComposerProcessor& self, const juce::var& edit);
 

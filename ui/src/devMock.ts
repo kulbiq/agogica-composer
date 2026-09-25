@@ -11,6 +11,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   const scene = {
     scene: "A",
     scenes: ["A", "B"],
+    outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
     room: 20,
     listener: { x: 0, y: -4 },
@@ -41,11 +42,12 @@ if (import.meta.env.DEV && !window.__JUCE__) {
 
   const handlers: Record<string, (...args: never[]) => unknown> = {
     getStage: () => snapshot(),
-    getBuildInfo: () => ({ version: "0.1.0", format: "Browser", host: "Mock" }),
+    getBuildInfo: () => ({ version: "0.1.0", format: "Browser", host: "Mock", credits: "Binaural HRTF: SADIE II" }),
     edit: (e: Edit) => {
       if (e.phase !== "change") return;
       const p = scene.players.find((pl) => pl.id === e.target);
       if (e.param === "roomSize") scene.room = e.value;
+      if (e.param === "outputMode") scene.outputMode = e.value > 0.5 ? "binaural" : "stereo";
       if (e.param === "listenerX") scene.listener.x = e.value;
       if (e.param === "listenerY") scene.listener.y = e.value;
       if (p && e.param === "playerX") p.x = e.value;

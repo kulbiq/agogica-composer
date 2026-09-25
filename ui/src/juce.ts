@@ -15,13 +15,14 @@ export type Player = Point & {
 export type Stage = {
   scene: string; // active scene, "A".."H"
   scenes: string[]; // scenes that hold a layout (the active one included)
+  outputMode: "stereo" | "binaural";
   alone: boolean;
   room: number;
   listener: Point;
   players: Player[];
 };
 
-export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY";
+export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode";
 
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const editNative = getNativeFunction("edit");

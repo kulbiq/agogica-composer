@@ -5,7 +5,9 @@ namespace stage
 {
 namespace
 {
-const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY" };
+// Shared by every instance (each keeps its own copy). outputMode is a listening setting,
+// not part of scenes (ComposerProcessor::sceneParams).
+const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode" };
 const juce::StringArray playerParams { "playerX", "playerY" };
 
 // Positions are stored on a 1 cm grid; the float range conversion leaves residue like -5.6e-7.
@@ -110,6 +112,7 @@ juce::var snapshot (ComposerProcessor& self)
     });
 
     o->setProperty ("scene", self.getScene());
+    o->setProperty ("outputMode", self.getParam ("outputMode") > 0.5f ? "binaural" : "stereo");
     o->setProperty ("room", roomSize);
     o->setProperty ("listener", point (listener));
     return o.release();

@@ -1,0 +1,17 @@
+Binaural HRIR tables (sadie2_ku100_*.bin)
+
+Derived from the SADIE II Database, subject D1 (Neumann KU100 dummy head).
+Copyright 2018, University of York. Licensed under the Apache License, Version 2.0
+(see SADIE-II-LICENSE.txt).
+
+Source: https://zenodo.org/records/12092466 (D1_HRIR_SOFA.zip)
+Reference: C. Armstrong, L. Thresh, D. Murphy, G. Kearney, "A Perceptual Evaluation of
+Individual and Non-Individual HRTFs: A Case Study of the SADIE II Database",
+Applied Sciences 8(11), 2029 (2018). doi:10.3390/app8112029
+
+Modifications (tools/make_hrir.py): only the 0-degree-elevation ring is kept and
+re-indexed clockwise; one global onset delay is removed; responses are truncated
+(256 taps at 48 kHz, scaled with the sample rate) with a short fade-out; the 88.2,
+176.4 and 192 kHz tables are resampled from the 44.1 and 96 kHz measurements; a
+per-ear gain equalises the ear microphones, and each table is scaled so the front
+direction matches the stereo pan level at centre.

@@ -3,7 +3,7 @@ import { getNativeFunction } from "@juce-framework/webview";
 import { useJuceEvent } from "./juce";
 import styles from "./App.module.css";
 
-type BuildInfo = { version: string; format: string; host: string };
+type BuildInfo = { version: string; format: string; host: string; credits?: string };
 
 const getBuildInfo = getNativeFunction("getBuildInfo") as () => Promise<BuildInfo>;
 const floorDb = -60;
@@ -23,11 +23,11 @@ export default function Footer() {
 
   return (
     <footer className={styles.footer}>
-      <span className={styles.label}>
+      <span className={styles.label} title={info?.credits}>
         {info ? `v${info.version} · ${info.format} · ${info.host}` : " "}
       </span>
       <span className={styles.meter} aria-hidden>
-        <span className={styles.label}>In</span>
+        <span className={styles.label} title={info?.credits}>In</span>
         <span className={styles.meterTrack}>
           <span ref={level} className={styles.meterFill} />
         </span>

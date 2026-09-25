@@ -199,3 +199,33 @@ TEST_CASE ("state round-trip keeps scenes and placed")
     stage::setScene (restored, "A");
     CHECK_THAT (restored.getParam ("playerX"), WithinAbs (3.0, 1e-4));
 }
+
+TEST_CASE ("output mode is shared, adopted by new inserts, saved, and not part of scenes")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    juce::MemoryBlock saved;
+
+    {
+        ComposerProcessor a, b;
+        a.markPlaced();
+        drag (a, a.id, "outputMode", 1.0f);
+        CHECK_THAT (b.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
+        CHECK (stage::snapshot (b)["outputMode"].toString() == "binaural");
+
+        ComposerProcessor c;
+        stage::join (c, true);
+        CHECK_THAT (c.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
+
+        stage::setScene (a, "B");
+        drag (a, a.id, "outputMode", 0.0f);
+        stage::setScene (a, "A");
+        CHECK_THAT (a.getParam ("outputMode"), WithinAbs (0.0, 1e-4)); // scenes don't restore it
+
+        drag (a, a.id, "outputMode", 1.0f);
+        b.getStateInformation (saved);
+    }
+
+    ComposerProcessor restored;
+    restored.setStateInformation (saved.getData(), (int) saved.getSize());
+    CHECK_THAT (restored.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
+}
