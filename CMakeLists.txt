@@ -195,6 +195,10 @@ add_custom_command(
 add_custom_target(ComposerTrackerModels DEPENDS ${TRACKER_MODELS_STAMP})
 add_dependencies(ComposerTracker ComposerTrackerModels)
 
+# The bundle is filled by POST_BUILD steps, which only run when the app re-links: make a new
+# page or new models re-link it (otherwise a page-only change never reaches the bundle).
+set_target_properties(ComposerTracker PROPERTIES LINK_DEPENDS "${TRACKER_UI_STAMP};${TRACKER_MODELS_STAMP}")
+
 add_custom_command(TARGET ComposerTracker POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
