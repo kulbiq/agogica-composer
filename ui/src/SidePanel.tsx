@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { beginGesture, setName, setParams, type Gesture, type Param, type Stage } from "./juce";
+import { beginGesture, setName, setScene, setParams, type Gesture, type Param, type Stage } from "./juce";
 import type { NodeKey } from "./StageMap";
 import styles from "./App.module.css";
 
@@ -9,6 +9,8 @@ type Props = {
   selected: NodeKey | null;
   onSelect: (key: NodeKey) => void;
 };
+
+const scenes = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 const gestureKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"]);
 
@@ -23,12 +25,27 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
     <aside className={styles.panel}>
       <section className={styles.section}>
         <div className={styles.row}>
-          <span className={styles.label}>Group {stage.group}</span>
+          <span className={styles.label}>Scene</span>
           {stage.alone && (
             <span className={styles.status} data-status="soon">
               Only this track
             </span>
           )}
+        </div>
+        <div className={styles.chips} role="radiogroup" aria-label="Scene">
+          {scenes.map((s) => (
+            <button
+              key={s}
+              className={styles.chip}
+              role="radio"
+              aria-checked={stage.scene === s}
+              data-empty={!stage.scenes.includes(s) || undefined}
+              title={stage.scenes.includes(s) ? `Scene ${s}` : `Scene ${s} - starts as a copy of the current layout`}
+              onClick={() => void setScene(s)}
+            >
+              {s}
+            </button>
+          ))}
         </div>
       </section>
 

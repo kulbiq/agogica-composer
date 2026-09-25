@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "bridge/Stage.h"
 
 namespace
 {
@@ -21,6 +22,25 @@ ComposerProcessor::ComposerProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       id (nextId++)
 {
+    registry->add (*this);
+
+    // Join the stage once the host has had its chance to restore a saved state (which
+    // marks the instance placed). Captures the id, not `this`: hosts often create and
+    // destroy instances in quick succession while scanning.
+    juce::MessageManager::callAsync ([instance = id, reg = registry]
+                                     {
+                                         reg->withMember (instance, [] (ComposerProcessor& p)
+                                         {
+                                             if (! p.isPlaced())
+                                                 stage::join (p, true);
+                                         });
+                                     });
+}
+
+ComposerProcessor::~ComposerProcessor()
+{
+    // First, before any member goes away: other editors may be reading this instance.
+    registry->remove (*this);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createParameterLayout()
@@ -44,6 +64,47 @@ juce::String ComposerProcessor::getDisplayName() const
         return name;
 
     return trackName;
+}
+
+void ComposerProcessor::writeParam (const juce::String& paramId, float value)
+{
+    auto* param = state.getParameter (paramId);
+    param->beginChangeGesture();
+    param->setValueNotifyingHost (param->convertTo0to1 (value));
+    param->endChangeGesture();
+}
+
+void ComposerProcessor::storeScene()
+{
+    auto scenes = state.state.getOrCreateChildWithName ("scenes", nullptr);
+    auto slot = scenes.getOrCreateChildWithName (getScene(), nullptr);
+
+    for (const auto& paramId : sceneParams)
+        slot.setProperty (paramId, getParam (paramId), nullptr);
+}
+
+bool ComposerProcessor::recallScene (const juce::String& scene)
+{
+    const auto slot = state.state.getChildWithName ("scenes").getChildWithName (scene);
+
+    if (! slot.isValid())
+        return false;
+
+    for (const auto& paramId : sceneParams)
+        if (slot.hasProperty (paramId))
+            writeParam (paramId, slot[paramId]);
+
+    return true;
+}
+
+juce::StringArray ComposerProcessor::getStoredScenes() const
+{
+    juce::StringArray names;
+
+    for (const auto& slot : state.state.getChildWithName ("scenes"))
+        names.add (slot.getType().toString());
+
+    return names;
 }
 
 void ComposerProcessor::updateTrackProperties (const TrackProperties& properties)

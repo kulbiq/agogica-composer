@@ -103,6 +103,51 @@
   border: 1px solid currentColor;
 }
 
+/* Scene chips - the website's .chip, as a segmented choice. */
+.chips {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.chip {
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-lighter);
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* A scene nothing is stored in yet: the website's dashed "not yet" state. */
+.chip[data-empty] {
+  border-style: dashed;
+  color: var(--ink-faint);
+}
+
+.chip[aria-checked="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.chip:focus {
+  outline: none;
+}
+
+.chip:focus-visible {
+  box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--ink);
+}
+
 /* ---- Room size ---- */
 
 .field {

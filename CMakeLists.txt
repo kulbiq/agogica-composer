@@ -45,7 +45,8 @@ juce_add_plugin(Composer
 target_sources(Composer PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/bridge/Stage.cpp)
+    Source/bridge/Stage.cpp
+    Source/stage/StageRegistry.cpp)
 
 target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1

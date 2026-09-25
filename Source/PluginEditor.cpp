@@ -93,8 +93,15 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                                          })
                     .withNativeFunction ("setName", [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
-                                             if (args.size() == 2 && (int) args[0] == composer.id)
-                                                 composer.setNameOverride (args[1].toString());
+                                             if (args.size() == 2)
+                                                 stage::setName (composer, (int) args[0], args[1].toString());
+
+                                             complete ({});
+                                         })
+                    .withNativeFunction ("setScene", [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 1)
+                                                 stage::setScene (composer, args[0].toString());
 
                                              complete ({});
                                          })

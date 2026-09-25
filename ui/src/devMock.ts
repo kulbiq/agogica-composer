@@ -9,7 +9,8 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   const names = ["Violin I", "Violin II", "Viola", "Cello", "Flute", "Horn"];
   const colours = ["#d1495b", "#edae49", "#00798c", "#30638e", "#66a182", ""];
   const scene = {
-    group: "A",
+    scene: "A",
+    scenes: ["A", "B"],
     alone: false,
     room: 20,
     listener: { x: 0, y: -4 },
@@ -49,6 +50,11 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (e.param === "listenerY") scene.listener.y = e.value;
       if (p && e.param === "playerX") p.x = e.value;
       if (p && e.param === "playerY") p.y = e.value;
+      emit("stage", snapshot());
+    },
+    setScene: (name: string) => {
+      scene.scene = name;
+      if (!scene.scenes.includes(name)) scene.scenes = [...scene.scenes, name].sort();
       emit("stage", snapshot());
     },
     setName: (id: number, name: string) => {

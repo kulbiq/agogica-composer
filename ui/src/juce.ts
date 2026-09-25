@@ -13,7 +13,8 @@ export type Player = Point & {
 
 // Mirrors stage::snapshot in Source/bridge/Stage.cpp.
 export type Stage = {
-  group: string;
+  scene: string; // active scene, "A".."H"
+  scenes: string[]; // scenes that hold a layout (the active one included)
   alone: boolean;
   room: number;
   listener: Point;
@@ -25,6 +26,7 @@ export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "player
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const editNative = getNativeFunction("edit");
 export const setName = getNativeFunction("setName") as (id: number, name: string) => Promise<void>;
+export const setScene = getNativeFunction("setScene") as (scene: string) => Promise<void>;
 
 // Listens to an event C++ sends with emitEventIfBrowserIsVisible.
 export function useJuceEvent<T>(id: string, fn: (payload: T) => void) {

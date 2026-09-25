@@ -1,11 +1,13 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "stage/StageRegistry.h"
 
 class ComposerProcessor final : public juce::AudioProcessor
 {
 public:
     ComposerProcessor();
+    ~ComposerProcessor() override;
 
     void prepareToPlay (double, int) override {}
     void releaseResources() override {}
@@ -40,10 +42,22 @@ public:
     float takeInputPeak() noexcept                      { return inputPeak.exchange (0.0f); }
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    static inline const juce::StringArray sceneParams { "roomSize", "listenerX", "listenerY", "playerX", "playerY" };
 
     // Stage data (message thread). Positions are unclamped, in metres.
     float getParam (const juce::String& paramId) const  { return state.getRawParameterValue (paramId)->load(); }
-    juce::String getGroup() const                       { return state.state.getProperty ("group", "A"); }
+    // Scenes A-H: alternative layouts of the whole ensemble. The parameters hold the
+    // active scene; the others are stored in the state tree. See stage::setScene.
+    juce::String getScene() const                       { return state.state.getProperty ("scene", "A"); }
+    void storeScene();                                  // parameters -> active scene's slot
+    bool recallScene (const juce::String& scene);       // that scene's slot -> parameters; false if never stored
+    juce::StringArray getStoredScenes() const;
+
+    // False for a brand-new insert until it has joined the stage (copied the shared
+    // room/listener and scene, taken a seat). Saved, so a reloaded project never re-joins.
+    bool isPlaced() const                               { return state.state.getProperty ("placed", false); }
+    void markPlaced()                                   { state.state.setProperty ("placed", true, nullptr); }
+    void setActiveScene (const juce::String& scene)     { state.state.setProperty ("scene", scene, nullptr); }
     juce::String getDisplayName() const;                // name override, else host track name, else empty
     void setNameOverride (const juce::String& name)     { state.state.setProperty ("name", name.trim(), nullptr); }
 
@@ -52,6 +66,11 @@ public:
 
     // Unique within the process; identifies this player to the web UI.
     const int id;
+
+    juce::SharedResourcePointer<StageRegistry> registry;
+
+    // A complete gesture on one parameter, in its real units.
+    void writeParam (const juce::String& paramId, float value);
 
 private:
     juce::String trackName, trackColour;

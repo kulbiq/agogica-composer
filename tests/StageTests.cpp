@@ -86,3 +86,116 @@ TEST_CASE ("state round-trip keeps the name override")
     restored.setStateInformation (saved.getData(), (int) saved.getSize());
     CHECK (restored.getDisplayName() == "Viola");
 }
+
+TEST_CASE ("every instance in the process is on the stage")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+
+    CHECK (stage::snapshot (a)["players"].size() == 2);
+    CHECK_FALSE ((bool) stage::snapshot (a)["alone"]);
+
+    {
+        ComposerProcessor c;
+        CHECK (stage::snapshot (a)["players"].size() == 3);
+    }
+
+    CHECK (stage::snapshot (a)["players"].size() == 2); // destruction unregisters
+}
+
+TEST_CASE ("room and listener edits reach every instance; player edits only the target")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+
+    drag (a, a.id, "roomSize", 35.0f);
+    drag (b, b.id, "listenerX", -2.0f);
+    drag (a, b.id, "playerX", 4.0f); // a's editor moves b's player
+
+    for (auto* p : { &a, &b })
+    {
+        CHECK_THAT (p->getParam ("roomSize"), WithinAbs (35.0, 1e-4));
+        CHECK_THAT (p->getParam ("listenerX"), WithinAbs (-2.0, 1e-4));
+    }
+
+    CHECK_THAT (b.getParam ("playerX"), WithinAbs (4.0, 1e-4));
+    CHECK_THAT (a.getParam ("playerX"), WithinAbs (0.0, 1e-4));
+}
+
+TEST_CASE ("a new insert adopts the stage's scene, room/listener and takes a free seat")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a;
+    stage::join (a, true); // alone: stays where it is
+    stage::setScene (a, "C");
+    drag (a, a.id, "roomSize", 30.0f);
+    drag (a, a.id, "listenerY", -3.0f);
+    drag (a, a.id, "playerY", 3.0f); // seat 0 (0, 3) is taken by a
+
+    ComposerProcessor b;
+    stage::join (b, true);
+
+    CHECK (b.getScene() == "C");
+    CHECK_THAT (b.getParam ("roomSize"), WithinAbs (30.0, 1e-4));
+    CHECK_THAT (b.getParam ("listenerY"), WithinAbs (-3.0, 1e-4));
+    CHECK_THAT (b.getParam ("playerX"), WithinAbs (-2.0, 1e-4)); // seat 1: left of centre
+    CHECK_THAT (b.getParam ("playerY"), WithinAbs (3.0, 1e-4));
+    CHECK (b.isPlaced());
+}
+
+TEST_CASE ("scenes store and recall every instance's layout")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+
+    drag (a, a.id, "playerX", 1.0f);
+    drag (a, b.id, "playerX", 2.0f);
+    drag (a, a.id, "roomSize", 25.0f);
+
+    stage::setScene (b, "B"); // first visit: starts as a copy of A
+    CHECK (a.getScene() == "B");
+    CHECK_THAT (a.getParam ("playerX"), WithinAbs (1.0, 1e-4));
+
+    drag (a, a.id, "playerX", -6.0f);
+    drag (a, b.id, "playerX", -7.0f);
+    drag (a, a.id, "roomSize", 40.0f);
+
+    stage::setScene (a, "A");
+    CHECK_THAT (a.getParam ("playerX"), WithinAbs (1.0, 1e-4));
+    CHECK_THAT (b.getParam ("playerX"), WithinAbs (2.0, 1e-4));
+    CHECK_THAT (b.getParam ("roomSize"), WithinAbs (25.0, 1e-4));
+
+    stage::setScene (a, "B");
+    CHECK_THAT (a.getParam ("playerX"), WithinAbs (-6.0, 1e-4));
+    CHECK_THAT (b.getParam ("playerX"), WithinAbs (-7.0, 1e-4));
+    CHECK_THAT (a.getParam ("roomSize"), WithinAbs (40.0, 1e-4));
+
+    const auto scenes = stage::snapshot (a)["scenes"];
+    CHECK (scenes.size() == 2);
+
+    stage::setScene (a, "Z"); // not a scene: ignored
+    CHECK (a.getScene() == "B");
+}
+
+TEST_CASE ("state round-trip keeps scenes and placed")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    juce::MemoryBlock saved;
+
+    {
+        ComposerProcessor p;
+        drag (p, p.id, "playerX", 3.0f);
+        stage::setScene (p, "D");
+        drag (p, p.id, "playerX", -3.0f);
+        p.getStateInformation (saved);
+    }
+
+    ComposerProcessor restored;
+    restored.setStateInformation (saved.getData(), (int) saved.getSize());
+    CHECK (restored.getScene() == "D");
+    CHECK (restored.isPlaced());
+    CHECK_THAT (restored.getParam ("playerX"), WithinAbs (-3.0, 1e-4));
+
+    stage::setScene (restored, "A");
+    CHECK_THAT (restored.getParam ("playerX"), WithinAbs (3.0, 1e-4));
+}
