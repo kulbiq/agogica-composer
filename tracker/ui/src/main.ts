@@ -4,7 +4,7 @@ import "./tracker.css";
 import { getNativeFunction } from "@juce-framework/webview";
 
 // The app runs 6DRepNet360 natively (ONNX Runtime + CoreML) and sends raw estimates as
-// "estimate" events. This page applies Invert / Recenter / rotation gain / smoothing / hold
+// "estimate" events. This page applies Invert / Recenter / smoothing / hold
 // and writes the pose to Composer (protocol: Source/stage/HeadTracking.h; yaw clockwise =
 // head turned right).
 const sendPose = getNativeFunction("pose") as (yaw: number, pitch: number, roll: number, face: boolean) => Promise<void>;
@@ -16,7 +16,6 @@ const status = $("status");
 const video = $<HTMLVideoElement>("video");
 const settings = {
   paused: false,
-  gain: Number(localStorage.getItem("gain") ?? 1),
   invert: localStorage.getItem(`invert:${engine}`) === "1",
 };
 let centre = 0;
@@ -96,8 +95,7 @@ class Output {
     this.range.min = Math.min(this.range.min, head);
     this.range.max = Math.max(this.range.max, head);
 
-    // Rotation gain: e.g. x2 turns 60 degrees of head into 120 degrees of scene.
-    const yaw = wrap(head * settings.gain);
+    const yaw = head;
     this.lastYaw = yaw;
 
     setStatus("Tracking", true);
@@ -126,15 +124,6 @@ async function main() {
     settings.invert = !settings.invert;
     localStorage.setItem(`invert:${engine}`, settings.invert ? "1" : "0");
     $("invert").setAttribute("aria-pressed", String(settings.invert));
-  };
-  const gain = $<HTMLInputElement>("gain");
-  const showGain = () => ($("gainValue").textContent = `×${settings.gain.toFixed(1)}`);
-  gain.value = String(settings.gain);
-  showGain();
-  gain.oninput = () => {
-    settings.gain = Number(gain.value);
-    localStorage.setItem("gain", gain.value);
-    showGain();
   };
   $("pause").onclick = () => {
     settings.paused = !settings.paused;
