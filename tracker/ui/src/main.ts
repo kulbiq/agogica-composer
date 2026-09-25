@@ -128,7 +128,7 @@ async function main() {
     $("invert").setAttribute("aria-pressed", String(settings.invert));
   };
   const gain = $<HTMLInputElement>("gain");
-  const showGain = () => ($("gainValue").textContent = `\\u00d7${settings.gain.toFixed(1)}`);
+  const showGain = () => ($("gainValue").textContent = `×${settings.gain.toFixed(1)}`);
   gain.value = String(settings.gain);
   showGain();
   gain.oninput = () => {
