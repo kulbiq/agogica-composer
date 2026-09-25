@@ -66,7 +66,7 @@ void EarlyReflections::setAcoustics (const Acoustics& a) noexcept
 
         auto& placer = placers[(size_t) placerOf[i]];
         placer.setMode (a.mode);
-        placer.setDirection (geometry::azimuthDegrees (image.position, a.listener), snap);
+        placer.setDirection (geometry::azimuthDegrees (image.position, a.listener) - a.headYaw, snap);
 
         if (snap)
         {

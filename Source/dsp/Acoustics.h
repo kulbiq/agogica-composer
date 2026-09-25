@@ -56,6 +56,10 @@ struct Acoustics
     const Hall* hall = &halls[defaultHall];
     Adjustments adjust;
 
+    // Listener's head rotation, degrees clockwise (head turned right). Binaural only and
+    // realtime only - the processor sets 0 otherwise.
+    float headYaw = 0.0f;
+
     // Longest delay any stage asks the History for: the longest reflection path
     // (geometry::maxImageDistance) plus the tail pre-delay, with margin.
     static constexpr double maxDelaySeconds = 0.5;

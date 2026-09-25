@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "stage/StageRegistry.h"
+#include "stage/HeadTracking.h"
 #include "dsp/DirectPath.h"
 #include "dsp/EarlyReflections.h"
 #include "dsp/ReverbTail.h"
@@ -71,6 +72,7 @@ public:
     const int id;
 
     juce::SharedResourcePointer<StageRegistry> registry;
+    juce::SharedResourcePointer<HeadTracking> headTracking;
 
     // A complete gesture on one parameter, in its real units.
     void writeParam (const juce::String& paramId, float value);

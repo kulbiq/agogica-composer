@@ -19,6 +19,7 @@ export type Stage = {
   hall: number; // index into `halls`, stored per scene
   halls: string[];
   pro: Record<string, number>; // Pro panel parameter values (project-wide)
+  headTracking: { live: boolean; yaw: number }; // degrees clockwise (head turned right)
   alone: boolean;
   room: number;
   listener: Point;

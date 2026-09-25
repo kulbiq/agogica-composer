@@ -18,7 +18,8 @@ void DirectPath::setAcoustics (const Acoustics& a) noexcept
     const auto distance = geometry::distance (a.player, a.listener);
 
     setMode (a.mode);
-    setTarget (geometry::azimuthDegrees (a.player, a.listener),
+    // Relative to where the head points: turning right moves everything to the left.
+    setTarget (geometry::azimuthDegrees (a.player, a.listener) - a.headYaw,
                geometry::delayMs (a.player, a.listener) / 1000.0f,
                geometry::distanceGain (distance, a.adjust.distanceExponent),
                geometry::airCutoffHz (distance, a.adjust.air));

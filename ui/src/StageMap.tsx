@@ -171,15 +171,22 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
       }
       ctx.lineWidth = 1;
 
-      // Listener: a triangle facing +y (front).
+      // Listener: an arrowhead facing +y (front), turned with the head when tracking. Slim and
+      // notched so its direction reads at any angle (an equilateral triangle turned 25°
+      // looks like it points left).
       const l = drawn.get("listener")!;
+      ctx.save();
+      ctx.translate(sx(l.x), sy(l.y));
+      ctx.rotate((stage.headTracking.yaw * Math.PI) / 180);
       ctx.beginPath();
-      ctx.moveTo(sx(l.x), sy(l.y) - 7);
-      ctx.lineTo(sx(l.x) + 6, sy(l.y) + 5);
-      ctx.lineTo(sx(l.x) - 6, sy(l.y) + 5);
+      ctx.moveTo(0, -8);
+      ctx.lineTo(5.5, 6);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-5.5, 6);
       ctx.closePath();
       ctx.fillStyle = `rgba(${ink},0.9)`;
       ctx.fill();
+      ctx.restore();
 
       for (const player of stage.players) {
         const p = drawn.get(player.id)!;

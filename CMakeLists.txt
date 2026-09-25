@@ -47,6 +47,7 @@ target_sources(Composer PRIVATE
     Source/PluginEditor.cpp
     Source/bridge/Stage.cpp
     Source/stage/StageRegistry.cpp
+    Source/stage/HeadTracking.cpp
     Source/dsp/DirectPath.cpp
     Source/dsp/Placer.cpp
     Source/dsp/EarlyReflections.cpp
@@ -114,7 +115,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Tests link the plugin's shared code (which already contains the JUCE modules)
 # and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp)
+add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp)
 target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
 target_compile_definitions(ComposerTests PRIVATE COMPOSER_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")

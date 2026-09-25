@@ -67,6 +67,11 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
             </button>
           ))}
         </div>
+        {stage.outputMode === "binaural" && (
+          <span className={styles.status} data-status={stage.headTracking.live ? "live" : "soon"}>
+            Head tracking · {stage.headTracking.live ? "live" : "not running"}
+          </span>
+        )}
         <p className={styles.note}>
           {stage.outputMode === "stereo"
             ? "For speakers. Players behind the listener are mirrored to the front."

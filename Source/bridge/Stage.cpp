@@ -127,6 +127,11 @@ juce::var snapshot (ComposerProcessor& self)
         hallNames.add (juce::String (h.name));
     o->setProperty ("halls", hallNames);
 
+    auto tracking = std::make_unique<juce::DynamicObject>();
+    tracking->setProperty ("live", self.headTracking->isLive());
+    tracking->setProperty ("yaw", self.headTracking->yaw());
+    o->setProperty ("headTracking", tracking.release());
+
     // Pro panel values (raw parameter values; the UI shows them with their units).
     auto pro = std::make_unique<juce::DynamicObject>();
     for (const auto& id : sharedParams)

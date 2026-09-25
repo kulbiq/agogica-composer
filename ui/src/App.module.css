@@ -167,6 +167,23 @@
   box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--ink);
 }
 
+/* Live: the website's .status (ink dot breathing with ag-blink). */
+.status[data-status="live"] {
+  align-self: flex-start;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.status[data-status="live"]::before {
+  border: 0;
+  background: var(--ink);
+  animation: ag-blink 2.4s ease-in-out infinite;
+}
+
+.status[data-status="soon"] {
+  align-self: flex-start;
+}
+
 /* ---- Room size ---- */
 
 .field {

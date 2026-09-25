@@ -199,6 +199,10 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
     acoustics.hall = &halls[(size_t) juce::jlimit (0, (int) halls.size() - 1, (int) audioParams.hall->load())];
 
+    // Head tracking is a live monitoring aid: never in exports, never in stereo.
+    if (acoustics.mode == OutputMode::binaural && ! isNonRealtime())
+        acoustics.headYaw = headTracking->yaw();
+
     auto& adjust = acoustics.adjust;
     adjust.reflections = levelFromDb (audioParams.proReflections->load());
     adjust.diffusion = audioParams.proDiffusion->load();
