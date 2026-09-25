@@ -167,6 +167,13 @@
   box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--ink);
 }
 
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 /* Live: the website's .status (ink dot breathing with ag-blink). */
 .status[data-status="live"] {
   align-self: flex-start;

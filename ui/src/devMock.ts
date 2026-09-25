@@ -12,7 +12,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     scene: "A",
     scenes: ["A", "B"],
     hall: 2,
-    headTracking: { live: location.search.includes("binaural"), yaw: location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0 },
+    headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), yaw: location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0 },
     pro: {
       proReflections: 0,
       proDiffusion: 1,
@@ -78,6 +78,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (p && e.param === "playerY") p.y = e.value;
       emit("stage", snapshot());
     },
+    startTracker: () => true,
     setScene: (name: string) => {
       scene.scene = name;
       if (!scene.scenes.includes(name)) scene.scenes = [...scene.scenes, name].sort();

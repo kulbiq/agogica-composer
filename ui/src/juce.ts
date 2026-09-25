@@ -41,6 +41,7 @@ export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "player
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const editNative = getNativeFunction("edit");
 export const setName = getNativeFunction("setName") as (id: number, name: string) => Promise<void>;
+export const startTracker = getNativeFunction("startTracker") as () => Promise<boolean>;
 export const setScene = getNativeFunction("setScene") as (scene: string) => Promise<void>;
 
 // Listens to an event C++ sends with emitEventIfBrowserIsVisible.

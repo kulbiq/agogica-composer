@@ -39,3 +39,21 @@ void HeadTracking::pollNow()
     const auto current = yawDegrees.load (std::memory_order_relaxed);
     yawDegrees.store (isLive ? pose->yaw : current * 0.9f, std::memory_order_relaxed);
 }
+
+bool HeadTracking::startTracker()
+{
+   #if JUCE_MAC
+    // The per-user install first (a build folder may hold another copy with the same
+    // identity), then by identity wherever it is.
+    const auto installed = juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+                               .getChildFile ("Applications/Agogica Tracker.app");
+    if (installed.exists() && installed.startAsProcess())
+        return true;
+
+    juce::ChildProcess open;
+    return open.start (juce::StringArray { "/usr/bin/open", "-b", "com.agogica.tracker" })
+        && open.waitForProcessToFinish (5000) && open.getExitCode() == 0;
+   #else
+    return false; // ponytail: the tracker is macOS-only for now
+   #endif
+}

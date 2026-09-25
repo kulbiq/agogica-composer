@@ -90,6 +90,10 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
+                    .withNativeFunction ("startTracker", [] (const auto&, auto complete)
+                                         {
+                                             complete (HeadTracking::startTracker());
+                                         })
                     .withNativeFunction ("getBuildInfo", [this] (const auto&, auto complete)
                                          {
                                              complete (getBuildInfo (composer));

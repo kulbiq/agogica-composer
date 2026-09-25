@@ -168,3 +168,12 @@ add_custom_command(TARGET ComposerTracker POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
     VERBATIM)
+
+# Install per user (no admin), like the plugins: Composer starts it from there.
+if(APPLE)
+    set(TRACKER_INSTALL_DIR "$ENV{HOME}/Applications/Agogica Tracker.app")
+    add_custom_command(TARGET ComposerTracker POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${TRACKER_INSTALL_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ComposerTracker>" "${TRACKER_INSTALL_DIR}"
+        VERBATIM)
+endif()

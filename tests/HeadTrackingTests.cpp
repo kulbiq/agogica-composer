@@ -211,3 +211,9 @@ TEST_CASE ("head tracking: read the file written by another process", "[.interop
     UNSCOPED_INFO ("yaw " << p->yaw << ", face " << (int) p->face << ", age " << juce::Time::currentTimeMillis() - (juce::int64) p->timestampMs << " ms");
     CHECK (p->face);
 }
+
+// Manual: starts the installed Agogica Tracker (opens a window, uses the camera).
+TEST_CASE ("head tracking: start the tracker app", "[.start]")
+{
+    CHECK (HeadTracking::startTracker());
+}

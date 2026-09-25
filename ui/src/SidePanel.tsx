@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { setName, setParams, setScene, type Stage } from "./juce";
+import { setName, setParams, setScene, startTracker, type Stage } from "./juce";
 import ParamSlider from "./ParamSlider";
 import ProPanel from "./ProPanel";
 import type { NodeKey } from "./StageMap";
@@ -68,9 +68,12 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
           ))}
         </div>
         {stage.outputMode === "binaural" && (
-          <span className={styles.status} data-status={stage.headTracking.live ? "live" : "soon"}>
-            Head tracking · {stage.headTracking.live ? "live" : "not running"}
-          </span>
+          <div className={styles.stack}>
+            <span className={styles.status} data-status={stage.headTracking.live ? "live" : "soon"}>
+              Head tracking · {stage.headTracking.live ? "live" : "not running"}
+            </span>
+            {!stage.headTracking.live && <TrackerButton />}
+          </div>
         )}
         <p className={styles.note}>
           {stage.outputMode === "stereo"
@@ -181,6 +184,20 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
   );
 }
 
+
+function TrackerButton() {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <button
+      className={styles.ghost}
+      title={failed ? "Agogica Tracker isn't installed (~/Applications)" : "Open Agogica Tracker"}
+      onClick={() => void startTracker().then((ok) => setFailed(!ok))}
+    >
+      {failed ? "Not found" : "Start tracker"}
+    </button>
+  );
+}
 
 function NumberField({
   label,
