@@ -11,6 +11,8 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   const scene = {
     scene: "A",
     scenes: ["A", "B"],
+    hall: 2,
+    halls: ["Dry", "Studio", "Chamber", "Concert hall", "Church"],
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
     room: 20,
@@ -55,6 +57,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (e.phase !== "change") return;
       const p = scene.players.find((pl) => pl.id === e.target);
       if (e.param === "roomSize") scene.room = e.value;
+      if (e.param === "hall") scene.hall = e.value;
       if (e.param === "outputMode") scene.outputMode = e.value > 0.5 ? "binaural" : "stereo";
       if (e.param === "listenerX") scene.listener.x = e.value;
       if (e.param === "listenerY") scene.listener.y = e.value;

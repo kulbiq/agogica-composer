@@ -1,15 +1,18 @@
 #include "Placer.h"
 #include "DspUtil.h"
 
-void Placer::prepare (double sampleRate)
+void Placer::prepare (double sampleRate, Binaural binauralQuality)
 {
     hrtf = &Hrtf::forSampleRate (sampleRate);
-    recent.assign ((size_t) hrtf->taps() * 2, 0.0f);
+    quality = binauralQuality;
+    taps = quality == Binaural::shortHrir ? hrtf->shortTaps() : hrtf->taps();
+    recent.assign ((size_t) taps * 2, 0.0f);
     recentPos = 0;
 
     pan.reset (sampleRate, 0.02);
     fadeStep = (float) (1.0 / (fadeSeconds * sampleRate));
     directionFade = modeFade = 1.0f;
+    lastPan = 2.0f;
 }
 
 void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
@@ -22,6 +25,7 @@ void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
         direction = nextDirection = targetDirection;
         directionFade = 1.0f;
         pan.setCurrentAndTargetValue (newPan);
+        lastPan = 2.0f;
         return;
     }
 
@@ -41,17 +45,31 @@ void Placer::setMode (OutputMode newMode) noexcept
 
 void Placer::binaural (int index, float& left, float& right) const noexcept
 {
-    const auto taps = hrtf->taps();
     const auto* window = recent.data() + recentPos + 1; // oldest ... newest
 
-    left = dsp::dot (hrtf->reversedIr (index, 0), window, taps);
-    right = dsp::dot (hrtf->reversedIr (index, 1), window, taps);
+    const auto shortIr = quality == Binaural::shortHrir;
+    left = dsp::dot (shortIr ? hrtf->shortReversedIr (index, 0) : hrtf->reversedIr (index, 0), window, taps);
+    right = dsp::dot (shortIr ? hrtf->shortReversedIr (index, 1) : hrtf->reversedIr (index, 1), window, taps);
 }
 
 void Placer::process (float in, float& left, float& right) noexcept
 {
     constexpr auto quarterPi = juce::MathConstants<float>::pi * 0.25f;
-    const auto taps = hrtf->taps();
+
+    // Constant-power pan law: -1..+1 -> 0..pi/2. Recomputed only when the pan moves.
+    if (const auto p = pan.getNextValue(); ! juce::exactlyEqual (p, lastPan))
+    {
+        lastPan = p;
+        panLeft = std::cos ((p + 1.0f) * quarterPi);
+        panRight = std::sin ((p + 1.0f) * quarterPi);
+    }
+
+    if (quality == Binaural::panOnly)
+    {
+        left += in * panLeft;
+        right += in * panRight;
+        return;
+    }
 
     // Feed the HRIR input even in stereo mode, so switching to binaural is seamless.
     recentPos = recentPos + 1 < taps ? recentPos + 1 : 0;
@@ -63,13 +81,10 @@ void Placer::process (float in, float& left, float& right) noexcept
 
     float stereoL = 0.0f, stereoR = 0.0f, binauralL = 0.0f, binauralR = 0.0f;
 
-    // Constant-power pan law: -1..+1 -> 0..pi/2.
-    const auto angle = (pan.getNextValue() + 1.0f) * quarterPi;
-
     if (needStereo)
     {
-        stereoL = in * std::cos (angle);
-        stereoR = in * std::sin (angle);
+        stereoL = in * panLeft;
+        stereoR = in * panRight;
     }
 
     // Direction changes: fade to the latest direction once the previous fade is done.

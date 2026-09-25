@@ -208,6 +208,29 @@
   background: var(--ink);
 }
 
+.select {
+  appearance: none;
+  width: 100%;
+  padding: 7px 28px 7px 10px;
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius-input);
+  /* Chevron drawn with two gradients so it follows the ink token. */
+  background:
+    linear-gradient(45deg, transparent 50%, var(--ink-lighter) 50%) right 14px center / 5px 5px no-repeat,
+    linear-gradient(-45deg, transparent 50%, var(--ink-lighter) 50%) right 10px center / 5px 5px no-repeat,
+    var(--surface);
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.select:focus {
+  border-color: var(--ink);
+}
+
 /* ---- Selected node ---- */
 
 .nodeTitle,

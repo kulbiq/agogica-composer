@@ -60,6 +60,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createPar
                                                       "Output",
                                                       juce::StringArray { "Stereo", "Binaural" },
                                                       0),
+        std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "hall", 1 },
+                                                      "Hall",
+                                                      [] { juce::StringArray names; for (const auto& h : halls) names.add (h.name); return names; }(),
+                                                      defaultHall),
     };
 }
 
@@ -147,6 +151,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, acoustics.roomSize);
     acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, acoustics.roomSize);
     acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
+    acoustics.hall = &halls[(size_t) juce::jlimit (0, (int) halls.size() - 1, (int) audioParams.hall->load())];
 
     std::apply ([&] (auto&... stage) { (stage.setAcoustics (acoustics), ...); }, stages);
 

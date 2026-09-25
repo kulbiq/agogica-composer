@@ -16,13 +16,15 @@ export type Stage = {
   scene: string; // active scene, "A".."H"
   scenes: string[]; // scenes that hold a layout (the active one included)
   outputMode: "stereo" | "binaural";
+  hall: number; // index into `halls`, stored per scene
+  halls: string[];
   alone: boolean;
   room: number;
   listener: Point;
   players: Player[];
 };
 
-export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode";
+export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode" | "hall";
 
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const editNative = getNativeFunction("edit");

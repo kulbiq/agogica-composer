@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "stage/StageRegistry.h"
 #include "dsp/DirectPath.h"
+#include "dsp/EarlyReflections.h"
 
 class ComposerProcessor final : public juce::AudioProcessor
 {
@@ -43,7 +44,7 @@ public:
     float takeInputPeak() noexcept                      { return inputPeak.exchange (0.0f); }
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-    static inline const juce::StringArray sceneParams { "roomSize", "listenerX", "listenerY", "playerX", "playerY" };
+    static inline const juce::StringArray sceneParams { "roomSize", "listenerX", "listenerY", "playerX", "playerY", "hall" };
 
     // Stage data (message thread). Positions are unclamped, in metres.
     float getParam (const juce::String& paramId) const  { return state.getRawParameterValue (paramId)->load(); }
@@ -83,6 +84,7 @@ private:
         std::atomic<float>* playerX;
         std::atomic<float>* playerY;
         std::atomic<float>* outputMode;
+        std::atomic<float>* hall;
     };
 
     const AudioParams audioParams { state.getRawParameterValue ("roomSize"),
@@ -90,14 +92,15 @@ private:
                                     state.getRawParameterValue ("listenerY"),
                                     state.getRawParameterValue ("playerX"),
                                     state.getRawParameterValue ("playerY"),
-                                    state.getRawParameterValue ("outputMode") };
+                                    state.getRawParameterValue ("outputMode"),
+                                    state.getRawParameterValue ("hall") };
 
     // The player's mono input, read by every stage.
     History history;
 
     // The processing chain: every stage reads `history` and adds its stereo output.
     // Plug a stage in or out here.
-    std::tuple<DirectPath> stages;
+    std::tuple<DirectPath, EarlyReflections> stages;
 
     juce::String trackName, trackColour;
 

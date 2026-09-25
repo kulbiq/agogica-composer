@@ -1,13 +1,13 @@
 #include "Stage.h"
-#include "../dsp/Geometry.h"
+#include "../dsp/Acoustics.h"
 
 namespace stage
 {
 namespace
 {
 // Shared by every instance (each keeps its own copy). outputMode is a listening setting,
-// not part of scenes (ComposerProcessor::sceneParams).
-const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode" };
+// not part of scenes (ComposerProcessor::sceneParams); hall is.
+const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "hall" };
 const juce::StringArray playerParams { "playerX", "playerY" };
 
 // Positions are stored on a 1 cm grid; the float range conversion leaves residue like -5.6e-7.
@@ -115,6 +115,12 @@ juce::var snapshot (ComposerProcessor& self)
 
     o->setProperty ("scene", self.getScene());
     o->setProperty ("outputMode", self.getParam ("outputMode") > 0.5f ? "binaural" : "stereo");
+    o->setProperty ("hall", (int) self.getParam ("hall"));
+
+    juce::Array<juce::var> hallNames;
+    for (const auto& h : halls)
+        hallNames.add (juce::String (h.name));
+    o->setProperty ("halls", hallNames);
     o->setProperty ("room", roomSize);
     o->setProperty ("listener", point (listener));
     return o.release();

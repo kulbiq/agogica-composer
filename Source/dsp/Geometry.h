@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 // Stage geometry in metres: origin at the room centre, +x right, +y front.
@@ -80,4 +81,59 @@ inline float airCutoffHz (float metres)
     const auto excess = std::pow (10.0f, airLossDbAt8k (metres) / 10.0f) - 1.0f;
     return excess < 1.0e-4f ? 0.0f : 8000.0f / std::sqrt (excess);
 }
+
+// ---- Reflections: image sources of a square room --------------------------------
+// The floor plan is the square [-room/2, room/2]²; ears and sources are at 1.2 m. A wall
+// reflection is heard as if from the source mirrored in that wall ("image source").
+
+constexpr float earHeight = 1.2f; // m
+constexpr float maxRoomSize = 50.0f;
+
+struct Image
+{
+    Point position;   // on the floor plan (floor/ceiling images share the source's)
+    float distance;   // path length from the image to the listener, m
+    int bounces;      // 1 or 2
+};
+
+constexpr int numImages = 10;
+
+// 4 walls + floor + ceiling (first order) and the 4 corner images (a wall of each
+// axis: the strongest horizontal second-order paths).
+inline std::array<Image, numImages> imageSources (Point player, Point listener, float roomSize, float ceiling)
+{
+    // A coordinate mirrored in the wall at side · room/2 (side = ±1).
+    const auto mirror = [&] (float v, int side) { return (float) side * roomSize - v; };
+    const auto horizontal = [&] (Point p) { return distance (p, listener); };
+
+    std::array<Image, numImages> images {};
+    int n = 0;
+
+    for (const auto side : { 1, -1 })
+    {
+        const Point wallX { mirror (player.x, side), player.y };
+        const Point wallY { player.x, mirror (player.y, side) };
+        images[(size_t) n++] = { wallX, horizontal (wallX), 1 };
+        images[(size_t) n++] = { wallY, horizontal (wallY), 1 };
+    }
+
+    const auto direct = horizontal (player);
+    images[(size_t) n++] = { player, std::hypot (direct, 2.0f * earHeight), 1 };                  // floor
+    images[(size_t) n++] = { player, std::hypot (direct, 2.0f * (ceiling - earHeight)), 1 };      // ceiling
+
+    for (const auto sx : { 1, -1 })
+        for (const auto sy : { 1, -1 })
+        {
+            const Point corner { mirror (player.x, sx), mirror (player.y, sy) };
+            images[(size_t) n++] = { corner, horizontal (corner), 2 };
+        }
+
+    return images;
+}
+
+// Longest image path in any room (largest room, any positions inside it): a corner image
+// can be 2 rooms away on both axes (2√2 · room), the ceiling image < 3 · room for any
+// preset ceiling (≤ 20 m).
+constexpr float maxImageDistance = 3.0f * maxRoomSize;
+
 } // namespace geometry

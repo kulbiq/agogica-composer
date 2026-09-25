@@ -229,3 +229,36 @@ TEST_CASE ("output mode is shared, adopted by new inserts, saved, and not part o
     restored.setStateInformation (saved.getData(), (int) saved.getSize());
     CHECK_THAT (restored.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
 }
+
+TEST_CASE ("hall is shared, stored per scene, saved, and adopted by new inserts")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    juce::MemoryBlock saved;
+
+    {
+        ComposerProcessor a, b;
+        a.markPlaced();
+        drag (a, a.id, "hall", 4.0f); // church
+        CHECK_THAT (b.getParam ("hall"), WithinAbs (4.0, 1e-4));
+        CHECK ((int) stage::snapshot (b)["hall"] == 4);
+
+        stage::setScene (a, "B");
+        drag (a, a.id, "hall", 1.0f); // studio in scene B
+        stage::setScene (a, "A");
+        CHECK_THAT (b.getParam ("hall"), WithinAbs (4.0, 1e-4)); // scene A's church is back
+        stage::setScene (a, "B");
+        CHECK_THAT (b.getParam ("hall"), WithinAbs (1.0, 1e-4));
+
+        ComposerProcessor c;
+        stage::join (c, true);
+        CHECK_THAT (c.getParam ("hall"), WithinAbs (1.0, 1e-4));
+
+        a.getStateInformation (saved);
+    }
+
+    ComposerProcessor restored;
+    restored.setStateInformation (saved.getData(), (int) saved.getSize());
+    CHECK_THAT (restored.getParam ("hall"), WithinAbs (1.0, 1e-4));
+    stage::setScene (restored, "A");
+    CHECK_THAT (restored.getParam ("hall"), WithinAbs (4.0, 1e-4));
+}
