@@ -46,7 +46,8 @@ target_sources(Composer PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/bridge/Stage.cpp
-    Source/stage/StageRegistry.cpp)
+    Source/stage/StageRegistry.cpp
+    Source/dsp/Spatializer.cpp)
 
 target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1
@@ -90,6 +91,7 @@ target_link_libraries(Composer
     PRIVATE
         ComposerWebUI
         juce::juce_audio_utils
+        juce::juce_dsp
         juce::juce_gui_extra
     PUBLIC
         juce::juce_recommended_config_flags
@@ -106,7 +108,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Tests link the plugin's shared code (which already contains the JUCE modules)
 # and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp)
+add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/SpatializerTests.cpp)
 target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
 target_link_libraries(ComposerTests PRIVATE Composer Catch2::Catch2WithMain)

@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "stage/StageRegistry.h"
+#include "dsp/Spatializer.h"
 
 class ComposerProcessor final : public juce::AudioProcessor
 {
@@ -9,7 +10,7 @@ public:
     ComposerProcessor();
     ~ComposerProcessor() override;
 
-    void prepareToPlay (double, int) override {}
+    void prepareToPlay (double sampleRate, int) override { spatializer.prepare (sampleRate); }
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -22,7 +23,7 @@ public:
     bool acceptsMidi() const override                   { return false; }
     bool producesMidi() const override                  { return false; }
     bool isMidiEffect() const override                  { return false; }
-    double getTailLengthSeconds() const override        { return 0.0; }
+    double getTailLengthSeconds() const override        { return Spatializer::maxDelaySeconds; }
 
     int getNumPrograms() override                       { return 1; }
     int getCurrentProgram() override                    { return 0; }
@@ -73,6 +74,23 @@ public:
     void writeParam (const juce::String& paramId, float value);
 
 private:
+    // Cached for the audio thread (looking up by name would allocate a String).
+    struct AudioParams
+    {
+        std::atomic<float>* roomSize;
+        std::atomic<float>* listenerX;
+        std::atomic<float>* listenerY;
+        std::atomic<float>* playerX;
+        std::atomic<float>* playerY;
+    };
+
+    const AudioParams audioParams { state.getRawParameterValue ("roomSize"),
+                                    state.getRawParameterValue ("listenerX"),
+                                    state.getRawParameterValue ("listenerY"),
+                                    state.getRawParameterValue ("playerX"),
+                                    state.getRawParameterValue ("playerY") };
+    Spatializer spatializer;
+
     juce::String trackName, trackColour;
 
     std::atomic<float> inputPeak { 0.0f };

@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "bridge/Stage.h"
+#include "dsp/Geometry.h"
 
 namespace
 {
@@ -135,9 +136,18 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
          prev < peak && ! inputPeak.compare_exchange_weak (prev, peak, std::memory_order_relaxed);)
         ;
 
-    // Pass-through; a mono input is copied to the right channel.
-    if (getTotalNumInputChannels() == 1 && buffer.getNumChannels() > 1)
-        buffer.copyFrom (1, 0, buffer, 0, 0, buffer.getNumSamples());
+    // Audio depends only on this instance's own parameters (never on UI pushes or other
+    // instances), so offline bounces and ahead-of-time rendering stay correct.
+    const auto room = audioParams.roomSize->load();
+    const auto listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, room);
+    const auto player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, room);
+
+    spatializer.setTarget (geometry::pan (player, listener), geometry::delayMs (player, listener) / 1000.0f);
+    spatializer.process (buffer.getArrayOfReadPointers(),
+                         getTotalNumInputChannels(),
+                         buffer.getWritePointer (0),
+                         buffer.getWritePointer (1),
+                         buffer.getNumSamples());
 }
 
 juce::AudioProcessorEditor* ComposerProcessor::createEditor()
