@@ -36,6 +36,7 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> level;
     double sampleRate = 44100.0;
     const Hall* hall = nullptr;
+    float decay = 0.0f; // the Pro decay multiplier the coefficients were computed for
     bool snap = true, silent = true, hasEnergy = false;
     int dryFor = 0, drySilentAfter = 0; // samples; in Dry, keep running until the tail has died away
 };

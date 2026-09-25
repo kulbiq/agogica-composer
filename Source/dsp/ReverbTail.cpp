@@ -54,25 +54,31 @@ void ReverbTail::prepare (double newSampleRate)
 
 void ReverbTail::setAcoustics (const Acoustics& a) noexcept
 {
+    const auto& adjust = a.adjust;
     const auto directDelayMs = geometry::delayMs (a.player, a.listener);
-    input.setTarget ((directDelayMs + a.hall->preDelayMs) / 1000.0f * (float) sampleRate);
+    input.setTarget ((directDelayMs + a.hall->preDelayMs * adjust.preDelay) / 1000.0f * (float) sampleRate);
+
+    const auto tailLevel = a.hall->tailLevel * adjust.reverb;
 
     if (snap)
-        level.setCurrentAndTargetValue (a.hall->tailLevel);
+        level.setCurrentAndTargetValue (tailLevel);
     else
-        level.setTargetValue (a.hall->tailLevel);
+        level.setTargetValue (tailLevel);
 
     snap = false;
 
-    if (a.hall != hall && a.hall->rt60 > 0.0f)
+    if ((a.hall != hall || ! juce::exactlyEqual (adjust.decay, decay)) && a.hall->rt60 > 0.0f)
     {
         // Per line: decay to -60 dB in rt60 at low frequencies, rt60High at high ones
         // (Jot's first-order absorptive filter: y = g (1 - p) x + p y).
+        const auto rt60 = (double) (a.hall->rt60 * adjust.decay);
+        const auto rt60High = (double) (a.hall->rt60High * adjust.decay);
+
         for (auto& line : lines)
         {
             const auto seconds = (double) line.buffer.size() / sampleRate;
-            const auto gLow = std::pow (10.0, -3.0 * seconds / a.hall->rt60);
-            const auto gHigh = std::pow (10.0, -3.0 * seconds / a.hall->rt60High);
+            const auto gLow = std::pow (10.0, -3.0 * seconds / rt60);
+            const auto gHigh = std::pow (10.0, -3.0 * seconds / rt60High);
             const auto ratio = gHigh / gLow;
 
             line.damping = (float) ((1.0 - ratio) / (1.0 + ratio));
@@ -81,9 +87,11 @@ void ReverbTail::setAcoustics (const Acoustics& a) noexcept
     }
 
     hall = a.hall;
+    decay = adjust.decay;
 
-    // Dry: keep running until what's left in the lines has died away.
-    if (a.hall->tailLevel > 0.0f)
+    // Off (Dry, or the Pro reverb control at its bottom): keep running until what's left in
+    // the lines has died away.
+    if (tailLevel > 0.0f)
     {
         dryFor = 0;
         silent = false;
@@ -100,7 +108,7 @@ void ReverbTail::processSample (const History& history, float& left, float& righ
     if (silent)
         return;
 
-    if (hall != nullptr && hall->tailLevel <= 0.0f)
+    if (level.getTargetValue() <= 0.0f)
         ++dryFor;
 
     std::array<float, numLines> out;

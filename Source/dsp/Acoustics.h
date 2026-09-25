@@ -30,6 +30,23 @@ inline constexpr std::array<Hall, 5> halls { {
 
 inline constexpr int defaultHall = 2; // Chamber
 
+// The Pro panel: project-wide adjustments on top of the hall, in natural units.
+// The defaults are neutral (the hall exactly as designed).
+struct Adjustments
+{
+    float reflections = 1.0f;      // early reflection gain (0 = off)
+    float diffusion = 1.0f;        // 0 = clean copies (no allpass), 1 = the designed scattering
+    float floor = 1.0f;            // floor reflection gain
+    float brightness = 1.0f;       // surface cutoff multiplier
+    float reverb = 1.0f;           // tail gain (0 = off)
+    float decay = 1.0f;            // RT60 multiplier, 0.5..2
+    float preDelay = 1.0f;         // tail pre-delay multiplier, 0.5..2
+    float distanceExponent = geometry::distanceLawExponent; // 1 = free field (-6 dB per doubling)
+    float air = 1.0f;              // air absorption multiplier, 0..2
+
+    static constexpr float maxDecay = 2.0f;
+};
+
 // Everything a processing stage needs to know about the scene, set once per block.
 struct Acoustics
 {
@@ -37,12 +54,14 @@ struct Acoustics
     float roomSize = 20.0f;
     OutputMode mode = OutputMode::stereo;
     const Hall* hall = &halls[defaultHall];
+    Adjustments adjust;
 
     // Longest delay any stage asks the History for: the longest reflection path
     // (geometry::maxImageDistance) plus the tail pre-delay, with margin.
     static constexpr double maxDelaySeconds = 0.5;
 
-    // Longest audible tail after the input stops: the longest reverb (Church, 4 s) plus the
-    // longest delay. Reported to the host; also how long a silent track keeps processing.
-    static constexpr double tailSeconds = 5.0;
+    // Longest audible tail after the input stops: the longest reverb (Church, 4 s) at the
+    // Pro panel's maximum decay (x2), plus the longest delay, with margin. Reported to the
+    // host; also how long a silent track keeps processing.
+    static constexpr double tailSeconds = 10.0;
 };

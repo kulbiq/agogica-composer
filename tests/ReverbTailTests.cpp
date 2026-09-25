@@ -147,7 +147,7 @@ TEST_CASE ("a silent track skips its work and resumes at the current position")
     buffer.setSample (0, 0, 1.0f);
     p.processBlock (buffer, midi);
 
-    for (int block = 0; block < 700; ++block) // 7 s of silence
+    for (int block = 0; block < 1100; ++block) // 11 s of silence (longer than the 10 s tail)
     {
         buffer.clear();
         p.processBlock (buffer, midi);

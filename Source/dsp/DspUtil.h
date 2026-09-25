@@ -37,14 +37,14 @@ inline float onePoleCoefficient (float cutoffHz, double sampleRate) noexcept
 class Allpass
 {
 public:
-    void prepare (int delaySamples, float feedback)
+    void prepare (int delaySamples)
     {
         buffer.assign ((size_t) std::max (1, delaySamples), 0.0f);
         pos = 0;
-        g = feedback;
     }
 
-    float process (float x) noexcept
+    // g = 0 is a pure delay of the allpass length (no scattering).
+    float process (float x, float g) noexcept
     {
         const auto delayed = buffer[(size_t) pos];
         const auto v = x + g * delayed;
@@ -56,6 +56,5 @@ public:
 private:
     std::vector<float> buffer;
     int pos = 0;
-    float g = 0.0f;
 };
 } // namespace dsp

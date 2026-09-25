@@ -7,7 +7,9 @@ namespace
 {
 // Shared by every instance (each keeps its own copy). outputMode is a listening setting,
 // not part of scenes (ComposerProcessor::sceneParams); hall is.
-const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "hall" };
+const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "hall",
+                                      "proReflections", "proDiffusion", "proFloor", "proBrightness", "proReverb",
+                                      "proDecay", "proPreDelay", "proDistanceLaw", "proAir" };
 const juce::StringArray playerParams { "playerX", "playerY" };
 
 // Positions are stored on a 1 cm grid; the float range conversion leaves residue like -5.6e-7.
@@ -35,7 +37,8 @@ juce::var point (geometry::Point p)
     return o.release();
 }
 
-juce::var player (const ComposerProcessor& p, int index, bool self, float roomSize, geometry::Point listener)
+juce::var player (const ComposerProcessor& p, int index, bool self, float roomSize, geometry::Point listener,
+                  float lawExponent, float airAmount)
 {
     const auto pos = playerOf (p, roomSize);
 
@@ -44,8 +47,8 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
     derived->setProperty ("azimuth", geometry::azimuthDegrees (pos, listener));
     derived->setProperty ("pan", geometry::pan (pos, listener));
     derived->setProperty ("delayMs", geometry::delayMs (pos, listener));
-    derived->setProperty ("levelDb", 20.0f * std::log10 (geometry::distanceGain (geometry::distance (pos, listener))));
-    derived->setProperty ("airDb", -geometry::airLossDbAt8k (geometry::distance (pos, listener)));
+    derived->setProperty ("levelDb", 20.0f * std::log10 (geometry::distanceGain (geometry::distance (pos, listener), lawExponent)));
+    derived->setProperty ("airDb", -geometry::airLossDbAt8k (geometry::distance (pos, listener), airAmount));
 
     const auto name = p.getDisplayName();
 
@@ -85,6 +88,8 @@ juce::var snapshot (ComposerProcessor& self)
     auto o = std::make_unique<juce::DynamicObject>();
     const auto roomSize = self.getParam ("roomSize");
     const auto listener = listenerOf (self);
+    const auto lawExponent = self.getParam ("proDistanceLaw") / (20.0f * std::log10 (2.0f));
+    const auto airAmount = self.getParam ("proAir");
 
     // ponytail: the viewing instance's room/listener stand for the stage. The copies can
     // drift if someone edits one track's automation lane by hand; add an "out of sync" hint
@@ -96,7 +101,7 @@ juce::var snapshot (ComposerProcessor& self)
 
         for (int i = 0; i < members.size(); ++i)
         {
-            players.add (player (*members[i], i, members[i] == &self, roomSize, listener));
+            players.add (player (*members[i], i, members[i] == &self, roomSize, listener, lawExponent, airAmount));
             stored.addArray (members[i]->getStoredScenes());
         }
 
@@ -121,6 +126,13 @@ juce::var snapshot (ComposerProcessor& self)
     for (const auto& h : halls)
         hallNames.add (juce::String (h.name));
     o->setProperty ("halls", hallNames);
+
+    // Pro panel values (raw parameter values; the UI shows them with their units).
+    auto pro = std::make_unique<juce::DynamicObject>();
+    for (const auto& id : sharedParams)
+        if (id.startsWith ("pro"))
+            pro->setProperty (id, self.getParam (id));
+    o->setProperty ("pro", pro.release());
     o->setProperty ("room", roomSize);
     o->setProperty ("listener", point (listener));
     return o.release();

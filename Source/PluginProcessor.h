@@ -86,6 +86,15 @@ private:
         std::atomic<float>* playerY;
         std::atomic<float>* outputMode;
         std::atomic<float>* hall;
+        std::atomic<float>* proReflections;
+        std::atomic<float>* proDiffusion;
+        std::atomic<float>* proFloor;
+        std::atomic<float>* proBrightness;
+        std::atomic<float>* proReverb;
+        std::atomic<float>* proDecay;
+        std::atomic<float>* proPreDelay;
+        std::atomic<float>* proDistanceLaw;
+        std::atomic<float>* proAir;
     };
 
     const AudioParams audioParams { state.getRawParameterValue ("roomSize"),
@@ -94,7 +103,16 @@ private:
                                     state.getRawParameterValue ("playerX"),
                                     state.getRawParameterValue ("playerY"),
                                     state.getRawParameterValue ("outputMode"),
-                                    state.getRawParameterValue ("hall") };
+                                    state.getRawParameterValue ("hall"),
+                                    state.getRawParameterValue ("proReflections"),
+                                    state.getRawParameterValue ("proDiffusion"),
+                                    state.getRawParameterValue ("proFloor"),
+                                    state.getRawParameterValue ("proBrightness"),
+                                    state.getRawParameterValue ("proReverb"),
+                                    state.getRawParameterValue ("proDecay"),
+                                    state.getRawParameterValue ("proPreDelay"),
+                                    state.getRawParameterValue ("proDistanceLaw"),
+                                    state.getRawParameterValue ("proAir") };
 
     // The player's mono input, read by every stage.
     History history;

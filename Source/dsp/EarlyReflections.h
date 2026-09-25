@@ -38,6 +38,7 @@ private:
     static constexpr std::array<int, geometry::numImages> placerOf { 0, 1, 2, 3, 4, 4, 5, 6, 7, 8 };
     std::array<Placer, 9> placers;
     std::array<float, 9> placerInput {};
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> diffusion; // allpass g
     double sampleRate = 44100.0;
     bool snap = true, silent = true;
 };

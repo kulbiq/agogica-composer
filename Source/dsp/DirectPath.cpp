@@ -20,8 +20,8 @@ void DirectPath::setAcoustics (const Acoustics& a) noexcept
     setMode (a.mode);
     setTarget (geometry::azimuthDegrees (a.player, a.listener),
                geometry::delayMs (a.player, a.listener) / 1000.0f,
-               geometry::distanceGain (distance),
-               geometry::airCutoffHz (distance));
+               geometry::distanceGain (distance, a.adjust.distanceExponent),
+               geometry::airCutoffHz (distance, a.adjust.air));
 }
 
 void DirectPath::setTarget (float azimuthDegrees, float delaySeconds, float newGain, float airCutoffHz) noexcept
