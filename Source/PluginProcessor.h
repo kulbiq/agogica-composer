@@ -2,7 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "stage/StageRegistry.h"
-#include "dsp/Spatializer.h"
+#include "dsp/DirectPath.h"
 
 class ComposerProcessor final : public juce::AudioProcessor
 {
@@ -10,7 +10,7 @@ public:
     ComposerProcessor();
     ~ComposerProcessor() override;
 
-    void prepareToPlay (double sampleRate, int) override { spatializer.prepare (sampleRate); }
+    void prepareToPlay (double sampleRate, int) override;
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -23,7 +23,7 @@ public:
     bool acceptsMidi() const override                   { return false; }
     bool producesMidi() const override                  { return false; }
     bool isMidiEffect() const override                  { return false; }
-    double getTailLengthSeconds() const override        { return Spatializer::maxDelaySeconds; }
+    double getTailLengthSeconds() const override        { return Acoustics::maxDelaySeconds; }
 
     int getNumPrograms() override                       { return 1; }
     int getCurrentProgram() override                    { return 0; }
@@ -91,7 +91,13 @@ private:
                                     state.getRawParameterValue ("playerX"),
                                     state.getRawParameterValue ("playerY"),
                                     state.getRawParameterValue ("outputMode") };
-    Spatializer spatializer;
+
+    // The player's mono input, read by every stage.
+    History history;
+
+    // The processing chain: every stage reads `history` and adds its stereo output.
+    // Plug a stage in or out here.
+    std::tuple<DirectPath> stages;
 
     juce::String trackName, trackColour;
 

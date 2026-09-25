@@ -2,7 +2,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "../Source/PluginProcessor.h"
-#include "../Source/dsp/Spatializer.h"
+#include "../Source/dsp/DirectPath.h"
 
 using Catch::Matchers::WithinAbs;
 
@@ -26,13 +26,45 @@ void operator delete (void* p, std::size_t) noexcept { std::free (p); }
 
 namespace
 {
+// The direct-path stage with its input history, driven like the processor drives it.
+struct Rig
+{
+    History history;
+    DirectPath path;
+
+    void prepare (double sampleRate)
+    {
+        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+        path.prepare (sampleRate);
+    }
+
+    void setTarget (float azimuth, float delaySeconds, float gain = 1.0f, float airCutoffHz = 0.0f)
+    {
+        path.setTarget (azimuth, delaySeconds, gain, airCutoffHz);
+    }
+
+    void setMode (OutputMode mode) { path.setMode (mode); }
+
+    void process (const float* const* input, int numInputChannels, float* left, float* right, int numSamples)
+    {
+        for (int i = 0; i < numSamples; ++i)
+        {
+            history.write (numInputChannels > 1 ? 0.5f * (input[0][i] + input[1][i]) : input[0][i]);
+            float l = 0.0f, r = 0.0f;
+            path.processSample (history, l, r);
+            left[i] = l;
+            right[i] = r;
+        }
+    }
+};
+
 struct Output
 {
     std::vector<float> left, right;
 };
 
 // Runs `input` (mono) through a spatializer in blocks of `blockSize`.
-Output run (Spatializer& s, const std::vector<float>& input, int blockSize = 512)
+Output run (Rig& s, const std::vector<float>& input, int blockSize = 512)
 {
     Output out { std::vector<float> (input.size()), std::vector<float> (input.size()) };
 
@@ -68,7 +100,7 @@ TEST_CASE ("delay: an impulse arrives distance / 343 m/s later")
     constexpr int delaySamples = 1000;
     const auto delaySeconds = (float) (delaySamples / sampleRate);
 
-    Spatializer s;
+    Rig s;
     s.prepare (sampleRate);
     s.setTarget (0.0f, delaySeconds);
 
@@ -80,7 +112,7 @@ TEST_CASE ("delay: an impulse arrives distance / 343 m/s later")
 
 TEST_CASE ("pan: constant-power law")
 {
-    Spatializer s;
+    Rig s;
     s.prepare (48000.0);
 
     const auto [pan, expectedLeft, expectedRight] = GENERATE (table<float, double, double> ({
@@ -98,7 +130,7 @@ TEST_CASE ("pan: constant-power law")
 
 TEST_CASE ("a player at the listener: no delay, centre")
 {
-    Spatializer s;
+    Rig s;
     s.prepare (48000.0);
     s.setTarget (0.0f, 0.0f);
 
@@ -108,7 +140,7 @@ TEST_CASE ("a player at the listener: no delay, centre")
 
 TEST_CASE ("stereo input is summed to mono")
 {
-    Spatializer s;
+    Rig s;
     s.prepare (48000.0);
     s.setTarget (-90.0f, 0.0f); // -90 = hard left: left = the mono sum
 
@@ -121,7 +153,7 @@ TEST_CASE ("stereo input is summed to mono")
 TEST_CASE ("delay changes don't click and don't bend the pitch (no Doppler)")
 {
     constexpr double sampleRate = 48000.0;
-    Spatializer s;
+    Rig s;
     s.prepare (sampleRate);
     s.setTarget (0.0f, 0.0f);
 
@@ -171,7 +203,7 @@ std::vector<float> whiteNoise (size_t length, int seed)
 
 TEST_CASE ("after a delay change the output is exactly the input at the new delay")
 {
-    Spatializer s;
+    Rig s;
     s.prepare (48000.0);
     s.setTarget (-90.0f, 100.0f / 48000.0f); // hard left: left = the delayed input
 
@@ -193,7 +225,7 @@ TEST_CASE ("after a delay change the output is exactly the input at the new dela
 
 TEST_CASE ("a moving player keeps its delay until it stops (no fade chain)")
 {
-    Spatializer s;
+    Rig s;
     s.prepare (48000.0);
     s.setTarget (-90.0f, 100.0f / 48000.0f);
 
@@ -218,7 +250,7 @@ TEST_CASE ("a moving player keeps its delay until it stops (no fade chain)")
 
 TEST_CASE ("a player moving for a long time still updates its delay every ~0.5 s")
 {
-    Spatializer s;
+    Rig s;
     s.prepare (48000.0);
     s.setTarget (-90.0f, 100.0f / 48000.0f);
 
@@ -249,7 +281,7 @@ TEST_CASE ("block size doesn't change the result (1-sample blocks included)")
 
     auto render = [&] (int blockSize)
     {
-        Spatializer s;
+        Rig s;
         s.prepare (44100.0);
         s.setTarget (27.0f, 0.0123f);
         return run (s, noise, blockSize);
@@ -324,9 +356,9 @@ double rms (const float* v, size_t n)
 
 double db (double ratio) { return 20.0 * std::log10 (ratio); }
 
-Output render (Spatializer::Mode mode, float azimuth, const std::vector<float>& input, double sampleRate = 48000.0)
+Output render (OutputMode mode, float azimuth, const std::vector<float>& input, double sampleRate = 48000.0)
 {
-    Spatializer s;
+    Rig s;
     s.prepare (sampleRate);
     s.setMode (mode);
     s.setTarget (azimuth, 0.0f);
@@ -388,8 +420,8 @@ TEST_CASE ("HRTF index wraps around the circle")
 TEST_CASE ("binaural at the front is as loud as stereo at centre")
 {
     const auto noise = whiteNoise (96000, 21);
-    const auto stereo = render (Spatializer::Mode::stereo, 0.0f, noise);
-    const auto binaural = render (Spatializer::Mode::binaural, 0.0f, noise);
+    const auto stereo = render (OutputMode::stereo, 0.0f, noise);
+    const auto binaural = render (OutputMode::binaural, 0.0f, noise);
 
     auto power = [] (const Output& o)
     {
@@ -402,22 +434,22 @@ TEST_CASE ("binaural at the front is as loud as stereo at centre")
 TEST_CASE ("binaural direction: level and arrival-time differences between the ears")
 {
     const auto noise = whiteNoise (48000, 22);
-    const auto right = render (Spatializer::Mode::binaural, 90.0f, noise);
-    const auto left = render (Spatializer::Mode::binaural, -90.0f, noise);
+    const auto right = render (OutputMode::binaural, 90.0f, noise);
+    const auto left = render (OutputMode::binaural, -90.0f, noise);
 
     CHECK (db (rms (right.right.data(), noise.size()) / rms (right.left.data(), noise.size())) > 6.0);
     CHECK (db (rms (left.left.data(), noise.size()) / rms (left.right.data(), noise.size())) > 6.0);
 
     // Interaural time difference: at +90 the right ear hears it > 0.3 ms earlier.
-    const auto click = render (Spatializer::Mode::binaural, 90.0f, impulse (1024));
+    const auto click = render (OutputMode::binaural, 90.0f, impulse (1024));
     CHECK ((double) onset (click.left) - (double) onset (click.right) > 0.0003 * 48000.0);
 }
 
 TEST_CASE ("binaural tells front from back")
 {
     const auto noise = whiteNoise (48000, 23);
-    const auto front = render (Spatializer::Mode::binaural, 0.0f, noise);
-    const auto back = render (Spatializer::Mode::binaural, 180.0f, noise);
+    const auto front = render (OutputMode::binaural, 0.0f, noise);
+    const auto back = render (OutputMode::binaural, 180.0f, noise);
 
     std::vector<float> difference (noise.size());
     for (size_t i = 0; i < noise.size(); ++i)
@@ -433,9 +465,9 @@ TEST_CASE ("direction jumps and mode switches don't click")
     for (size_t i = 0; i < sine.size(); ++i)
         sine[i] = std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * (float) i / (float) sampleRate);
 
-    Spatializer s;
+    Rig s;
     s.prepare (sampleRate);
-    s.setMode (Spatializer::Mode::binaural);
+    s.setMode (OutputMode::binaural);
     s.setTarget (0.0f, 0.0f);
 
     Output out { std::vector<float> (sine.size()), std::vector<float> (sine.size()) };
@@ -448,9 +480,9 @@ TEST_CASE ("direction jumps and mode switches don't click")
     play (0, 4800);
     s.setTarget (120.0f, 0.0f); // big direction jump: one 20 ms fade
     play (4800, 4800);
-    s.setMode (Spatializer::Mode::stereo);
+    s.setMode (OutputMode::stereo);
     play (9600, 4800);
-    s.setMode (Spatializer::Mode::binaural);
+    s.setMode (OutputMode::binaural);
     play (14400, 4800);
 
     // Steps during the transitions stay within what the steady signals do on either side.
@@ -469,9 +501,9 @@ TEST_CASE ("binaural: block size doesn't change the result, no allocation")
 
     auto renderInBlocks = [&] (int blockSize)
     {
-        Spatializer s;
+        Rig s;
         s.prepare (48000.0);
-        s.setMode (Spatializer::Mode::binaural);
+        s.setMode (OutputMode::binaural);
         s.setTarget (-37.0f, 0.004f);
 
         countAllocations = true;
@@ -495,11 +527,11 @@ TEST_CASE ("binaural CPU: 32 players", "[.perf]")
     constexpr int players = 32, block = 512;
     const auto seconds = 10.0;
 
-    std::vector<Spatializer> spatializers (players);
+    std::vector<Rig> spatializers (players);
     for (int p = 0; p < players; ++p)
     {
         spatializers[(size_t) p].prepare (sampleRate);
-        spatializers[(size_t) p].setMode (Spatializer::Mode::binaural);
+        spatializers[(size_t) p].setMode (OutputMode::binaural);
         spatializers[(size_t) p].setTarget ((float) (p * 11 % 360) - 180.0f, 0.01f);
     }
 
@@ -536,7 +568,7 @@ std::vector<float> tone (double frequency, double sampleRate, size_t length)
 
 TEST_CASE ("distance gain scales the output")
 {
-    Spatializer s;
+    Rig s;
     s.prepare (48000.0);
     s.setTarget (-90.0f, 0.0f, 0.25f); // hard left, gain 0.25
 
@@ -551,7 +583,7 @@ TEST_CASE ("air absorption: ISO loss at 8 kHz, low frequencies untouched")
 
     auto lossDb = [&] (double frequency)
     {
-        Spatializer s;
+        Rig s;
         s.prepare (sampleRate);
         s.setTarget (-90.0f, 0.0f, 1.0f, geometry::airCutoffHz (metres));
         const auto input = tone (frequency, sampleRate, 48000);
@@ -568,7 +600,7 @@ TEST_CASE ("moving away changes loudness smoothly (no clicks)")
     constexpr double sampleRate = 48000.0;
     const auto input = tone (440.0, sampleRate, 9600);
 
-    Spatializer s;
+    Rig s;
     s.prepare (sampleRate);
     s.setTarget (-90.0f, 0.0f, 1.0f);
 

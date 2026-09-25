@@ -142,21 +142,37 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     // Audio depends only on this instance's own parameters (never on UI pushes or other
     // instances), so offline bounces and ahead-of-time rendering stay correct.
-    const auto room = audioParams.roomSize->load();
-    const auto listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, room);
-    const auto player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, room);
+    Acoustics acoustics;
+    acoustics.roomSize = audioParams.roomSize->load();
+    acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, acoustics.roomSize);
+    acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, acoustics.roomSize);
+    acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
 
-    spatializer.setMode (audioParams.outputMode->load() > 0.5f ? Spatializer::Mode::binaural : Spatializer::Mode::stereo);
-    const auto distance = geometry::distance (player, listener);
-    spatializer.setTarget (geometry::azimuthDegrees (player, listener),
-                           geometry::delayMs (player, listener) / 1000.0f,
-                           geometry::distanceGain (distance),
-                           geometry::airCutoffHz (distance));
-    spatializer.process (buffer.getArrayOfReadPointers(),
-                         getTotalNumInputChannels(),
-                         buffer.getWritePointer (0),
-                         buffer.getWritePointer (1),
-                         buffer.getNumSamples());
+    std::apply ([&] (auto&... stage) { (stage.setAcoustics (acoustics), ...); }, stages);
+
+    const auto numInputs = getTotalNumInputChannels();
+    const auto* inL = buffer.getReadPointer (0);
+    const auto* inR = buffer.getReadPointer (numInputs > 1 ? 1 : 0);
+    auto* outL = buffer.getWritePointer (0);
+    auto* outR = buffer.getWritePointer (1);
+
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        // A stereo input is summed to mono (read before the outputs overwrite it).
+        history.write (numInputs > 1 ? 0.5f * (inL[i] + inR[i]) : inL[i]);
+
+        float left = 0.0f, right = 0.0f;
+        std::apply ([&] (auto&... stage) { (stage.processSample (history, left, right), ...); }, stages);
+
+        outL[i] = left;
+        outR[i] = right;
+    }
+}
+
+void ComposerProcessor::prepareToPlay (double sampleRate, int)
+{
+    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+    std::apply ([&] (auto&... stage) { (stage.prepare (sampleRate), ...); }, stages);
 }
 
 juce::AudioProcessorEditor* ComposerProcessor::createEditor()
