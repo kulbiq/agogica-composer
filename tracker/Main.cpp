@@ -3,26 +3,31 @@
 // the head-tracking file (Source/stage/HeadTrackingFile.h). No network: the page, the
 // WASM runtime and the model are served from the app bundle.
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <juce_video/juce_video.h>
 #include "../Source/bridge/Mime.h"
 #include "../Source/stage/HeadTrackingFile.h"
+#include "EngineHost.h"
 
 namespace
 {
 // The built page (tracker/ui/dist), copied into the bundle by the build.
-juce::File pageRoot()
+juce::File resources()
 {
     const auto app = juce::File::getSpecialLocation (juce::File::currentApplicationFile);
    #if JUCE_MAC
-    return app.getChildFile ("Contents/Resources/ui");
+    return app.getChildFile ("Contents/Resources");
    #else
-    return app.getParentDirectory().getChildFile ("ui");
+    return app.getParentDirectory();
    #endif
 }
 
+juce::File pageRoot() { return resources().getChildFile ("ui"); }
+
 std::optional<juce::WebBrowserComponent::Resource> serve (const juce::String& url)
 {
-    const auto path = url == "/" ? juce::String { "index.html" }
-                                 : url.fromFirstOccurrenceOf ("/", false, false).upToFirstOccurrenceOf ("?", false, false);
+    auto path = url.fromFirstOccurrenceOf ("/", false, false).upToFirstOccurrenceOf ("?", false, false);
+    if (path.isEmpty())
+        path = "index.html";
     const auto root = pageRoot();
     const auto file = root.getChildFile (path);
 
@@ -50,11 +55,19 @@ public:
                                     (std::uint64_t) juce::Time::currentTimeMillis(), (bool) args[3] });
                 complete ({});
             })
+            .withNativeFunction ("setEngine", [this] (const juce::Array<juce::var>& args, auto complete)
+            {
+                if (args.size() == 1)
+                    engines.setEngine (args[0].toString());
+                complete ({});
+            })
             .withResourceProvider (serve));
 
         setContentNonOwned (browser.get(), false);
         browser->setSize (380, 680);
-        browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+        // Development: AGOGICA_TRACKER_ENGINE=whenet starts on that engine.
+        const auto engine = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_ENGINE", {});
+        browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + (engine.isNotEmpty() ? "?engine=" + engine : juce::String()));
         setUsingNativeTitleBar (true);
         setResizable (false, false);
 
@@ -74,6 +87,11 @@ public:
 
 private:
     headtracking::Writer writer { headtracking::defaultFile() };
+    EngineHost engines { resources().getChildFile ("models"), [this] (const juce::var& v)
+    {
+        if (browser != nullptr)
+            browser->emitEventIfBrowserIsVisible ("estimate", v);
+    } };
     juce::ScopedLowPowerModeDisabler noAppNap; // tracking must keep running in the background
     std::unique_ptr<juce::WebBrowserComponent> browser;
 };

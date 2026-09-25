@@ -5,3 +5,5 @@ tracker/ui/node_modules/
 tracker/ui/dist/
 tracker/ui/models/
 .DS_Store
+tracker/models/*.onnx
+tracker/models/*.part

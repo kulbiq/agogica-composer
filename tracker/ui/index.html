@@ -12,6 +12,18 @@
         <span class="status" id="status" data-status="soon">Starting</span>
       </header>
 
+      <label class="field">
+        <span class="label">Engine</span>
+        <select class="select" id="engine">
+          <option value="mediapipe">MediaPipe (face + body)</option>
+          <option value="whenet">WHENet</option>
+          <option value="6drepnet360">6DRepNet360</option>
+          <option value="deimv2">DEIMv2 direction</option>
+          <option value="yolov8pose">YOLOv8n-Pose</option>
+        </select>
+        <span class="note small" id="engineNote"></span>
+      </label>
+
       <div class="dial" aria-hidden="true">
         <svg viewBox="-60 -60 120 120">
           <circle class="ring" r="50" />
@@ -39,10 +51,14 @@
         <button class="ghost" id="pause" aria-pressed="false">Pause</button>
       </div>
 
+      <p class="note small" id="stats"></p>
+
       <details class="more">
         <summary class="label">Camera</summary>
-        <video id="video" autoplay playsinline muted></video>
-        <p class="note" id="stats"></p>
+        <div class="preview">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="box" id="box" hidden></div>
+        </div>
       </details>
 
       <footer class="foot label">Head tracking for Composer · video never leaves this Mac · MediaPipe (Apache 2.0)</footer>

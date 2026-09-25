@@ -116,7 +116,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Tests link the plugin's shared code (which already contains the JUCE modules)
 # and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp)
+add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp)
 target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
 target_compile_definitions(ComposerTests PRIVATE COMPOSER_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
@@ -127,6 +127,15 @@ include(Catch)
 catch_discover_tests(ComposerTests)
 
 # --- Agogica Tracker (head tracking companion app) ---------------------------
+# ONNX Runtime (MIT) for the tracker's native head-pose engines; never linked into the plugin.
+# ponytail: arm64 only - 1.30 ships no universal macOS build; Intel Macs need a source build.
+include(FetchContent)
+FetchContent_Declare(onnxruntime
+    URL https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-osx-arm64-1.30.0.tgz
+    URL_HASH SHA256=6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(onnxruntime)
+
 juce_add_gui_app(ComposerTracker
     COMPANY_NAME Agogica
     BUNDLE_ID com.agogica.tracker
@@ -136,13 +145,22 @@ juce_add_gui_app(ComposerTracker
     CAMERA_PERMISSION_ENABLED TRUE
     CAMERA_PERMISSION_TEXT "Agogica Tracker follows your head with the camera so Composer can keep the ensemble fixed in the room. Video never leaves this Mac.")
 
-target_sources(ComposerTracker PRIVATE tracker/Main.cpp Source/stage/HeadTrackingFile.cpp)
+target_sources(ComposerTracker PRIVATE
+    tracker/Main.cpp
+    tracker/EngineHost.cpp
+    tracker/engines/Engines.cpp
+    tracker/engines/Onnx.cpp
+    Source/stage/HeadTrackingFile.cpp)
+target_include_directories(ComposerTracker SYSTEM PRIVATE ${onnxruntime_SOURCE_DIR}/include) # third-party warnings off
+target_link_libraries(ComposerTracker PRIVATE ${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.1.dylib)
+set_target_properties(ComposerTracker PROPERTIES BUILD_RPATH "@executable_path/../Frameworks" INSTALL_RPATH "@executable_path/../Frameworks")
 target_compile_definitions(ComposerTracker PRIVATE
+    JUCE_USE_CAMERA=1
     JUCE_WEB_BROWSER=1
     JUCE_USE_CURL=0
     JUCE_APPLICATION_VERSION_STRING="${COMPOSER_VERSION}")
 target_link_libraries(ComposerTracker
-    PRIVATE juce::juce_gui_extra
+    PRIVATE juce::juce_gui_extra juce::juce_video
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
 # The tracker page (MediaPipe + model, ~25 MB) ships as files in the app bundle, not as
@@ -164,9 +182,28 @@ add_custom_command(
 add_custom_target(ComposerTrackerUI DEPENDS ${TRACKER_UI_STAMP})
 add_dependencies(ComposerTracker ComposerTrackerUI)
 
+# The native engines' models (downloaded, not committed: tracker/models/MODELS.md).
+set(TRACKER_MODELS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tracker/models)
+set(TRACKER_MODELS_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-models.stamp)
+add_custom_command(
+    OUTPUT ${TRACKER_MODELS_STAMP}
+    COMMAND python3 ${TRACKER_MODELS_DIR}/fetch_models.py
+    COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_MODELS_STAMP}
+    DEPENDS ${TRACKER_MODELS_DIR}/fetch_models.py
+    COMMENT "Fetching tracker models"
+    VERBATIM)
+add_custom_target(ComposerTrackerModels DEPENDS ${TRACKER_MODELS_STAMP})
+add_dependencies(ComposerTracker ComposerTrackerModels)
+
 add_custom_command(TARGET ComposerTracker POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
+    COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx ${TRACKER_MODELS_DIR}/whenet_1x3x224x224_prepost.onnx
+            ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx ${TRACKER_MODELS_DIR}/deimv2_atto_wholebody34_320x320.onnx
+            ${TRACKER_MODELS_DIR}/yolov8n-pose.onnx ${TRACKER_MODELS_DIR}/MODELS.md "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks"
+    COMMAND ${CMAKE_COMMAND} -E copy ${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.1.30.0.dylib "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks/libonnxruntime.1.dylib"
     VERBATIM)
 
 # Install per user (no admin), like the plugins: Composer starts it from there.
