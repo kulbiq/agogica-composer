@@ -230,22 +230,37 @@ p.small {
 }
 
 /* Wide window: controls on the left, the camera (with the head box) on the right, so the
-   engine's readouts and what it sees are visible together. */
+   engine's readouts and what it sees are visible together. Two real columns: the camera's
+   height never stretches the controls. */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 @media (min-width: 700px) {
   .app {
-    display: grid;
-    grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.4fr);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
     column-gap: 28px;
-    row-gap: 18px;
-    align-content: start;
   }
 
-  .app > * {
-    grid-column: 1;
+  .controls {
+    flex: 1 1 300px;
   }
 
-  .app > .more {
-    grid-column: 2;
-    grid-row: 1 / span 20;
+  .more {
+    flex: 1.4 1 320px;
   }
+
+  .foot {
+    flex-basis: 100%;
+  }
+}
+
+/* The preview never takes over the window. */
+.more video {
+  max-height: 60vh;
+  object-fit: contain;
 }
