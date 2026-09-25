@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "bridge/Stage.h"
 #include <BinaryData.h>
 
 namespace
@@ -79,7 +80,24 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                     .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
                                                  .withUserDataFolder (juce::File::getSpecialLocation (juce::File::tempDirectory)))
                     .withNativeIntegrationEnabled()
-                    .withOptionsFrom (roomSizeRelay)
+                    .withNativeFunction ("getStage", [this] (const auto&, auto complete)
+                                         {
+                                             complete (stage::snapshot (composer));
+                                         })
+                    .withNativeFunction ("edit", [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 1)
+                                                 stage::applyEdit (composer, args[0]);
+
+                                             complete ({});
+                                         })
+                    .withNativeFunction ("setName", [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 2 && (int) args[0] == composer.id)
+                                                 composer.setNameOverride (args[1].toString());
+
+                                             complete ({});
+                                         })
                     .withNativeFunction ("getBuildInfo", [this] (const auto&, auto complete)
                                          {
                                              complete (getBuildInfo (composer));
@@ -93,8 +111,7 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
-                    .withResourceProvider (getResource, resourceOrigin) },
-      roomSizeAttachment { *p.state.getParameter ("roomSize"), roomSizeRelay }
+                    .withResourceProvider (getResource, resourceOrigin) }
 {
     addAndMakeVisible (browser);
 
@@ -110,6 +127,15 @@ void ComposerEditor::timerCallback()
 {
     const auto db = juce::Decibels::gainToDecibels (composer.takeInputPeak(), -60.0f);
     browser.emitEventIfBrowserIsVisible ("inputLevel", db);
+
+    // Automation playback and other changes reach the UI here; it only draws them.
+    const auto stage = stage::snapshot (composer);
+
+    if (auto json = juce::JSON::toString (stage, true); json != lastStage)
+    {
+        lastStage = std::move (json);
+        browser.emitEventIfBrowserIsVisible ("stage", stage);
+    }
 }
 
 void ComposerEditor::resized()

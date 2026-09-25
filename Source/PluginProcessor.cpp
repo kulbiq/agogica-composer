@@ -1,10 +1,25 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+namespace
+{
+std::atomic<int> nextId { 0 };
+
+auto metres (const juce::String& id, const juce::String& name, float defaultValue)
+{
+    return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 },
+                                                        name,
+                                                        juce::NormalisableRange<float> { -25.0f, 25.0f, 0.01f },
+                                                        defaultValue,
+                                                        juce::AudioParameterFloatAttributes{}.withLabel ("m"));
+}
+} // namespace
+
 ComposerProcessor::ComposerProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+      id (nextId++)
 {
 }
 
@@ -16,7 +31,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createPar
                                                      juce::NormalisableRange<float> { 5.0f, 50.0f, 5.0f },
                                                      20.0f,
                                                      juce::AudioParameterFloatAttributes{}.withLabel ("m")),
+        metres ("listenerX", "Listener X", 0.0f),
+        metres ("listenerY", "Listener Y", 0.0f),
+        metres ("playerX", "Player X", 0.0f),
+        metres ("playerY", "Player Y", 5.0f),
     };
+}
+
+juce::String ComposerProcessor::getDisplayName() const
+{
+    if (const auto name = state.state.getProperty ("name").toString(); name.isNotEmpty())
+        return name;
+
+    return trackName;
+}
+
+void ComposerProcessor::updateTrackProperties (const TrackProperties& properties)
+{
+    trackName = properties.name.value_or (juce::String{});
+    trackColour = properties.colourARGB ? "#" + juce::Colour (*properties.colourARGB).toDisplayString (false).toLowerCase()
+                                        : juce::String{};
 }
 
 bool ComposerProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const

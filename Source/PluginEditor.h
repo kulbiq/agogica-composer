@@ -29,13 +29,8 @@ private:
     void timerCallback() override;
 
     ComposerProcessor& composer;
-
-    // Relays must exist before the browser that takes options from them.
-    juce::WebSliderRelay roomSizeRelay { "roomSize" };
-
     Browser browser;
-
-    juce::WebSliderParameterAttachment roomSizeAttachment;
+    juce::String lastStage;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComposerEditor)
 };

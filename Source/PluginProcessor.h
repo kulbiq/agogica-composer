@@ -31,6 +31,8 @@ public:
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
 
+    void updateTrackProperties (const TrackProperties&) override;
+
     // Single source of truth for parameters and saved scene data.
     juce::AudioProcessorValueTreeState state { *this, nullptr, "Composer", createParameterLayout() };
 
@@ -39,7 +41,21 @@ public:
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+    // Stage data (message thread). Positions are unclamped, in metres.
+    float getParam (const juce::String& paramId) const  { return state.getRawParameterValue (paramId)->load(); }
+    juce::String getGroup() const                       { return state.state.getProperty ("group", "A"); }
+    juce::String getDisplayName() const;                // name override, else host track name, else empty
+    void setNameOverride (const juce::String& name)     { state.state.setProperty ("name", name.trim(), nullptr); }
+
+    // Host track colour as "#rrggbb", or empty when the host doesn't send one.
+    juce::String getTrackColour() const                 { return trackColour; }
+
+    // Unique within the process; identifies this player to the web UI.
+    const int id;
+
 private:
+    juce::String trackName, trackColour;
+
     std::atomic<float> inputPeak { 0.0f };
     static_assert (std::atomic<float>::is_always_lock_free);
 
