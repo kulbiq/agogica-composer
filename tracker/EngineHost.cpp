@@ -126,6 +126,7 @@ void EngineHost::run()
             {
                 o->setProperty ("found", true);
                 o->setProperty ("yaw", e->yaw);
+                o->setProperty ("rawYaw", e->rawYaw);
                 o->setProperty ("pitch", e->pitch);
                 o->setProperty ("roll", e->roll);
                 o->setProperty ("confidence", e->confidence);
@@ -141,7 +142,13 @@ void EngineHost::run()
         }
         catch (const std::exception& e)
         {
-            return status ("error", e.what());
+            // One bad frame is "no head this frame", not the end of tracking.
+            juce::DynamicObject::Ptr o = new juce::DynamicObject();
+            o->setProperty ("status", "running");
+            o->setProperty ("provider", engine->provider());
+            o->setProperty ("found", false);
+            o->setProperty ("warning", juce::String (e.what()));
+            post (o);
         }
     }
 }

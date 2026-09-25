@@ -20,7 +20,16 @@ Ort::Session openSession (const juce::File& file, juce::String& provider)
         try
         {
             Ort::SessionOptions options;
-            options.AppendExecutionProvider ("CoreML", { { "ModelFormat", "MLProgram" }, { "MLComputeUnits", "ALL" } });
+            // Static shapes only: the head detector's post-processing returns N detections, and
+            // CoreML fails on N = 0 (no head in view) - those nodes run on the CPU instead.
+            // Compiled models are cached, so only the first launch compiles.
+            const auto cache = juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+                                   .getChildFile ("Library/Caches/Agogica/coreml");
+            cache.createDirectory();
+            options.AppendExecutionProvider ("CoreML", { { "ModelFormat", "MLProgram" },
+                                                         { "MLComputeUnits", "ALL" },
+                                                         { "RequireStaticInputShapes", "1" },
+                                                         { "ModelCacheDirectory", cache.getFullPathName().toStdString() } });
             provider = "CoreML";
             return Ort::Session (environment(), file.getFullPathName().toRawUTF8(), options);
         }

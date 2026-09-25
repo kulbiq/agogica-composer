@@ -11,6 +11,7 @@ namespace engines
 struct Estimate
 {
     float yaw = 0, pitch = 0, roll = 0;
+    float rawYaw = 0;             // before any reconstruction (diagnostics)
     float confidence = 0;
     juce::Rectangle<float> box;   // the head/person used, normalised 0..1 (debug overlay)
     float detectMs = 0, poseMs = 0;
@@ -24,7 +25,7 @@ public:
     virtual juce::String provider() const = 0; // "CoreML" / "CPU"
 };
 
-// "whenet", "6drepnet360", "deimv2", "yolov8pose"; models from `modelsDir`. Loading can take
+// "6drepnet360" (the chosen engine); models from `modelsDir`. Loading can take
 // seconds (CoreML compiles on first use): call off the message thread. Throws on failure.
 std::unique_ptr<Engine> makeEngine (const juce::String& name, const juce::File& modelsDir);
 } // namespace engines

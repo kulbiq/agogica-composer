@@ -13,17 +13,6 @@
         <span class="status" id="status" data-status="soon">Starting</span>
       </header>
 
-      <label class="field">
-        <span class="label">Engine</span>
-        <select class="select" id="engine">
-          <option value="mediapipe">MediaPipe (face + body)</option>
-          <option value="whenet">WHENet</option>
-          <option value="6drepnet360">6DRepNet360</option>
-          <option value="deimv2">DEIMv2 direction</option>
-          <option value="yolov8pose">YOLOv8n-Pose</option>
-        </select>
-        <span class="note small" id="engineNote"></span>
-      </label>
 
       <div class="dial" aria-hidden="true">
         <svg viewBox="-60 -60 120 120">
@@ -63,7 +52,7 @@
         </div>
       </details>
 
-      <footer class="foot label">Head tracking for Composer · video never leaves this Mac · MediaPipe (Apache 2.0)</footer>
+      <footer class="foot label">Head tracking for Composer · video never leaves this Mac · 6DRepNet360 (MIT; non-commercial training data)</footer>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

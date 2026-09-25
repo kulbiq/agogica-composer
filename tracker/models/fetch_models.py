@@ -1,4 +1,4 @@
-"""Downloads the head-pose models the Agogica Tracker compares (dev builds only; the files
+"""Downloads the head-pose models of the Agogica Tracker (6DRepNet360 + its head detector) (dev builds only; the files
 are not committed - see MODELS.md for sources, licences and training-data terms).
 
     python3 tracker/models/fetch_models.py
@@ -20,19 +20,10 @@ MODELS = {
         f"{PINTO}/426_YOLOX-Body-Head-Hand/resources_n.tar.gz",
         "yolox_n_body_head_hand_post_0461_0.4428_1x3x192x320.onnx",
     ),
-    "whenet_1x3x224x224_prepost.onnx": (
-        "https://github.com/PINTO0309/HeadPoseEstimation-WHENet-yolov4-onnx-openvino/releases/download/v1.0.4/whenet_1x3x224x224_prepost.onnx",
-        None,
-    ),
     "sixdrepnet360_1x3x224x224_full.onnx": (
         f"{PINTO}/423_6DRepNet360/resources_full.tar.gz",
         "sixdrepnet360_1x3x224x224_full.onnx",
     ),
-    "deimv2_atto_wholebody34_320x320.onnx": (
-        f"{PINTO}/472_DEIMv2-Wholebody34/resources.tar.gz",
-        "deimv2_hgnetv2_atto_wholebody34_340query_n_batch_320x320.onnx",
-    ),
-    "yolov8n-pose.onnx": ("https://huggingface.co/Xenova/yolov8-pose-onnx/resolve/main/yolov8n-pose.onnx", None),
 }
 
 

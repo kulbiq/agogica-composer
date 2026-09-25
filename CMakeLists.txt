@@ -202,10 +202,11 @@ set_target_properties(ComposerTracker PROPERTIES LINK_DEPENDS "${TRACKER_UI_STAM
 add_custom_command(TARGET ComposerTracker POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
-    COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx ${TRACKER_MODELS_DIR}/whenet_1x3x224x224_prepost.onnx
-            ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx ${TRACKER_MODELS_DIR}/deimv2_atto_wholebody34_320x320.onnx
-            ${TRACKER_MODELS_DIR}/yolov8n-pose.onnx ${TRACKER_MODELS_DIR}/MODELS.md "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
+    COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx
+            ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx ${TRACKER_MODELS_DIR}/MODELS.md
+            "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks"
     COMMAND ${CMAKE_COMMAND} -E copy ${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.1.30.0.dylib "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks/libonnxruntime.1.dylib"
     VERBATIM)

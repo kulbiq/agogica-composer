@@ -5,11 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node scripts/copy-assets.mjs"
+    "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@juce-framework/webview": "file:../../JUCE/modules/juce_gui_extra/native/typescript/webview-interop",
-    "@mediapipe/tasks-vision": "^1.0.1"
+    "@juce-framework/webview": "file:../../JUCE/modules/juce_gui_extra/native/typescript/webview-interop"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
