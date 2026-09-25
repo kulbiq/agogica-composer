@@ -41,6 +41,21 @@ std::optional<juce::WebBrowserComponent::Resource> serve (const juce::String& ur
     return juce::WebBrowserComponent::Resource { { bytes, bytes + data.getSize() }, web::mimeType (path) };
 }
 
+// ~/Library/Application Support/Agogica/Tracker.settings
+juce::PropertiesFile& settings()
+{
+    static juce::PropertiesFile file ([]
+    {
+        juce::PropertiesFile::Options o;
+        o.applicationName = "Tracker";
+        o.folderName = "Agogica";
+        o.filenameSuffix = ".settings";
+        o.osxLibrarySubFolder = "Application Support";
+        return o;
+    }());
+    return file;
+}
+
 class Window final : public juce::DocumentWindow
 {
 public:
@@ -69,17 +84,22 @@ public:
         const auto engine = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_ENGINE", {});
         browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + (engine.isNotEmpty() ? "?engine=" + engine : juce::String()));
         setUsingNativeTitleBar (true);
-        setResizable (false, false);
+        // Resizable (taller shows the camera preview and the angle together); the size and
+        // position are remembered between launches.
+        setResizable (true, false);
+        setResizeLimits (340, 420, 1200, 2400);
 
         // WebKit pauses a page it thinks isn't visible, which would stop tracking whenever
         // Dorico is in front: keep the window above other windows.
         setAlwaysOnTop (true);
-        centreWithSize (380, 680);
+        if (const auto saved = settings().getValue ("windowState"); saved.isEmpty() || ! restoreWindowStateFromString (saved))
+            centreWithSize (380, 680);
         setVisible (true);
     }
 
     ~Window() override
     {
+        settings().setValue ("windowState", getWindowStateAsString());
         writer.write ({}); // no face: Composer eases back to straight ahead
     }
 

@@ -185,6 +185,11 @@ class Output {
 let output = new Output();
 
 async function main() {
+  // The camera section stays as the user left it.
+  const camera = document.querySelector<HTMLDetailsElement>("details.more")!;
+  camera.open = localStorage.getItem("cameraOpen") === "1";
+  camera.ontoggle = () => localStorage.setItem("cameraOpen", camera.open ? "1" : "0");
+
   const select = $<HTMLSelectElement>("engine");
   const syncInvert = () => $("invert").setAttribute("aria-pressed", String(invertOf(engine)));
 
