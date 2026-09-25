@@ -53,11 +53,15 @@ public:
             .withResourceProvider (serve));
 
         setContentNonOwned (browser.get(), false);
-        browser->setSize (380, 620);
+        browser->setSize (380, 680);
         browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
         setUsingNativeTitleBar (true);
         setResizable (false, false);
-        centreWithSize (380, 620);
+
+        // WebKit pauses a page it thinks isn't visible, which would stop tracking whenever
+        // Dorico is in front: keep the window above other windows.
+        setAlwaysOnTop (true);
+        centreWithSize (380, 680);
         setVisible (true);
     }
 
@@ -70,6 +74,7 @@ public:
 
 private:
     headtracking::Writer writer { headtracking::defaultFile() };
+    juce::ScopedLowPowerModeDisabler noAppNap; // tracking must keep running in the background
     std::unique_ptr<juce::WebBrowserComponent> browser;
 };
 

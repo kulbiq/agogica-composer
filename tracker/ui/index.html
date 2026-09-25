@@ -26,6 +26,13 @@
       </div>
       <p class="note">Turn your head to the right: the value goes positive and the players move to your left. If it goes negative, press Invert.</p>
 
+      <label class="field">
+        <span class="row"><span class="label">Rotation gain</span><span class="small" id="gainValue">×1.0</span></span>
+        <input class="range" id="gain" type="range" min="1" max="3" step="0.1" value="1" />
+      </label>
+      <p class="note small" id="range">Tracked this session: 0° … 0°</p>
+      <p class="note small" id="source">Source: none</p>
+
       <div class="buttons">
         <button class="ghost" id="recenter">Recenter</button>
         <button class="ghost" id="invert" aria-pressed="false">Invert</button>
