@@ -212,3 +212,68 @@ TEST_CASE ("head filter: replay recorded sessions", "[.replay]")
     }
     CHECK (true);
 }
+
+// ---- FilterTuner -------------------------------------------------------------------------------
+
+#include "../tracker/engines/FilterTuner.h"
+
+namespace
+{
+using Pins = std::array<std::optional<float>, (size_t) Param::count>;
+
+// Runs `seconds` of readings from `yawAt(t)` through a tuner; returns its settled parameters.
+template <typename F>
+FilterParams settle (FilterTuner& tuner, double& t, double seconds, F yawAt, const Pins& pins = {})
+{
+    FilterParams p;
+    for (double end = t + seconds; t < end; t += 1.0 / 30.0)
+    {
+        tuner.add (t, yawAt (t), 1.0f);
+        p = tuner.tuned (t, pins);
+    }
+    return p;
+}
+} // namespace
+
+TEST_CASE ("filter tuner: noisy readings raise sigmaZ")
+{
+    std::mt19937 rng (3);
+    std::normal_distribution<float> small (0.0f, 1.0f), large (0.0f, 6.0f);
+    FilterTuner calm, noisy;
+    double t1 = 0, t2 = 0;
+    const auto a = settle (calm, t1, 20, [&] (double) { return std::optional<float> (small (rng)); });
+    const auto b = settle (noisy, t2, 20, [&] (double) { return std::optional<float> (large (rng)); });
+    CHECK (b.sigmaZ > 2.5f * a.sigmaZ);
+}
+
+TEST_CASE ("filter tuner: moving raises turnSpeed, never below the floor when still")
+{
+    FilterTuner still, moving;
+    double t1 = 0, t2 = 0;
+    const auto a = settle (still, t1, 20, [] (double) { return std::optional<float> (10.0f); });
+    const auto b = settle (moving, t2, 20, [] (double time) { return std::optional<float> (wrap ((float) (time * 200.0))); }); // 200 °/s
+    CHECK (a.turnSpeed >= FilterTuner::minTurnSpeed);
+    CHECK (b.turnSpeed > 250.0f);
+}
+
+TEST_CASE ("filter tuner: model jumps count as outliers, not as speed")
+{
+    FilterTuner tuner;
+    double t = 0;
+    int frame = 0;
+    const auto p = settle (tuner, t, 20, [&] (double) { return std::optional<float> (++frame % 30 == 0 ? 170.0f : 10.0f); });
+    CHECK (p.turnSpeed < 100.0f);      // the jumps didn't make it "fast"
+    CHECK (p.outlierWeight > 0.05f);   // they raised the outlier share
+}
+
+TEST_CASE ("filter tuner: pinned values are respected")
+{
+    FilterTuner tuner;
+    double t = 0;
+    Pins pins;
+    pins[(size_t) Param::sigmaZ] = 9.0f;
+    pins[(size_t) Param::confirmFrames] = 10.0f;
+    const auto p = settle (tuner, t, 10, [] (double time) { return std::optional<float> (wrap ((float) (time * 100.0))); }, pins);
+    CHECK_THAT (p.sigmaZ, WithinAbs (9.0, 1e-6));
+    CHECK (p.confirmFrames == 10);
+}

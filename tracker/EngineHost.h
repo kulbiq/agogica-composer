@@ -18,6 +18,9 @@ public:
 
     void setEngine (const juce::String& name); // message thread
 
+    // Pins a filter parameter to `value`, or back to automatic (void var). Message thread.
+    void setFilterParam (const juce::String& name, const juce::var& value);
+
 private:
     void imageReceived (const juce::Image&) override;
     void run() override;
@@ -35,4 +38,7 @@ private:
 
     juce::CriticalSection postLock;
     juce::DynamicObject::Ptr pending;
+
+    juce::CriticalSection pinsLock;
+    std::array<std::optional<float>, 7> pins; // engines::Param order
 };

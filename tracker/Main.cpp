@@ -70,6 +70,12 @@ public:
                                     (std::uint64_t) juce::Time::currentTimeMillis(), (bool) args[3] });
                 complete ({});
             })
+            .withNativeFunction ("setFilterParam", [this] (const juce::Array<juce::var>& args, auto complete)
+            {
+                if (args.size() == 2)
+                    engines.setFilterParam (args[0].toString(), args[1]);
+                complete ({});
+            })
             .withNativeFunction ("setEngine", [this] (const juce::Array<juce::var>& args, auto complete)
             {
                 if (args.size() == 1)

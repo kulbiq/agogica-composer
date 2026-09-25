@@ -38,7 +38,19 @@
       </div>
 
       <p class="note small" id="stats"></p>
+
+      <section class="stability">
+        <span class="label">Stability</span>
+        <p class="note">Auto adapts each value to the last seconds of tracking; move a slider to pin your own value.</p>
+        <div id="params"></div>
+      </section>
       </div>
+
+      <div class="side">
+      <figure class="plot">
+        <canvas id="plot" aria-label="Last 10 seconds: raw readings (dots), the filter estimate and the output"></canvas>
+        <figcaption class="note">Last 10 s · dots = raw readings (fainter = unsure front/back) · thin = estimate · bold = what Composer hears</figcaption>
+      </figure>
 
       <details class="more">
         <summary class="label">Camera</summary>
@@ -47,6 +59,7 @@
           <div class="box" id="box" hidden></div>
         </div>
       </details>
+      </div>
 
       <footer class="foot label">Head tracking for Composer · video never leaves this Mac · 6DRepNet360 (MIT; non-commercial training data)</footer>
     </main>
