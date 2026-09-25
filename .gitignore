@@ -1,4 +1,7 @@
 build/
 ui/node_modules/
 ui/dist/
+tracker/ui/node_modules/
+tracker/ui/dist/
+tracker/ui/models/
 .DS_Store

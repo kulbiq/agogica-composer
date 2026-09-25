@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agogica Tracker</title>
+  </head>
+  <body>
+    <main class="app">
+      <header class="head">
+        <span class="label">Agogica · Tracker</span>
+        <span class="status" id="status" data-status="soon">Starting</span>
+      </header>
+
+      <div class="dial" aria-hidden="true">
+        <svg viewBox="-60 -60 120 120">
+          <circle class="ring" r="50" />
+          <line class="tick" x1="0" y1="-50" x2="0" y2="-42" />
+          <path id="head" class="headArrow" d="M0 -30 L9 12 L0 5 L-9 12 Z" />
+        </svg>
+      </div>
+
+      <div class="readout">
+        <span class="label">Yaw</span>
+        <span class="value" id="yaw">0.0°</span>
+      </div>
+      <p class="note">Turn your head to the right: the value goes positive and the players move to your left. If it goes negative, press Invert.</p>
+
+      <div class="buttons">
+        <button class="ghost" id="recenter">Recenter</button>
+        <button class="ghost" id="invert" aria-pressed="false">Invert</button>
+        <button class="ghost" id="pause" aria-pressed="false">Pause</button>
+      </div>
+
+      <details class="more">
+        <summary class="label">Camera</summary>
+        <video id="video" autoplay playsinline muted></video>
+        <p class="note" id="stats"></p>
+      </details>
+
+      <footer class="foot label">Head tracking for Composer · video never leaves this Mac · MediaPipe (Apache 2.0)</footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

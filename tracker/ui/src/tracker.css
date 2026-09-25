@@ -1,0 +1,148 @@
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-lighter);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-lighter);
+}
+
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+
+.status[data-status="live"] {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.status[data-status="live"]::before {
+  border: 0;
+  background: var(--ink);
+  animation: ag-blink 2.4s ease-in-out infinite;
+}
+
+.dial {
+  align-self: center;
+  width: 180px;
+  height: 180px;
+}
+
+.dial svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ring {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.tick {
+  stroke: var(--ink-faint);
+  stroke-width: 1;
+}
+
+.headArrow {
+  fill: var(--ink);
+}
+
+.readout {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.value {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-light);
+}
+
+.buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.ghost {
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-button);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ghost:hover {
+  border-color: var(--ink);
+}
+
+.ghost[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.more video {
+  width: 100%;
+  margin-top: 10px;
+  border-radius: var(--radius-chip);
+  transform: scaleX(-1); /* a mirror is what people expect to see */
+}
+
+.more summary {
+  cursor: pointer;
+}
+
+.foot {
+  margin-top: auto;
+  font-size: 10px;
+  color: var(--ink-faint);
+}

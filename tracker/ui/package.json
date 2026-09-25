@@ -1,0 +1,18 @@
+{
+  "name": "agogica-tracker-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && node scripts/copy-assets.mjs"
+  },
+  "dependencies": {
+    "@juce-framework/webview": "file:../../JUCE/modules/juce_gui_extra/native/typescript/webview-interop",
+    "@mediapipe/tasks-vision": "^1.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}

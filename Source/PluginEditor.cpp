@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "bridge/Stage.h"
+#include "bridge/Mime.h"
 #include <BinaryData.h>
 
 namespace
@@ -9,23 +10,6 @@ juce::ZipFile& getUiZip()
     static juce::MemoryInputStream stream { BinaryData::ui_zip, BinaryData::ui_zipSize, false };
     static juce::ZipFile zip { stream };
     return zip;
-}
-
-const char* getMimeType (const juce::String& path)
-{
-    static const std::unordered_map<juce::String, const char*> types {
-        { "html",  "text/html" },
-        { "js",    "text/javascript" },
-        { "css",   "text/css" },
-        { "json",  "application/json" },
-        { "svg",   "image/svg+xml" },
-        { "png",   "image/png" },
-        { "woff2", "font/woff2" },
-        { "woff",  "font/woff" },
-    };
-
-    const auto it = types.find (path.fromLastOccurrenceOf (".", false, false).toLowerCase());
-    return it != types.end() ? it->second : "application/octet-stream";
 }
 
 std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url)
@@ -46,7 +30,7 @@ std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::Stri
 
     std::vector<std::byte> data ((size_t) in->getTotalLength());
     in->read (data.data(), data.size());
-    return juce::WebBrowserComponent::Resource { std::move (data), getMimeType (path) };
+    return juce::WebBrowserComponent::Resource { std::move (data), web::mimeType (path) };
 }
 juce::var getBuildInfo (const juce::AudioProcessor& processor)
 {

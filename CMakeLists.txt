@@ -48,6 +48,7 @@ target_sources(Composer PRIVATE
     Source/bridge/Stage.cpp
     Source/stage/StageRegistry.cpp
     Source/stage/HeadTracking.cpp
+    Source/stage/HeadTrackingFile.cpp
     Source/dsp/DirectPath.cpp
     Source/dsp/Placer.cpp
     Source/dsp/EarlyReflections.cpp
@@ -124,3 +125,46 @@ target_link_libraries(ComposerTests PRIVATE Composer Catch2::Catch2WithMain)
 include(CTest)
 include(Catch)
 catch_discover_tests(ComposerTests)
+
+# --- Agogica Tracker (head tracking companion app) ---------------------------
+juce_add_gui_app(ComposerTracker
+    COMPANY_NAME Agogica
+    BUNDLE_ID com.agogica.tracker
+    PRODUCT_NAME "Agogica Tracker"
+    VERSION ${COMPOSER_VERSION}
+    NEEDS_WEB_BROWSER TRUE
+    CAMERA_PERMISSION_ENABLED TRUE
+    CAMERA_PERMISSION_TEXT "Agogica Tracker follows your head with the camera so Composer can keep the ensemble fixed in the room. Video never leaves this Mac.")
+
+target_sources(ComposerTracker PRIVATE tracker/Main.cpp Source/stage/HeadTrackingFile.cpp)
+target_compile_definitions(ComposerTracker PRIVATE
+    JUCE_WEB_BROWSER=1
+    JUCE_USE_CURL=0
+    JUCE_APPLICATION_VERSION_STRING="${COMPOSER_VERSION}")
+target_link_libraries(ComposerTracker
+    PRIVATE juce::juce_gui_extra
+    PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+# The tracker page (MediaPipe + model, ~25 MB) ships as files in the app bundle, not as
+# BinaryData. The model is downloaded once by tracker/ui/scripts/copy-assets.mjs.
+set(TRACKER_UI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tracker/ui)
+set(TRACKER_UI_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-ui.stamp)
+file(GLOB_RECURSE TRACKER_UI_SOURCES CONFIGURE_DEPENDS ${TRACKER_UI_DIR}/src/* ${TRACKER_UI_DIR}/scripts/*)
+
+add_custom_command(
+    OUTPUT ${TRACKER_UI_STAMP}
+    COMMAND npm ci --no-audit --no-fund
+    COMMAND npm run build
+    COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_UI_STAMP}
+    WORKING_DIRECTORY ${TRACKER_UI_DIR}
+    DEPENDS ${TRACKER_UI_SOURCES} ${TRACKER_UI_DIR}/index.html ${TRACKER_UI_DIR}/package.json
+        ${TRACKER_UI_DIR}/package-lock.json ${TRACKER_UI_DIR}/vite.config.ts ${UI_SOURCES}
+    COMMENT "Building tracker UI"
+    VERBATIM)
+add_custom_target(ComposerTrackerUI DEPENDS ${TRACKER_UI_STAMP})
+add_dependencies(ComposerTracker ComposerTrackerUI)
+
+add_custom_command(TARGET ComposerTracker POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
+    VERBATIM)
