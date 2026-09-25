@@ -12,6 +12,17 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     scene: "A",
     scenes: ["A", "B"],
     hall: 2,
+    pro: {
+      proReflections: 0,
+      proDiffusion: 1,
+      proFloor: 1,
+      proBrightness: 0,
+      proReverb: -3,
+      proDecay: 1,
+      proPreDelay: 1,
+      proDistanceLaw: 6.0206 / 3,
+      proAir: 1,
+    } as Record<string, number>,
     halls: ["Dry", "Studio", "Chamber", "Concert hall", "Church"],
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
@@ -58,6 +69,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       const p = scene.players.find((pl) => pl.id === e.target);
       if (e.param === "roomSize") scene.room = e.value;
       if (e.param === "hall") scene.hall = e.value;
+      if (e.param.startsWith("pro")) scene.pro = { ...scene.pro, [e.param]: e.value };
       if (e.param === "outputMode") scene.outputMode = e.value > 0.5 ? "binaural" : "stereo";
       if (e.param === "listenerX") scene.listener.x = e.value;
       if (e.param === "listenerY") scene.listener.y = e.value;
@@ -85,6 +97,16 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       setTimeout(() => emit("__juce__complete", { promiseId: payload.resultId, result }));
     },
   };
+
+  // ?pro opens the Pro section (for screenshots; nothing to click in headless Chrome).
+  if (location.search.includes("pro"))
+    new MutationObserver((_, observer) => {
+      const details = document.querySelector("details");
+      if (details) {
+        details.open = true;
+        observer.disconnect();
+      }
+    }).observe(document, { childList: true, subtree: true });
 
   // A little fake input level.
   setInterval(() => emit("inputLevel", -30 + Math.sin(performance.now() / 700) * 20), 33);

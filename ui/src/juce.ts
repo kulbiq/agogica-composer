@@ -18,13 +18,24 @@ export type Stage = {
   outputMode: "stereo" | "binaural";
   hall: number; // index into `halls`, stored per scene
   halls: string[];
+  pro: Record<string, number>; // Pro panel parameter values (project-wide)
   alone: boolean;
   room: number;
   listener: Point;
   players: Player[];
 };
 
-export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode" | "hall";
+export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode"
+  | "hall"
+  | "proReflections"
+  | "proDiffusion"
+  | "proFloor"
+  | "proBrightness"
+  | "proReverb"
+  | "proDecay"
+  | "proPreDelay"
+  | "proDistanceLaw"
+  | "proAir";
 
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const editNative = getNativeFunction("edit");

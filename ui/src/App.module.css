@@ -320,6 +320,90 @@
   color: var(--ink);
 }
 
+/* ---- Pro panel ---- */
+
+.pro {
+  display: flex;
+  flex-direction: column;
+}
+
+.proSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  cursor: pointer;
+}
+
+.proSummary::-webkit-details-marker {
+  display: none;
+}
+
+/* Disclosure chevron after the label, drawn from the ink token. */
+.proSummary .label::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 0 2px 10px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.pro[open] .proSummary .label::after {
+  transform: rotate(45deg);
+}
+
+.proSummary:focus {
+  outline: none;
+}
+
+.proSummary:focus-visible .label {
+  color: var(--ink);
+}
+
+.proBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+}
+
+/* The website's ghost button (hard corners); a dashed outline when there's nothing to reset. */
+.ghost {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-button);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.ghost:hover {
+  border-color: var(--ink);
+}
+
+.ghost:disabled {
+  border-style: dashed;
+  color: var(--ink-lighter);
+  cursor: default;
+}
+
+.ghost:focus {
+  outline: none;
+}
+
+.ghost:focus-visible {
+  border-color: var(--ink);
+}
+
 /* ---- Player list ---- */
 
 .list {

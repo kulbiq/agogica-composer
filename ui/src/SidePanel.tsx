@@ -1,5 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { beginGesture, setName, setScene, setParams, type Gesture, type Param, type Stage } from "./juce";
+import { setName, setParams, setScene, type Stage } from "./juce";
+import ParamSlider from "./ParamSlider";
+import ProPanel from "./ProPanel";
 import type { NodeKey } from "./StageMap";
 import styles from "./App.module.css";
 
@@ -11,8 +13,6 @@ type Props = {
 };
 
 const scenes = ["A", "B", "C", "D", "E", "F", "G", "H"];
-
-const gestureKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"]);
 
 // "−15.6 dB" with a real minus sign; 0 shows as "0.0 dB".
 const formatDb = (value: number) => `${value < -0.05 ? "\u2212" : ""}${Math.abs(value).toFixed(1)} dB`;
@@ -75,7 +75,16 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
       </section>
 
       <section className={styles.section}>
-        <RoomSize room={stage.room} selfId={selfId} />
+        <ParamSlider
+          param="roomSize"
+          label="Room size"
+          value={stage.room}
+          min={5}
+          max={50}
+          step={5}
+          format={(v) => `${v} m`}
+          selfId={selfId}
+        />
         <label className={styles.field}>
           <span className={styles.label}>Hall</span>
           <select
@@ -140,6 +149,10 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
       )}
 
       <section className={styles.section}>
+        <ProPanel values={stage.pro} selfId={selfId} />
+      </section>
+
+      <section className={styles.section}>
         <span className={styles.label}>Players</span>
         <ul className={styles.list}>
           <li>
@@ -163,50 +176,6 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
   );
 }
 
-function RoomSize({ room, selfId }: { room: number; selfId: number }) {
-  // While dragging, show the local value; C++ confirms it a frame later.
-  const [dragging, setDragging] = useState<number>();
-  const gesture = useRef<Gesture>(undefined);
-  const value = dragging ?? room;
-
-  const begin = () => {
-    gesture.current ??= beginGesture(selfId, ["roomSize"] satisfies Param[]);
-  };
-  const end = () => {
-    gesture.current?.end();
-    gesture.current = undefined;
-    setDragging(undefined);
-  };
-
-  return (
-    <label className={styles.field}>
-      <span className={styles.row}>
-        <span className={styles.label}>Room size</span>
-        <span className={styles.value}>{value} m</span>
-      </span>
-      <input
-        className={styles.range}
-        type="range"
-        min={5}
-        max={50}
-        step={5}
-        value={value}
-        onPointerDown={begin}
-        onPointerUp={end}
-        onPointerCancel={end}
-        onKeyDown={(e) => gestureKeys.has(e.key) && begin()}
-        onKeyUp={(e) => gestureKeys.has(e.key) && end()}
-        onBlur={end}
-        onChange={(e) => {
-          begin();
-          const v = Number(e.target.value);
-          setDragging(v);
-          gesture.current!.change({ roomSize: v });
-        }}
-      />
-    </label>
-  );
-}
 
 function NumberField({
   label,
