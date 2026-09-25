@@ -4,7 +4,8 @@
 #include "PluginProcessor.h"
 
 // Hosts the web UI; all UI logic lives in ui/.
-class ComposerEditor final : public juce::AudioProcessorEditor
+class ComposerEditor final : public juce::AudioProcessorEditor,
+                             private juce::Timer
 {
 public:
     explicit ComposerEditor (ComposerProcessor&);
@@ -17,13 +18,24 @@ private:
         using WebBrowserComponent::WebBrowserComponent;
 
         // The UI is a single page; never navigate anywhere else.
-        bool pageAboutToLoad (const juce::String& url) override
-        {
-            return url == getResourceProviderRoot();
-        }
+        bool pageAboutToLoad (const juce::String& url) override;
+
+        // Events sent before the page's bridge exists are lost (and assert).
+        void pageFinishedLoading (const juce::String&) override   { onPageLoaded(); }
+
+        std::function<void()> onPageLoaded;
     };
 
+    void timerCallback() override;
+
+    ComposerProcessor& composer;
+
+    // Relays must exist before the browser that takes options from them.
+    juce::WebSliderRelay roomSizeRelay { "roomSize" };
+
     Browser browser;
+
+    juce::WebSliderParameterAttachment roomSizeAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComposerEditor)
 };

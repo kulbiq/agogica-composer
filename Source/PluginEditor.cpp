@@ -47,15 +47,43 @@ std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::Stri
     in->read (data.data(), data.size());
     return juce::WebBrowserComponent::Resource { std::move (data), getMimeType (path) };
 }
+juce::var getBuildInfo (const juce::AudioProcessor& processor)
+{
+    auto info = std::make_unique<juce::DynamicObject>();
+    info->setProperty ("version", JucePlugin_VersionString);
+    info->setProperty ("format", juce::AudioProcessor::getWrapperTypeDescription (processor.wrapperType));
+    info->setProperty ("host", juce::File::getSpecialLocation (juce::File::hostApplicationPath).getFileNameWithoutExtension());
+    return info.release();
+}
+
+// Debug builds configured with COMPOSER_UI_DEV_SERVER load the Vite dev server (hot reload).
+#ifdef COMPOSER_UI_DEV_SERVER_URL
+const juce::String uiUrl { COMPOSER_UI_DEV_SERVER_URL };
+const std::optional<juce::String> resourceOrigin = juce::URL { uiUrl }.getOrigin();
+#else
+const juce::String uiUrl = juce::WebBrowserComponent::getResourceProviderRoot();
+const std::optional<juce::String> resourceOrigin;
+#endif
 } // namespace
+
+bool ComposerEditor::Browser::pageAboutToLoad (const juce::String& url)
+{
+    return url == uiUrl;
+}
 
 ComposerEditor::ComposerEditor (ComposerProcessor& p)
     : AudioProcessorEditor (&p),
+      composer (p),
       browser { juce::WebBrowserComponent::Options{}
                     .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
                     .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
                                                  .withUserDataFolder (juce::File::getSpecialLocation (juce::File::tempDirectory)))
                     .withNativeIntegrationEnabled()
+                    .withOptionsFrom (roomSizeRelay)
+                    .withNativeFunction ("getBuildInfo", [this] (const auto&, auto complete)
+                                         {
+                                             complete (getBuildInfo (composer));
+                                         })
                     // The web page draws its own resize grip (JUCE's corner resizer would sit
                     // under the native webview); hosts like Ableton rely on it.
                     .withNativeFunction ("setEditorSize", [this] (const juce::Array<juce::var>& args, auto complete)
@@ -65,14 +93,23 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
-                    .withResourceProvider (getResource) }
+                    .withResourceProvider (getResource, resourceOrigin) },
+      roomSizeAttachment { *p.state.getParameter ("roomSize"), roomSizeRelay }
 {
     addAndMakeVisible (browser);
-    browser.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
 
     setResizable (true, false);
     setResizeLimits (640, 400, 2560, 1600);
     setSize (960, 600);
+
+    browser.onPageLoaded = [this] { startTimerHz (30); };
+    browser.goToURL (uiUrl);
+}
+
+void ComposerEditor::timerCallback()
+{
+    const auto db = juce::Decibels::gainToDecibels (composer.takeInputPeak(), -60.0f);
+    browser.emitEventIfBrowserIsVisible ("inputLevel", db);
 }
 
 void ComposerEditor::resized()

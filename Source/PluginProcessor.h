@@ -32,8 +32,16 @@ public:
     void setStateInformation (const void*, int) override;
 
     // Single source of truth for parameters and saved scene data.
-    juce::AudioProcessorValueTreeState state { *this, nullptr, "Composer", {} };
+    juce::AudioProcessorValueTreeState state { *this, nullptr, "Composer", createParameterLayout() };
+
+    // Peak input level since the last call; read by the editor's timer (message thread).
+    float takeInputPeak() noexcept                      { return inputPeak.exchange (0.0f); }
+
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
 private:
+    std::atomic<float> inputPeak { 0.0f };
+    static_assert (std::atomic<float>::is_always_lock_free);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComposerProcessor)
 };
