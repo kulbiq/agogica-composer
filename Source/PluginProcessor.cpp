@@ -147,7 +147,11 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const auto player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, room);
 
     spatializer.setMode (audioParams.outputMode->load() > 0.5f ? Spatializer::Mode::binaural : Spatializer::Mode::stereo);
-    spatializer.setTarget (geometry::azimuthDegrees (player, listener), geometry::delayMs (player, listener) / 1000.0f);
+    const auto distance = geometry::distance (player, listener);
+    spatializer.setTarget (geometry::azimuthDegrees (player, listener),
+                           geometry::delayMs (player, listener) / 1000.0f,
+                           geometry::distanceGain (distance),
+                           geometry::airCutoffHz (distance));
     spatializer.process (buffer.getArrayOfReadPointers(),
                          getTotalNumInputChannels(),
                          buffer.getWritePointer (0),

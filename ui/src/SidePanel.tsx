@@ -14,6 +14,9 @@ const scenes = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 const gestureKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"]);
 
+// "−15.6 dB" with a real minus sign; 0 shows as "0.0 dB".
+const formatDb = (value: number) => `${value < -0.05 ? "\u2212" : ""}${Math.abs(value).toFixed(1)} dB`;
+
 const formatPan = (pan: number) =>
   Math.abs(pan) < 0.005 ? "C" : `${pan < 0 ? "L" : "R"} ${Math.round(Math.abs(pan) * 100)}`;
 
@@ -111,6 +114,12 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
               )}
               <dt className={styles.label}>Delay</dt>
               <dd>{player.derived.delayMs.toFixed(1)} ms</dd>
+              <dt className={styles.label}>Level</dt>
+              <dd>{formatDb(player.derived.levelDb)}</dd>
+              <dt className={styles.label} title="High-frequency loss in air, at 8 kHz">
+                Air · 8 kHz
+              </dt>
+              <dd>{formatDb(player.derived.airDb)}</dd>
             </dl>
           )}
         </section>

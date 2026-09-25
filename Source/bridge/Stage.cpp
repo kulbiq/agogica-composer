@@ -44,6 +44,8 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
     derived->setProperty ("azimuth", geometry::azimuthDegrees (pos, listener));
     derived->setProperty ("pan", geometry::pan (pos, listener));
     derived->setProperty ("delayMs", geometry::delayMs (pos, listener));
+    derived->setProperty ("levelDb", 20.0f * std::log10 (geometry::distanceGain (geometry::distance (pos, listener))));
+    derived->setProperty ("airDb", -geometry::airLossDbAt8k (geometry::distance (pos, listener)));
 
     const auto name = p.getDisplayName();
 

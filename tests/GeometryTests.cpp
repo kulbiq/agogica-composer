@@ -49,3 +49,25 @@ TEST_CASE ("clampToRoom keeps points inside the square")
     CHECK_THAT (inside.x, WithinAbs (3.0, 1e-6));
     CHECK_THAT (inside.y, WithinAbs (4.0, 1e-6));
 }
+
+TEST_CASE ("loudness: -2 dB per doubling from 1 m")
+{
+    auto db = [] (float gain) { return 20.0 * std::log10 (gain); };
+
+    CHECK_THAT (db (distanceGain (0.5f)), WithinAbs (0.0, 1e-6));
+    CHECK_THAT (db (distanceGain (1.0f)), WithinAbs (0.0, 1e-6));
+    CHECK_THAT (db (distanceGain (2.0f)), WithinAbs (-2.01, 0.01));
+    CHECK_THAT (db (distanceGain (20.0f)), WithinAbs (-8.67, 0.01));
+}
+
+TEST_CASE ("air absorption: one-pole cutoff reproduces the 8 kHz loss")
+{
+    for (const auto metres : { 5.0f, 20.0f, 70.0f })
+    {
+        const auto fc = airCutoffHz (metres);
+        const auto lossAt8k = 10.0 * std::log10 (1.0 + std::pow (8000.0 / fc, 2.0));
+        CHECK_THAT (lossAt8k, WithinAbs (0.0766 * metres, 1e-3));
+    }
+
+    CHECK_THAT (airCutoffHz (0.001f), WithinAbs (0.0, 0.0)); // negligible: no filter
+}

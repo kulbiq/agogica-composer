@@ -518,3 +518,67 @@ TEST_CASE ("binaural CPU: 32 players", "[.perf]")
     UNSCOPED_INFO (players << " binaural players at " << sampleRate << " Hz: " << juce::String (load * 100.0, 1) << " % of one core");
     CHECK (load < (sampleRate < 50000.0 ? 0.10 : 0.40));
 }
+
+// ---- Distance: loudness and air ------------------------------------------------
+
+#include "../Source/dsp/Geometry.h"
+
+namespace
+{
+std::vector<float> tone (double frequency, double sampleRate, size_t length)
+{
+    std::vector<float> v (length);
+    for (size_t i = 0; i < length; ++i)
+        v[i] = (float) std::sin (juce::MathConstants<double>::twoPi * frequency * (double) i / sampleRate);
+    return v;
+}
+} // namespace
+
+TEST_CASE ("distance gain scales the output")
+{
+    Spatializer s;
+    s.prepare (48000.0);
+    s.setTarget (-90.0f, 0.0f, 0.25f); // hard left, gain 0.25
+
+    const auto out = run (s, std::vector<float> (256, 1.0f));
+    CHECK_THAT (out.left.back(), WithinAbs (0.25, 1e-5));
+}
+
+TEST_CASE ("air absorption: ISO loss at 8 kHz, low frequencies untouched")
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr float metres = 50.0f;
+
+    auto lossDb = [&] (double frequency)
+    {
+        Spatializer s;
+        s.prepare (sampleRate);
+        s.setTarget (-90.0f, 0.0f, 1.0f, geometry::airCutoffHz (metres));
+        const auto input = tone (frequency, sampleRate, 48000);
+        const auto out = run (s, input);
+        return db (rms (out.left.data() + 4800, 43200) / rms (input.data() + 4800, 43200));
+    };
+
+    CHECK_THAT (lossDb (8000.0), WithinAbs (-geometry::airLossDbAt8k (metres), 0.5)); // ~ -3.8 dB
+    CHECK (lossDb (500.0) > -0.1);
+}
+
+TEST_CASE ("moving away changes loudness smoothly (no clicks)")
+{
+    constexpr double sampleRate = 48000.0;
+    const auto input = tone (440.0, sampleRate, 9600);
+
+    Spatializer s;
+    s.prepare (sampleRate);
+    s.setTarget (-90.0f, 0.0f, 1.0f);
+
+    Output out { std::vector<float> (input.size()), std::vector<float> (input.size()) };
+    const float* first[] { input.data() };
+    s.process (first, 1, out.left.data(), out.right.data(), 4800);
+    s.setTarget (-90.0f, 0.0f, 0.1f); // -20 dB at once
+    const float* second[] { input.data() + 4800 };
+    s.process (second, 1, out.left.data() + 4800, out.right.data() + 4800, 4800);
+
+    CHECK (maxStep (out.left, 4700, 9600) <= maxStep (out.left, 100, 4800));
+    CHECK_THAT (out.left.back() / input.back(), WithinAbs (0.1, 1e-3)); // arrived after 50 ms
+}

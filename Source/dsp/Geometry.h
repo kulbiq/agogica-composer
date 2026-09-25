@@ -53,4 +53,31 @@ inline float delayMs (Point player, Point listener)
     const auto d = distance (player, listener);
     return d < atListener ? 0.0f : d / speedOfSound * 1000.0f;
 }
+
+// Loudness, unity at 1 m and closer. The free-field law is -6 dB per doubling, but in
+// a hall the reflections keep far players present, so on the dry signal that sounds far
+// too steep (user feedback): the drop is a third of it, -2 dB per doubling.
+constexpr float referenceDistance = 1.0f; // m
+constexpr float distanceLawExponent = 1.0f / 3.0f; // 1 = free field (-6 dB per doubling)
+
+inline float distanceGain (float metres)
+{
+    return metres <= referenceDistance ? 1.0f : std::pow (referenceDistance / metres, distanceLawExponent);
+}
+
+// Air absorption, ISO 9613-1 at 20 °C / 50 % RH: 0.0766 dB per metre at 8 kHz, far
+// less below. Modelled as a one-pole low-pass whose loss at 8 kHz matches.
+constexpr float airLossDbPerMetreAt8k = 0.0766f;
+
+inline float airLossDbAt8k (float metres)
+{
+    return airLossDbPerMetreAt8k * metres;
+}
+
+// Cutoff of that low-pass, or 0 when the loss is negligible (no filtering).
+inline float airCutoffHz (float metres)
+{
+    const auto excess = std::pow (10.0f, airLossDbAt8k (metres) / 10.0f) - 1.0f;
+    return excess < 1.0e-4f ? 0.0f : 8000.0f / std::sqrt (excess);
+}
 } // namespace geometry

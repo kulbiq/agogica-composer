@@ -36,6 +36,9 @@ void Spatializer::prepare (double newSampleRate)
 
     // Smoothing and fade times stay in milliseconds whatever the sample rate.
     pan.reset (sampleRate, 0.02);
+    distanceGain.reset (sampleRate, 0.05);
+    airCoefficient.reset (sampleRate, 0.05);
+    airState = 0.0f;
     delayFadeStep = (float) (1.0 / (delayFadeSeconds * sampleRate));
     fadeStep20ms = (float) (1.0 / (directionFadeSeconds * sampleRate));
     settleSamples = (int) (delaySettleSeconds * sampleRate);
@@ -45,8 +48,14 @@ void Spatializer::prepare (double newSampleRate)
     snapToTarget = true;
 }
 
-void Spatializer::setTarget (float azimuthDegrees, float delaySeconds) noexcept
+void Spatializer::setTarget (float azimuthDegrees, float delaySeconds, float gain, float airCutoffHz) noexcept
 {
+    // One-pole low-pass y += a (x - y); a = 1 passes the signal through untouched.
+    const auto nyquistish = 0.45f * (float) sampleRate;
+    const auto coefficient = airCutoffHz <= 0.0f || airCutoffHz >= nyquistish
+                                 ? 1.0f
+                                 : 1.0f - std::exp (-juce::MathConstants<float>::twoPi * airCutoffHz / (float) sampleRate);
+
     const auto maxDelay = (float) line.getMaximumDelayInSamples();
     const auto samples = juce::jlimit (0.0f, maxDelay, delaySeconds * (float) sampleRate);
     const auto newPan = juce::jlimit (-1.0f, 1.0f, geometry::foldedAzimuth (azimuthDegrees) / 90.0f);
@@ -59,11 +68,15 @@ void Spatializer::setTarget (float azimuthDegrees, float delaySeconds) noexcept
         fromDelay = toDelay = lastTarget = samples;
         direction = nextDirection = targetDirection;
         pan.setCurrentAndTargetValue (newPan);
+        distanceGain.setCurrentAndTargetValue (gain);
+        airCoefficient.setCurrentAndTargetValue (coefficient);
         snapToTarget = false;
         return;
     }
 
     pan.setTargetValue (newPan);
+    distanceGain.setTargetValue (gain);
+    airCoefficient.setTargetValue (coefficient);
 }
 
 void Spatializer::setMode (Mode newMode) noexcept
@@ -138,7 +151,8 @@ void Spatializer::process (const float* const* input, int numInputChannels, floa
     for (int i = 0; i < numSamples; ++i)
     {
         const auto in = numInputChannels > 1 ? 0.5f * (input[0][i] + input[1][i]) : input[0][i];
-        const auto out = nextDelayedSample (in);
+        airState += airCoefficient.getNextValue() * (nextDelayedSample (in) - airState);
+        const auto out = airState * distanceGain.getNextValue();
 
         // Feed the HRIR history even in stereo mode, so switching to binaural is seamless.
         historyPos = historyPos + 1 < taps ? historyPos + 1 : 0;

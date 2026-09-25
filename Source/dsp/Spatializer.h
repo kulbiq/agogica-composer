@@ -30,8 +30,10 @@ public:
     void prepare (double sampleRate);
 
     // Where the player should be heard: azimuth in degrees (0 = ahead, +90 = right,
-    // ±180 = behind), delay in seconds. The first target after prepare() is taken as-is.
-    void setTarget (float azimuthDegrees, float delaySeconds) noexcept;
+    // ±180 = behind), delay in seconds, distance gain, and the air-absorption low-pass
+    // cutoff in Hz (0 = none). The first target after prepare() is taken as-is; after
+    // that gain and cutoff glide over ~50 ms (they can't bend the pitch).
+    void setTarget (float azimuthDegrees, float delaySeconds, float gain = 1.0f, float airCutoffHz = 0.0f) noexcept;
 
     void setMode (Mode) noexcept;
 
@@ -52,6 +54,10 @@ private:
     float delayFade = 1.0f, delayFadeStep = 0.0f;   // 1 = not fading
     int stillFor = 0, waitingFor = 0;               // samples
     int settleSamples = 0, maxWaitSamples = 0;
+
+    // Distance: gain and a one-pole air-absorption low-pass (coefficient 1 = bypass).
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> distanceGain, airCoefficient;
+    float airState = 0.0f;
 
     // Stereo: constant-power pan from the folded azimuth.
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> pan;
