@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <vector>
 
 namespace dsp
 {
@@ -31,4 +32,30 @@ inline float onePoleCoefficient (float cutoffHz, double sampleRate) noexcept
 
     return 1.0f - std::exp (-juce::MathConstants<float>::twoPi * cutoffHz / (float) sampleRate);
 }
+// Schroeder allpass: flat magnitude, smears the signal in time. Used to diffuse
+// reflections (a real surface scatters; a perfect copy of the direct sound comb-filters).
+class Allpass
+{
+public:
+    void prepare (int delaySamples, float feedback)
+    {
+        buffer.assign ((size_t) std::max (1, delaySamples), 0.0f);
+        pos = 0;
+        g = feedback;
+    }
+
+    float process (float x) noexcept
+    {
+        const auto delayed = buffer[(size_t) pos];
+        const auto v = x + g * delayed;
+        buffer[(size_t) pos] = v;
+        pos = pos + 1 < (int) buffer.size() ? pos + 1 : 0;
+        return delayed - g * v;
+    }
+
+private:
+    std::vector<float> buffer;
+    int pos = 0;
+    float g = 0.0f;
+};
 } // namespace dsp

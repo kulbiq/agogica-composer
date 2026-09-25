@@ -89,19 +89,87 @@ TEST_CASE ("a wall reflection arrives on time with its physical level")
     Rig rig (chamber);
     const auto [l, r] = rig.impulse (4800);
 
-    // Right wall: image at (17, 5), 17.72 m; nothing else arrives within ±2 m of it.
+    // Right wall: image at (17, 5), 17.72 m; its neighbours arrive ≥ 7 ms before or after.
     const auto path = std::hypot (17.0f, 5.0f);
     const auto direct = std::hypot (3.0f, 5.0f);
-    const auto expected = distanceGain (direct) * direct / path * std::sqrt (1.0f - chamber.absorption);
+    const auto gain = distanceGain (direct) * direct / path * std::sqrt (1.0f - chamber.absorption);
+
+    // The diffusion allpasses keep the energy and spread it over a few ms; the air +
+    // surface low-pass takes a/(2-a) of an impulse's energy.
+    const auto a = dsp::onePoleCoefficient (std::min (airCutoffHz (path), chamber.surfaceCutoffHz), 48000.0);
+    const auto expectedEnergy = gain * gain * a / (2.0f - a);
+
     const auto at = (size_t) std::lround (path / speedOfSound * 48000.0f);
+    double energy = 0.0, rightEnergy = 0.0, leftEnergy = 0.0;
+    for (auto i = at - 2; i < at + 576; ++i) // 12 ms
+        energy += (double) l[i] * l[i] + (double) r[i] * r[i], rightEnergy += (double) r[i] * r[i], leftEnergy += (double) l[i] * l[i];
 
-    float peak = 0.0f;
-    for (auto i = at - 3; i <= at + 3; ++i)
-        peak = std::max (peak, std::hypot (l[i], r[i])); // constant-power pan: L² + R² = level²
+    CHECK (energy > 0.7 * expectedEnergy);
+    CHECK (energy < 1.3 * expectedEnergy);
+    CHECK (rightEnergy > leftEnergy); // it comes from the right
 
-    CHECK (peak > 0.55f * expected); // fractional delay spreads an impulse over 4 samples
-    CHECK (peak < 1.05f * expected);
-    CHECK (r[at] > std::abs (l[at])); // it comes from the right
+    // Nothing of it before it arrives (what's there is the diffusion tail of the front-wall
+    // reflection, 7 ms earlier).
+    double before = 0.0;
+    for (auto i = at - 40; i < at - 3; ++i)
+        before += (double) l[i] * l[i] + (double) r[i] * r[i];
+    CHECK (before < 0.15 * expectedEnergy);
+}
+
+TEST_CASE ("reflections don't comb-filter the sound (early colouration)")
+{
+    // User report: the halls sounded "distorted, too filtered". Cause: reflections were
+    // perfect copies of the direct sound (the floor one 1.35 ms late at 75 % level).
+    // Measure: the first 50 ms of the whole chain, smoothed over ~1/3 octave, 200 Hz-4 kHz.
+    // Before diffusion + surface/floor absorption: 10-13 dB. Real seats: roughly ±3 dB.
+    juce::ScopedJuceInitialiser_GUI juce;
+
+    for (const int hall : { 1, 2, 3, 4 })
+    {
+        ComposerProcessor p;
+        auto set = [&] (const char* id, float v) { auto* q = p.state.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        set ("hall", (float) hall);
+        set ("playerX", 0.0f);
+        set ("playerY", 6.0f);
+        p.setPlayConfigDetails (2, 2, 48000.0, 480);
+        p.prepareToPlay (48000.0, 480);
+
+        std::vector<float> ir;
+        juce::MidiBuffer midi;
+        for (int b = 0; b < 5; ++b)
+        {
+            juce::AudioBuffer<float> buffer (2, 480);
+            buffer.clear();
+            if (b == 0)
+                buffer.setSample (0, 0, 1.0f), buffer.setSample (1, 0, 1.0f);
+            p.processBlock (buffer, midi);
+            ir.insert (ir.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
+        }
+
+        auto power = [&] (double f) // |DFT|² of the first 50 ms at frequency f
+        {
+            double re = 0.0, im = 0.0;
+            for (size_t n = 0; n < ir.size(); ++n)
+                re += ir[n] * std::cos (juce::MathConstants<double>::twoPi * f * (double) n / 48000.0),
+                im -= ir[n] * std::sin (juce::MathConstants<double>::twoPi * f * (double) n / 48000.0);
+            return re * re + im * im;
+        };
+
+        double lo = 1e9, hi = -1e9;
+        for (double centre = 250.0; centre <= 3600.0; centre *= std::pow (2.0, 1.0 / 12.0))
+        {
+            double sum = 0.0;
+            int count = 0;
+            for (double f = centre / 1.12; f <= centre * 1.12; f += 5.0, ++count)
+                sum += power (f);
+            const auto db = 10.0 * std::log10 (sum / count);
+            lo = std::min (lo, db);
+            hi = std::max (hi, db);
+        }
+
+        INFO (halls[(size_t) hall].name << ": " << hi - lo << " dB");
+        CHECK (hi - lo < 8.0);
+    }
 }
 
 TEST_CASE ("the Dry hall has no reflections at all")

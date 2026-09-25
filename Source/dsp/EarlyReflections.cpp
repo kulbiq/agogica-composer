@@ -7,6 +7,15 @@ void EarlyReflections::prepare (double newSampleRate)
     for (size_t i = 0; i < placers.size(); ++i)
         placers[i].prepare (sampleRate, i < 5 ? Placer::Binaural::shortHrir : Placer::Binaural::panOnly);
 
+    for (size_t i = 0; i < reflections.size(); ++i)
+    {
+        // Two short allpasses per reflection, lengths differing between reflections
+        // (0.7-3.0 ms and 1.9-5.2 ms at any rate).
+        auto& r = reflections[i];
+        r.diffusion[0].prepare ((int) std::lround ((0.7 + 0.23 * (double) i) * sampleRate / 1000.0), 0.6f);
+        r.diffusion[1].prepare ((int) std::lround ((1.9 + 0.37 * (double) i) * sampleRate / 1000.0), 0.6f);
+    }
+
     for (auto& r : reflections)
     {
         r.delay.prepare (sampleRate);
@@ -25,6 +34,7 @@ void EarlyReflections::setAcoustics (const Acoustics& a) noexcept
     const auto directGain = geometry::distanceGain (direct);
     const auto images = geometry::imageSources (a.player, a.listener, a.roomSize, std::max (hall.ceiling, geometry::earHeight));
     const auto reflectivity = std::sqrt (1.0f - hall.absorption); // amplitude per bounce
+    constexpr size_t floorImage = 4; // see geometry::imageSources
 
     for (size_t i = 0; i < reflections.size(); ++i)
     {
@@ -37,8 +47,15 @@ void EarlyReflections::setAcoustics (const Acoustics& a) noexcept
         const auto gain = hall.ceiling <= 0.0f ? 0.0f
                                                : directGain * std::max (direct, geometry::referenceDistance)
                                                      / std::max (image.distance, geometry::referenceDistance)
-                                                     * std::pow (reflectivity, (float) image.bounces);
-        const auto air = dsp::onePoleCoefficient (geometry::airCutoffHz (image.distance), sampleRate);
+                                                     * (i == floorImage ? std::sqrt (1.0f - hall.floorAbsorption)
+                                                                        : std::pow (reflectivity, (float) image.bounces));
+
+        // Air over the path and the surface's own loss of highs: the lower cutoff wins.
+        const auto airCutoff = geometry::airCutoffHz (image.distance);
+        const auto cutoff = hall.surfaceCutoffHz <= 0.0f ? airCutoff
+                          : airCutoff <= 0.0f            ? hall.surfaceCutoffHz
+                                                         : std::min (airCutoff, hall.surfaceCutoffHz);
+        const auto air = dsp::onePoleCoefficient (cutoff, sampleRate);
 
         r.delay.setTarget (image.distance / geometry::speedOfSound * (float) sampleRate);
 
@@ -73,7 +90,8 @@ void EarlyReflections::processSample (const History& history, float& left, float
     {
         auto& r = reflections[i];
         r.airState += r.airCoefficient.getNextValue() * (r.delay.read (history) - r.airState);
-        placerInput[(size_t) placerOf[i]] += r.airState * r.gain.getNextValue();
+        const auto diffused = r.diffusion[1].process (r.diffusion[0].process (r.airState));
+        placerInput[(size_t) placerOf[i]] += diffused * r.gain.getNextValue();
     }
 
     for (size_t i = 0; i < placers.size(); ++i)

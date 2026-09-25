@@ -27,6 +27,7 @@ private:
         DelayTap delay;
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> gain, airCoefficient;
         float airState = 0.0f;
+        std::array<dsp::Allpass, 2> diffusion; // different lengths per reflection: decorrelated
     };
 
     std::array<Reflection, geometry::numImages> reflections;

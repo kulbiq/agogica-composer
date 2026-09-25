@@ -15,14 +15,17 @@ struct Hall
     float rt60High;      // s, at high frequencies (shorter: air and soft surfaces)
     float preDelayMs;    // tail start after the direct sound
     float tailLevel;     // tail gain relative to a player at 1 m
+    float floorAbsorption = 0.0f; // audience, seats, carpet absorb far more than walls
+    float surfaceCutoffHz = 0.0f; // surfaces absorb highs: low-pass per reflection (0 = none)
 };
 
 inline constexpr std::array<Hall, 5> halls { {
-    { "Dry",          0.0f,  0.0f,  0.0f, 0.0f,  0.0f, 0.0f  },
-    { "Studio",       3.0f,  0.6f,  0.3f, 0.2f,  5.0f, 0.10f },
-    { "Chamber",      5.0f,  0.35f, 1.0f, 0.6f, 10.0f, 0.15f },
-    { "Concert hall", 15.0f, 0.2f,  2.0f, 1.2f, 20.0f, 0.20f },
-    { "Church",       20.0f, 0.1f,  4.0f, 2.2f, 30.0f, 0.25f },
+    //  name           ceiling absorb  rt60  high  pre   tail   floor  surface Hz
+    { "Dry",           0.0f,  0.0f,   0.0f, 0.0f,  0.0f, 0.0f,  0.0f,  0.0f    },
+    { "Studio",        3.0f,  0.6f,   0.3f, 0.2f,  5.0f, 0.10f, 0.7f,  4000.0f },
+    { "Chamber",       5.0f,  0.35f,  1.0f, 0.6f, 10.0f, 0.15f, 0.6f,  6000.0f },
+    { "Concert hall", 15.0f,  0.2f,   2.0f, 1.2f, 20.0f, 0.20f, 0.7f,  5000.0f },
+    { "Church",       20.0f,  0.1f,   4.0f, 2.2f, 30.0f, 0.25f, 0.3f,  7000.0f },
 } };
 
 inline constexpr int defaultHall = 2; // Chamber
