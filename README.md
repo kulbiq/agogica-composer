@@ -76,6 +76,9 @@ Ideas and decisions collected during development, so none of them get lost.
 - Elevation (players above or below the listener) once the map is 3D.
 
 ### Head tracking
+- **AirPods head tracking** (AirPods Pro, AirPods Max, AirPods 3rd gen and later): Core Motion's `CMHeadphoneMotionManager` (macOS 14+) gives the head's rotation from the headphones' own sensors, with no camera, full 360° and no front/back ambiguity.
+  The tracker app would read it and write the same shared file, so Composer itself doesn't change; the camera stays as the fallback for other headphones.
+  Needs the motion permission (`NSMotionUsageDescription`) and a recenter on start, because the headphones report rotation relative to where they started.
 - Mirror consistency check (run 6DRepNet360 on the mirrored crop too and compare) as an extra confidence signal; it fits the frame budget.
 - Record button and replay-based tuning of the gate's default parameters on more real sessions (`tests/data/tracker-session-*.jsonl`).
 - Measure the full motion-to-sound latency.
