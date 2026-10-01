@@ -7,3 +7,4 @@ tracker/ui/models/
 .DS_Store
 tracker/models/*.onnx
 tracker/models/*.part
+.wrangler/
