@@ -13,7 +13,10 @@
 # the hub gets a signed link). Uses Wrangler's login (`wrangler login`).
 # Registering needs SUPABASE_URL and SUPABASE_SECRET_KEY, plus DOWNLOAD_BASE when not uploading
 # (a public URL prefix, e.g. a local test server).
-# ponytail: no signing or notarization yet (hub plan phase 5).
+#
+# Signing: Developer ID + hardened runtime + secure timestamp (SIGN_IDENTITY overrides the identity).
+# Notarization: NOTARY_PROFILE (default agogica-notary, a `notarytool store-credentials` profile);
+# NOTARIZE=0 skips it for a local test build. Agogica Hub refuses bundles not signed by our team.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -37,6 +40,34 @@ mkdir -p "$STAGE"
 ditto build/release/Composer_artefacts/Release/VST3/Composer.vst3 "$STAGE/Composer.vst3"
 ditto build/release/Composer_artefacts/Release/AU/Composer.component "$STAGE/Composer.component"
 ditto "build/release/ComposerTracker_artefacts/Release/Agogica Tracker.app" "$STAGE/Agogica Tracker.app"
+
+IDENTITY=${SIGN_IDENTITY:-"Developer ID Application: ..."}
+sign() { codesign --force --timestamp --options runtime --sign "$IDENTITY" "$@"; }
+# Inside out: nested code first, then the bundles that contain it.
+sign "$STAGE/Agogica Tracker.app/Contents/Frameworks/libonnxruntime.1.dylib"
+sign --entitlements scripts/tracker.entitlements "$STAGE/Agogica Tracker.app"
+sign "$STAGE/Composer.vst3"
+sign "$STAGE/Composer.component"
+for b in "$STAGE"/*; do codesign --verify --deep --strict "$b"; done
+echo "  signed as $IDENTITY"
+
+if [ "${NOTARIZE:-1}" != 0 ]; then
+  PROFILE=${NOTARY_PROFILE:-agogica-notary}
+  ditto -c -k "$STAGE" "$OUT/notarize.zip"
+  RESULT=$(xcrun notarytool submit "$OUT/notarize.zip" --keychain-profile "$PROFILE" --wait --output-format json)
+  rm -f "$OUT/notarize.zip"
+  echo "$RESULT" | grep -q '"status":"Accepted"' || {
+    echo "Notarization failed: $RESULT" >&2
+    echo "Log: xcrun notarytool log <id> --keychain-profile $PROFILE" >&2
+    exit 1
+  }
+  # Staple the ticket into each bundle so Gatekeeper can check it offline.
+  for b in "$STAGE"/*; do xcrun stapler staple -q "$b"; done
+  echo "  notarized and stapled"
+else
+  echo "  NOT notarized (NOTARIZE=0) - fine for local tests, not for users"
+fi
+
 # No --keepParent: the bundles sit at the zip root.
 ditto -c -k --sequesterRsrc "$STAGE" "$ZIP"
 rm -rf "$STAGE"
