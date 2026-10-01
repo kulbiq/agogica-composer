@@ -15,7 +15,8 @@
 # (a public URL prefix, e.g. a local test server).
 #
 # Signing: Developer ID + hardened runtime + secure timestamp (SIGN_IDENTITY overrides the identity).
-# Notarization: NOTARY_PROFILE (default agogica-notary, a `notarytool store-credentials` profile);
+# Notarization: APPLE_API_KEY + APPLE_API_ISSUER + APPLE_API_KEY_PATH (CI), else NOTARY_PROFILE
+# (default agogica-notary, a `notarytool store-credentials` profile);
 # NOTARIZE=0 skips it for a local test build. Agogica Hub refuses bundles not signed by our team.
 set -eu
 cd "$(dirname "$0")/.."
@@ -52,13 +53,19 @@ for b in "$STAGE"/*; do codesign --verify --deep --strict "$b"; done
 echo "  signed as $IDENTITY"
 
 if [ "${NOTARIZE:-1}" != 0 ]; then
-  PROFILE=${NOTARY_PROFILE:-agogica-notary}
+  # CI passes the App Store Connect key directly; locally the agogica-notary Keychain profile is used.
+  if [ -n "${APPLE_API_KEY:-}" ]; then
+    AUTH="--key ${APPLE_API_KEY_PATH:?} --key-id $APPLE_API_KEY --issuer ${APPLE_API_ISSUER:?}"
+  else
+    AUTH="--keychain-profile ${NOTARY_PROFILE:-agogica-notary}"
+  fi
   ditto -c -k "$STAGE" "$OUT/notarize.zip"
-  RESULT=$(xcrun notarytool submit "$OUT/notarize.zip" --keychain-profile "$PROFILE" --wait --output-format json)
+  # shellcheck disable=SC2086 # AUTH is a list of flags
+  RESULT=$(xcrun notarytool submit "$OUT/notarize.zip" $AUTH --wait --output-format json)
   rm -f "$OUT/notarize.zip"
   echo "$RESULT" | grep -q '"status":"Accepted"' || {
     echo "Notarization failed: $RESULT" >&2
-    echo "Log: xcrun notarytool log <id> --keychain-profile $PROFILE" >&2
+    echo "Log: xcrun notarytool log <id> (same credentials)" >&2
     exit 1
   }
   # Staple the ticket into each bundle so Gatekeeper can check it offline.
