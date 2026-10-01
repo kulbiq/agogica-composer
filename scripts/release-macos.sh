@@ -84,9 +84,22 @@ SIZE=$(stat -f %z "$ZIP")
 echo "$ZIP"
 echo "  version $VERSION  size $SIZE  sha256 $SHA"
 
+# Upload to R2: CI uses an S3 key scoped to the bucket (R2_UPLOAD_ACCESS_KEY_ID/R2_UPLOAD_SECRET_ACCESS_KEY,
+# Object Read & Write); locally Wrangler's login is used.
+r2_put() { # file key content-type
+  if [ -n "${R2_UPLOAD_ACCESS_KEY_ID:-}" ]; then
+    AWS_ACCESS_KEY_ID=$R2_UPLOAD_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=${R2_UPLOAD_SECRET_ACCESS_KEY:?} \
+      AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required \
+      aws s3 cp "$1" "s3://$R2_BUCKET/$2" --content-type "$3" --region auto --only-show-errors \
+      --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID:?}.r2.cloudflarestorage.com"
+  else
+    ${WRANGLER:-npx --yes wrangler@4} r2 object put "$R2_BUCKET/$2" --file "$1" --content-type "$3" --remote
+  fi
+}
+
 if [ -n "${R2_BUCKET:-}" ]; then
   KEY="composer/$VERSION/$NAME.zip"
-  ${WRANGLER:-npx --yes wrangler@4} r2 object put "$R2_BUCKET/$KEY" --file "$ZIP" --content-type application/zip --remote
+  r2_put "$ZIP" "$KEY" application/zip
   LOCATION="\"artifact_key\":\"$KEY\""
   echo "  uploaded to r2://$R2_BUCKET/$KEY"
 elif [ -n "${DOWNLOAD_BASE:-}" ]; then
