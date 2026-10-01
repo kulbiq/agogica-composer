@@ -10,6 +10,8 @@ import { getNativeFunction } from "@juce-framework/webview";
 const sendPose = getNativeFunction("pose") as (yaw: number, pitch: number, roll: number, face: boolean) => Promise<void>;
 const setEngine = getNativeFunction("setEngine") as (id: string) => Promise<void>;
 const setFilterParam = getNativeFunction("setFilterParam") as (name: string, value: number | null) => Promise<void>;
+const getDebug = getNativeFunction("getDebug") as () => Promise<boolean>;
+const fitHeight = getNativeFunction("fitHeight") as (height: number) => Promise<void>;
 
 const engine = "6drepnet360";
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -29,7 +31,6 @@ function setStatus(text: string, live: boolean) {
 }
 
 function show(yaw: number) {
-  $("yaw").textContent = `${yaw < 0 ? "−" : ""}${Math.abs(yaw).toFixed(1)}°`;
   $("head").setAttribute("transform", `rotate(${yaw})`);
 }
 
@@ -192,11 +193,26 @@ function startPlot() {
   requestAnimationFrame(draw);
 }
 
+// Debugging (the app's View menu) shows the readouts, Stability and the plot; off, the window
+// is fixed and fitted to what's left.
+function setDebug(on: boolean) {
+  document.body.toggleAttribute("data-debug", on);
+  if (!on) void fitHeight(document.querySelector<HTMLElement>(".app")!.offsetHeight);
+}
+
 async function main() {
+  setDebug(await getDebug());
+  window.__JUCE__.backend.addEventListener("debug", (on) => setDebug(on as boolean));
+  // Opening or closing the camera changes the height.
+  new ResizeObserver(() => setDebug(document.body.hasAttribute("data-debug"))).observe(document.querySelector(".app")!);
+
   // The camera section stays as the user left it.
   const camera = document.querySelector<HTMLDetailsElement>("details.more")!;
   camera.open = localStorage.getItem("cameraOpen") === "1";
-  camera.ontoggle = () => localStorage.setItem("cameraOpen", camera.open ? "1" : "0");
+  camera.ontoggle = () => {
+    localStorage.setItem("cameraOpen", camera.open ? "1" : "0");
+    if (camera.open) void video.play(); // WebKit pauses a video started while it was hidden
+  };
 
   $("recenter").onclick = () => (centre = output.lastOutput);
   $("invert").setAttribute("aria-pressed", String(settings.invert));

@@ -1,7 +1,7 @@
-// Agogica Tracker: follows the head with the camera (MediaPipe Face Landmarker, in the web
-// page under tracker/ui) and shares its orientation with every Composer instance through
-// the head-tracking file (Source/stage/HeadTrackingFile.h). No network: the page, the
-// WASM runtime and the model are served from the app bundle.
+// Agogica Tracker: follows the head with the camera (native 6DRepNet360 engine, EngineHost)
+// and shares its orientation with every Composer instance through the head-tracking file
+// (Source/stage/HeadTrackingFile.h); the page (tracker/ui) shows the status and writes the
+// pose. No network: the page and the models are served from the app bundle.
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <juce_video/juce_video.h>
 #include "../Source/bridge/Mime.h"
@@ -56,7 +56,11 @@ juce::PropertiesFile& settings()
     return file;
 }
 
-class Window final : public juce::DocumentWindow
+// Width of the compact (debugging off) window; its height fits the page (fitHeight).
+constexpr int compactWidth = 380;
+
+class Window final : public juce::DocumentWindow,
+                     private juce::MenuBarModel
 {
 public:
     Window() : DocumentWindow ("Agogica Tracker", juce::Colours::black, closeButton | minimiseButton)
@@ -76,6 +80,17 @@ public:
                     engines.setFilterParam (args[0].toString(), args[1]);
                 complete ({});
             })
+            .withNativeFunction ("getDebug", [this] (const auto&, auto complete)
+            {
+                pageReady = true; // events sent before the page has loaded assert
+                complete (debug);
+            })
+            .withNativeFunction ("fitHeight", [this] (const juce::Array<juce::var>& args, auto complete)
+            {
+                if (args.size() == 1 && ! debug)
+                    setContentComponentSize (compactWidth, juce::jlimit (200, 1600, (int) args[0]));
+                complete ({});
+            })
             .withNativeFunction ("setEngine", [this] (const juce::Array<juce::var>& args, auto complete)
             {
                 if (args.size() == 1)
@@ -90,28 +105,89 @@ public:
         const auto engine = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_ENGINE", {});
         browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + (engine.isNotEmpty() ? "?engine=" + engine : juce::String()));
         setUsingNativeTitleBar (true);
-        // Resizable (taller shows the camera preview and the angle together); the size and
-        // position are remembered between launches.
-        setResizable (true, false);
-        setResizeLimits (340, 420, 1200, 2400);
+        setResizeLimits (340, 200, 1200, 2400);
 
         // WebKit pauses a page it thinks isn't visible, which would stop tracking whenever
         // Dorico is in front: keep the window above other windows.
         setAlwaysOnTop (true);
         if (const auto saved = settings().getValue ("windowState"); saved.isEmpty() || ! restoreWindowStateFromString (saved))
-            centreWithSize (380, 680);
+            centreWithSize (compactWidth, 600);
+        setDebug (settings().getBoolValue ("debug", false));
         setVisible (true);
+
+       #if JUCE_MAC
+        juce::MenuBarModel::setMacMainMenu (this);
+       #else
+        setMenuBar (this);
+       #endif
     }
 
     ~Window() override
     {
-        settings().setValue ("windowState", getWindowStateAsString());
+       #if JUCE_MAC
+        juce::MenuBarModel::setMacMainMenu (nullptr);
+       #else
+        setMenuBar (nullptr);
+       #endif
+        saveBounds();
         writer.write ({}); // no face: Composer eases back to straight ahead
     }
 
     void closeButtonPressed() override { juce::JUCEApplication::quit(); }
 
 private:
+    // View > Debugging: readouts, Stability and the plot, in a resizable window whose size is
+    // remembered. Off: a fixed compact window with the status, dial, buttons and camera.
+    void setDebug (bool on)
+    {
+        if (on == debug && isVisible())
+            return;
+
+        saveBounds();
+        debug = on;
+        settings().setValue ("debug", on);
+        setResizable (on, false);
+
+        if (on)
+        {
+            const auto saved = settings().getValue ("debugBounds");
+            const auto r = juce::Rectangle<int>::fromString (saved);
+            setBounds (saved.isNotEmpty() && ! r.isEmpty() ? r : getBounds().withSize (900, 720));
+        }
+        else
+        {
+            setContentComponentSize (compactWidth, browser->getHeight()); // the page then fits the height
+        }
+
+        if (pageReady)
+            browser->emitEventIfBrowserIsVisible ("debug", on);
+        menuItemsChanged();
+    }
+
+    void saveBounds()
+    {
+        settings().setValue ("windowState", getWindowStateAsString());
+        if (debug)
+            settings().setValue ("debugBounds", getBounds().toString());
+    }
+
+    juce::StringArray getMenuBarNames() override { return { "View" }; }
+
+    juce::PopupMenu getMenuForIndex (int, const juce::String&) override
+    {
+        juce::PopupMenu menu;
+        menu.addItem (1, "Debugging", true, debug);
+        return menu;
+    }
+
+    void menuItemSelected (int itemId, int) override
+    {
+        if (itemId == 1)
+            setDebug (! debug);
+    }
+
+    bool debug = false, pageReady = false;
+
     headtracking::Writer writer { headtracking::defaultFile() };
     EngineHost engines { resources().getChildFile ("models"), [this] (const juce::var& v)
     {

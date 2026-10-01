@@ -21,6 +21,7 @@ export type Stage = {
   pro: Record<string, number>; // Pro panel parameter values (project-wide)
   headTracking: { live: boolean; yaw: number }; // degrees clockwise (head turned right)
   alone: boolean;
+  openElsewhere?: string; // name of another track whose Composer window is open
   room: number;
   listener: Point;
   players: Player[];

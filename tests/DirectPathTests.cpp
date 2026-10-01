@@ -7,7 +7,8 @@
 using Catch::Matchers::WithinAbs;
 
 // Counts heap allocations while `countAllocations` is set (replaces global new for this test binary).
-static std::atomic<bool> countAllocations { false };
+// Per thread: background threads (JUCE, head tracking) allocate whenever they like.
+static thread_local bool countAllocations = false;
 static std::atomic<int> allocations { 0 };
 
 void* operator new (std::size_t size)
@@ -320,6 +321,7 @@ TEST_CASE ("processBlock: position from parameters, clamped to the room, no allo
     juce::AudioBuffer<float> buffer (2, 512);
     juce::MidiBuffer midi;
     std::vector<float> left;
+    allocations = 0;
 
     for (int block = 0; block < 4; ++block)
     {

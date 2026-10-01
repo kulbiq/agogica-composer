@@ -42,8 +42,9 @@ public:
     // Single source of truth for parameters and saved scene data.
     juce::AudioProcessorValueTreeState state { *this, nullptr, "Composer", createParameterLayout() };
 
-    // Peak input level since the last call; read by the editor's timer (message thread).
-    float takeInputPeak() noexcept                      { return inputPeak.exchange (0.0f); }
+    // Input meter (linear gain): the loudest peak so far, falling ~300 ms after it.
+    // Message thread only; any number of editors may read it (each shows every track).
+    float readInputLevel (juce::uint32 nowMs);
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     static inline const juce::StringArray sceneParams { "roomSize", "listenerX", "listenerY", "playerX", "playerY", "hall" };
@@ -130,6 +131,8 @@ private:
 
     std::atomic<float> inputPeak { 0.0f };
     static_assert (std::atomic<float>::is_always_lock_free);
+    float meterLevel = 0.0f;       // message thread
+    juce::uint32 meterReadAt = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComposerProcessor)
 };

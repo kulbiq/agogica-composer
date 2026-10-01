@@ -1,6 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react";
-import { beginGesture, type Gesture, type Point, type Stage } from "./juce";
+import { beginGesture, useJuceEvent, type Gesture, type Point, type Stage } from "./juce";
 import styles from "./App.module.css";
+import { levelOf, type Levels } from "./LevelMeter";
 
 export type NodeKey = "listener" | number;
 
@@ -43,6 +44,8 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   const drag = useRef<{ key: NodeKey; gesture: Gesture } | null>(null);
   const keyGesture = useRef<{ key: NodeKey; gesture: Gesture } | null>(null);
   const view = useRef({ cx: 0, cy: 0, scale: 1 });
+  const levels = useRef<Levels>({});
+  useJuceEvent<Levels>("levels", (l) => (levels.current = l));
 
   // A fresh stage from C++ supersedes local positions, except for a node still in a gesture.
   useEffect(() => {
@@ -54,6 +57,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
     const drawn = new Map<NodeKey, Point>(); // eased positions in metres
+    const shown = new Map<number, number>(); // eased input levels, 0..1
     let W = 0;
     let H = 0;
     let frame = 0;
@@ -144,7 +148,11 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
         const snap = !prev || overrides.current.has(key);
         drawn.set(key, snap ? { ...goal } : { x: prev.x + (goal.x - prev.x) * 0.25, y: prev.y + (goal.y - prev.y) * 0.25 });
       }
-      for (const key of drawn.keys()) if (!targets.has(key)) drawn.delete(key);
+      for (const key of drawn.keys())
+        if (!targets.has(key)) {
+          drawn.delete(key);
+          if (typeof key === "number") shown.delete(key);
+        }
 
       // Selected node: a breathing ring.
       const sel = selected !== null ? drawn.get(selected) : undefined;
@@ -154,6 +162,18 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
         ctx.arc(sx(sel.x), sy(sel.y), 11 + b * 5, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(${ink},${0.12 + 0.3 * (1 - b)})`;
         ctx.stroke();
+      }
+
+      // Input level: a soft disc behind each player (30 Hz from C++, eased per frame).
+      for (const player of stage.players) {
+        const p = drawn.get(player.id)!;
+        const level = (shown.get(player.id) ?? 0) * 0.65 + levelOf(levels.current, player.id) * 0.35;
+        shown.set(player.id, level);
+        if (level < 0.01) continue;
+        ctx.beginPath();
+        ctx.arc(sx(p.x), sy(p.y), 6 + level * 14, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${ink},${0.04 + level * 0.12})`;
+        ctx.fill();
       }
 
       // Names first, with a paper halo so they stay legible where players crowd (selected last);
@@ -166,7 +186,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
         const p = drawn.get(player.id)!;
         const label = player.name.toUpperCase();
         ctx.strokeText(label, sx(p.x) + 12, sy(p.y));
-        ctx.fillStyle = `rgba(${ink},${player.self || player.id === selected ? 0.85 : 0.55})`;
+        ctx.fillStyle = `rgba(${ink},${player.id === selected ? 0.85 : 0.55})`;
         ctx.fillText(label, sx(p.x) + 12, sy(p.y));
       }
       ctx.lineWidth = 1;
@@ -194,7 +214,8 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
         const y = sy(p.y);
         ctx.beginPath();
         ctx.arc(x, y, 6, 0, Math.PI * 2);
-        if (player.self) {
+        // The selected player (the one the side panel shows) is filled.
+        if (player.id === selected) {
           ctx.fillStyle = `rgba(${ink},0.9)`;
           ctx.fill();
         } else {

@@ -27,6 +27,8 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     halls: ["Dry", "Studio", "Chamber", "Concert hall", "Church"],
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
+    // ?elsewhere: another track's window is open (the "open here anyway" screen).
+    openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
     room: 20,
     listener: { x: 0, y: -4 },
     players: names.map((name, i) => ({ id: i, name, colour: colours[i], self: i === 2, x: (i - 2.5) * 2.4, y: 3 + (i % 2) * 2 })),
@@ -110,6 +112,11 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       }
     }).observe(document, { childList: true, subtree: true });
 
-  // A little fake input level.
-  setInterval(() => emit("inputLevel", -30 + Math.sin(performance.now() / 700) * 20), 33);
+  // A little fake input level per player (one stays silent).
+  setInterval(() => {
+    const t = performance.now();
+    const levels: Record<string, number> = {};
+    for (const p of scene.players) levels[p.id] = p.id === 4 ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
+    emit("levels", levels);
+  }, 33);
 }

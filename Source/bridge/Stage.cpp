@@ -103,6 +103,11 @@ juce::var snapshot (ComposerProcessor& self)
         {
             players.add (player (*members[i], i, members[i] == &self, roomSize, listener, lawExponent, airAmount));
             stored.addArray (members[i]->getStoredScenes());
+
+            // Hosts give a plugin no way to close its window, so a second editor offers
+            // to step aside instead (see App.tsx).
+            if (members[i] != &self && members[i]->getActiveEditor() != nullptr && ! o->hasProperty ("openElsewhere"))
+                o->setProperty ("openElsewhere", players.getReference (i)["name"]);
         }
 
         stored.removeDuplicates (false);

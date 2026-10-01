@@ -81,21 +81,6 @@
   fill: var(--ink);
 }
 
-.readout {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.value {
-  font-family: var(--font-display);
-  font-size: 40px;
-  font-weight: 500;
-  letter-spacing: -0.025em;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-
 .note {
   margin: 0;
   font-size: 13px;
@@ -328,4 +313,20 @@ p.small {
   border-color: var(--ink);
   background: var(--ink);
   color: var(--paper);
+}
+
+/* Debugging off (View > Debugging): only the status, dial, buttons and camera. The window
+   is fixed and fitted to the content (native fitHeight), so the page takes its natural height. */
+body:not([data-debug]) .debug {
+  display: none;
+}
+
+body:not([data-debug]) .app {
+  height: auto;
+  overflow: visible;
+}
+
+/* The window follows the page here, so a cap relative to the window would feed back. */
+body:not([data-debug]) .more video {
+  max-height: none;
 }

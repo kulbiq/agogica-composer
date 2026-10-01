@@ -4,6 +4,7 @@ import ParamSlider from "./ParamSlider";
 import ProPanel from "./ProPanel";
 import type { NodeKey } from "./StageMap";
 import styles from "./App.module.css";
+import LevelMeter from "./LevelMeter";
 
 type Props = {
   stage: Stage;
@@ -67,19 +68,11 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
             </button>
           ))}
         </div>
-        {stage.outputMode === "binaural" && (
-          <div className={styles.stack}>
-            <span className={styles.status} data-status={stage.headTracking.live ? "live" : "soon"}>
-              Head tracking · {stage.headTracking.live ? "live" : "not running"}
-            </span>
-            {!stage.headTracking.live && <TrackerButton />}
-          </div>
+        {stage.outputMode === "binaural" ? (
+          <HeadTracking live={stage.headTracking.live} />
+        ) : (
+          <p className={styles.note}>For speakers. Players behind the listener are mirrored to the front.</p>
         )}
-        <p className={styles.note}>
-          {stage.outputMode === "stereo"
-            ? "For speakers. Players behind the listener are mirrored to the front."
-            : "For headphones: full 360°. HRTF: SADIE II, KU100 (University of York, Apache 2.0)."}
-        </p>
       </section>
 
       <section className={styles.section}>
@@ -175,6 +168,7 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
                 <span className={styles.tick} style={p.colour ? { background: p.colour } : undefined} />
                 {p.name}
                 {p.self && <span className={styles.you}>This track</span>}
+                <LevelMeter id={p.id} className={styles.listMeter} />
               </button>
             </li>
           ))}
@@ -185,16 +179,25 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
 }
 
 
-function TrackerButton() {
+// Head tracking status; while it isn't running, the same chip starts Agogica Tracker.
+function HeadTracking({ live }: { live: boolean }) {
   const [failed, setFailed] = useState(false);
+
+  if (live)
+    return (
+      <span className={styles.status} data-status="live">
+        Head tracking · live
+      </span>
+    );
 
   return (
     <button
-      className={styles.ghost}
-      title={failed ? "Agogica Tracker isn't installed (~/Applications)" : "Open Agogica Tracker"}
+      className={styles.status}
+      data-status="soon"
+      title={failed ? "Agogica Tracker isn't installed (~/Applications)" : "Start Agogica Tracker"}
       onClick={() => void startTracker().then((ok) => setFailed(!ok))}
     >
-      {failed ? "Not found" : "Start tracker"}
+      {failed ? "Tracker not found" : "Start head tracking"}
     </button>
   );
 }

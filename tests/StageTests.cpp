@@ -262,3 +262,20 @@ TEST_CASE ("hall is shared, stored per scene, saved, and adopted by new inserts"
     stage::setScene (restored, "A");
     CHECK_THAT (restored.getParam ("hall"), WithinAbs (4.0, 1e-4));
 }
+
+TEST_CASE ("snapshot names another instance whose editor is open")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+    a.setNameOverride ("Violin I");
+
+    CHECK_FALSE (stage::snapshot (b).hasProperty ("openElsewhere"));
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor { a.createEditorIfNeeded() };
+    CHECK (stage::snapshot (b)["openElsewhere"] == juce::var ("Violin I"));
+    CHECK_FALSE (stage::snapshot (a).hasProperty ("openElsewhere")); // its own editor doesn't count
+
+    a.editorBeingDeleted (editor.get()); // what the plugin wrappers do before deleting it
+    editor.reset();
+    CHECK_FALSE (stage::snapshot (b).hasProperty ("openElsewhere"));
+}

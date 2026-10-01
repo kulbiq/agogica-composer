@@ -22,14 +22,10 @@
         </svg>
       </div>
 
-      <div class="readout">
-        <span class="label">Yaw</span>
-        <span class="value" id="yaw">0.0°</span>
-      </div>
-      <p class="note">Turn your head to the right: the value goes positive and the players move to your left. If it goes negative, press Invert.</p>
+      <p class="note debug">Turn your head to the right: the value goes positive and the players move to your left. If it goes negative, press Invert.</p>
 
-      <p class="note small" id="range">Tracked this session: 0° … 0°</p>
-      <p class="note small" id="source">Source: none</p>
+      <p class="note small debug" id="range">Tracked this session: 0° … 0°</p>
+      <p class="note small debug" id="source">Source: none</p>
 
       <div class="buttons">
         <button class="ghost" id="recenter">Recenter</button>
@@ -37,9 +33,9 @@
         <button class="ghost" id="pause" aria-pressed="false">Pause</button>
       </div>
 
-      <p class="note small" id="stats"></p>
+      <p class="note small debug" id="stats"></p>
 
-      <section class="stability">
+      <section class="stability debug">
         <span class="label">Stability</span>
         <p class="note">Auto adapts each value to the last seconds of tracking; move a slider to pin your own value.</p>
         <div id="params"></div>
@@ -47,7 +43,7 @@
       </div>
 
       <div class="side">
-      <figure class="plot">
+      <figure class="plot debug">
         <canvas id="plot" aria-label="Last 10 seconds: raw readings (dots), the filter estimate and the output"></canvas>
         <figcaption class="note">Last 10 s · dots = raw readings (fainter = unsure front/back) · thin = estimate · bold = what Composer hears</figcaption>
       </figure>

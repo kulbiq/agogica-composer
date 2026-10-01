@@ -176,6 +176,16 @@ bool ComposerProcessor::isBusesLayoutSupported (const BusesLayout& layouts) cons
         && (in == juce::AudioChannelSet::mono() || in == juce::AudioChannelSet::stereo());
 }
 
+float ComposerProcessor::readInputLevel (juce::uint32 nowMs)
+{
+    // Falls by elapsed time, not per read: many readers, or a host that stopped calling
+    // processBlock, still see the level die away.
+    const auto decay = std::exp (-(float) (nowMs - meterReadAt) / 300.0f);
+    meterReadAt = nowMs;
+    meterLevel = std::max (inputPeak.exchange (0.0f), meterLevel * decay);
+    return meterLevel;
+}
+
 void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -185,7 +195,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     for (int ch = 0; ch < getTotalNumInputChannels(); ++ch)
         peak = std::max (peak, buffer.getMagnitude (ch, 0, buffer.getNumSamples()));
 
-    // Keep the loudest block until the editor takes it.
+    // Keep the loudest block until readInputLevel takes it.
     for (auto prev = inputPeak.load (std::memory_order_relaxed);
          prev < peak && ! inputPeak.compare_exchange_weak (prev, peak, std::memory_order_relaxed);)
         ;

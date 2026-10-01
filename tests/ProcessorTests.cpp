@@ -50,3 +50,21 @@ TEST_CASE ("state round-trip restores roomSize")
     restored.setStateInformation (saved.getData(), (int) saved.getSize());
     CHECK_THAT (roomSize (restored), WithinAbs (35.0, 1e-4));
 }
+
+TEST_CASE ("input level is shared by all readers and falls without audio")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor p;
+    p.prepareToPlay (48000.0, 64);
+
+    juce::AudioBuffer<float> buffer (2, 64);
+    buffer.clear();
+    buffer.setSample (0, 10, 0.5f);
+    juce::MidiBuffer midi;
+    p.processBlock (buffer, midi);
+
+    CHECK_THAT (p.readInputLevel (1000), WithinAbs (0.5, 1e-6));
+    CHECK_THAT (p.readInputLevel (1000), WithinAbs (0.5, 1e-6)); // a second editor, same tick
+    CHECK (p.readInputLevel (1300) < 0.5f * 0.4f);
+    CHECK (p.readInputLevel (3000) < 0.001f);
+}

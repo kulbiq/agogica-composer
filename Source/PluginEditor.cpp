@@ -121,8 +121,18 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
 void ComposerEditor::timerCallback()
 {
-    const auto db = juce::Decibels::gainToDecibels (composer.takeInputPeak(), -60.0f);
-    browser.emitEventIfBrowserIsVisible ("inputLevel", db);
+    // Every track's input level in dB, by player id; its own event so the stage diff
+    // below stays quiet while audio plays.
+    auto levels = std::make_unique<juce::DynamicObject>();
+    const auto now = juce::Time::getMillisecondCounter();
+
+    composer.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+    {
+        for (auto* p : members)
+            levels->setProperty (juce::String (p->id), juce::Decibels::gainToDecibels (p->readInputLevel (now), -60.0f));
+    });
+
+    browser.emitEventIfBrowserIsVisible ("levels", levels.release());
 
     // Automation playback and other changes reach the UI here; it only draws them.
     const auto stage = stage::snapshot (composer);

@@ -167,13 +167,6 @@
   box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--ink);
 }
 
-.stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
 /* Live: the website's .status (ink dot breathing with ag-blink). */
 .status[data-status="live"] {
   align-self: flex-start;
@@ -189,6 +182,20 @@
 
 .status[data-status="soon"] {
   align-self: flex-start;
+}
+
+/* Head tracking not running: the chip starts the tracker. */
+button.status {
+  background: none;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+button.status:hover,
+button.status:focus-visible {
+  border-color: var(--ink);
+  color: var(--ink);
+  outline: none;
 }
 
 /* ---- Room size ---- */
@@ -428,6 +435,33 @@
   border-color: var(--ink);
 }
 
+/* ---- Open in another window ---- */
+
+.elsewhere {
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 0 max(24px, calc(50% - 220px));
+}
+
+.elsewhereTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.elsewhereText {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-light);
+}
+
 /* ---- Player list ---- */
 
 .list {
@@ -481,11 +515,23 @@
 
 .you {
   margin-left: auto;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-lighter);
+}
+
+/* Input level per player; pushed right, after the "This track" badge when there is one. */
+.meterTrack.listMeter {
+  width: 40px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.you ~ .listMeter {
+  margin-left: 0;
 }
 
 /* ---- Footer ---- */
@@ -504,6 +550,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.meterName {
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .meterTrack {
