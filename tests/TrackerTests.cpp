@@ -63,85 +63,94 @@ TEST_CASE ("head filter: still with noise - the output is much calmer than the i
     CHECK (outJitter < 0.5f * rawJitter);
 }
 
-TEST_CASE ("head filter: a single wild frame is ignored")
+TEST_CASE ("head filter: outliers are ignored (a single wild frame, a mirrored burst)")
 {
-    HeadFilter f;
-    const auto before = feed (f, 180.0f, 30).output;
-    const auto s = feed (f, 10.0f, 1); // the user's example: 180 -> 10 for one frame
-    CHECK (std::abs (wrap (s.output - before)) < 2.0f);
-    CHECK (std::abs (wrap (feed (f, 180.0f, 10).output - 180.0f)) < 2.0f);
-}
-
-TEST_CASE ("head filter: a burst of mirrored readings (180 - z) is ignored")
-{
-    HeadFilter f;
-    feed (f, 110.0f, 30);
-    const auto s = feed (f, mirrorOf (110.0f), 3, 0.3f); // doubtful hemisphere, 3 frames
-    CHECK (std::abs (wrap (s.output - 110.0f)) < 3.0f);
-}
-
-TEST_CASE ("head filter: a new direction wins after confirmFrames, not before")
-{
-    FilterParams p;
-    p.confirmFrames = 6;
-    HeadFilter f (p);
-
-    feed (f, 0.0f, 30);
-    CHECK (std::abs (wrap (feed (f, 120.0f, p.confirmFrames / 2).estimate)) < 15.0f); // not yet
-
-    HeadFilter g (p);
-    feed (g, 0.0f, 30);
-    CHECK (std::abs (wrap (feed (g, 120.0f, p.confirmFrames).estimate - 120.0f)) < 15.0f); // now
-}
-
-TEST_CASE ("head filter: an accepted switch is approached slowly, never in a jump")
-{
-    HeadFilter f;
-    feed (f, 180.0f, 30);
-
-    float last = f.update (Measurement { 180, 1 }, dt).output, worst = 0;
-    bool arrived = false;
-    for (int i = 0; i < 90; ++i) // 3 s at the new direction
+    SECTION ("a single wild frame")
     {
-        const auto s = f.update (Measurement { 10.0f, 1 }, dt);
-        worst = std::max (worst, std::abs (wrap (s.output - last)));
-        last = s.output;
-        arrived = arrived || std::abs (wrap (s.output - 10.0f)) < 2.0f;
+        HeadFilter f;
+        const auto before = feed (f, 180.0f, 30).output;
+        const auto s = feed (f, 10.0f, 1); // the user's example: 180 -> 10 for one frame
+        CHECK (std::abs (wrap (s.output - before)) < 2.0f);
+        CHECK (std::abs (wrap (feed (f, 180.0f, 10).output - 180.0f)) < 2.0f);
     }
-    CHECK (worst <= f.getParams().maxSpeed * dt + 1e-3f);     // never a jump
-    CHECK (worst <= f.getParams().reacquireSpeed * dt + 1e-3f); // re-acquired at the slow speed
-    CHECK (arrived);                                            // 170° at 90 °/s: under 2 s
+
+    SECTION ("a burst of mirrored readings (180 - z) with a doubtful hemisphere")
+    {
+        HeadFilter f;
+        feed (f, 110.0f, 30);
+        const auto s = feed (f, mirrorOf (110.0f), 3, 0.3f);
+        CHECK (std::abs (wrap (s.output - 110.0f)) < 3.0f);
+    }
 }
 
-TEST_CASE ("head filter: a fast genuine turn is followed without re-acquisition")
+TEST_CASE ("head filter: re-acquisition after confirmFrames, approached at reacquireSpeed")
 {
-    HeadFilter f;
-    feed (f, 0.0f, 30);
-    FilterState s;
-    bool reacquired = false;
-    for (int i = 1; i <= 12; ++i) // 90° in 0.4 s: 225 °/s
+    SECTION ("a new direction wins after confirmFrames, not before")
     {
-        s = f.update (Measurement { 90.0f * (float) i / 12.0f, 1 }, dt);
-        reacquired = reacquired || s.reacquiring;
+        FilterParams p;
+        p.confirmFrames = 6;
+        HeadFilter f (p);
+
+        feed (f, 0.0f, 30);
+        CHECK (std::abs (wrap (feed (f, 120.0f, p.confirmFrames / 2).estimate)) < 15.0f); // not yet
+
+        HeadFilter g (p);
+        feed (g, 0.0f, 30);
+        CHECK (std::abs (wrap (feed (g, 120.0f, p.confirmFrames).estimate - 120.0f)) < 15.0f); // now
     }
-    s = feed (f, 90.0f, 6); // + 0.2 s
-    CHECK_FALSE (reacquired);
-    CHECK (std::abs (wrap (s.output - 90.0f)) < 5.0f);
+
+    SECTION ("an accepted switch is approached slowly, never in a jump")
+    {
+        HeadFilter f;
+        feed (f, 180.0f, 30);
+
+        float last = f.update (Measurement { 180, 1 }, dt).output, worst = 0;
+        bool arrived = false;
+        for (int i = 0; i < 90; ++i) // 3 s at the new direction
+        {
+            const auto s = f.update (Measurement { 10.0f, 1 }, dt);
+            worst = std::max (worst, std::abs (wrap (s.output - last)));
+            last = s.output;
+            arrived = arrived || std::abs (wrap (s.output - 10.0f)) < 2.0f;
+        }
+        CHECK (worst <= f.getParams().maxSpeed * dt + 1e-3f);       // never a jump
+        CHECK (worst <= f.getParams().reacquireSpeed * dt + 1e-3f); // re-acquired at the slow speed
+        CHECK (arrived);                                              // 170° at 90 °/s: under 2 s
+    }
 }
 
-TEST_CASE ("head filter: continuous turn across ±180 without a jump")
+TEST_CASE ("head filter: genuine turns are followed (fast, across ±180)")
 {
-    HeadFilter f;
-    feed (f, 150.0f, 30);
-    float last = f.update (Measurement { 150, 1 }, dt).output, worst = 0;
-    for (int i = 1; i <= 60; ++i) // 150 -> 210 (= -150), 30 °/s
+    SECTION ("a fast turn is followed without re-acquisition")
     {
-        const auto s = f.update (Measurement { wrap (150.0f + (float) i), 1 }, dt);
-        worst = std::max (worst, std::abs (wrap (s.output - last)));
-        last = s.output;
+        HeadFilter f;
+        feed (f, 0.0f, 30);
+        FilterState s;
+        bool reacquired = false;
+        for (int i = 1; i <= 12; ++i) // 90° in 0.4 s: 225 °/s
+        {
+            s = f.update (Measurement { 90.0f * (float) i / 12.0f, 1 }, dt);
+            reacquired = reacquired || s.reacquiring;
+        }
+        s = feed (f, 90.0f, 6); // + 0.2 s
+        CHECK_FALSE (reacquired);
+        CHECK (std::abs (wrap (s.output - 90.0f)) < 5.0f);
     }
-    CHECK (worst < 3.0f);
-    CHECK (std::abs (wrap (last + 150.0f)) < 5.0f);
+
+    SECTION ("a continuous turn across ±180 without a jump")
+    {
+        HeadFilter f;
+        feed (f, 150.0f, 30);
+        float last = f.update (Measurement { 150, 1 }, dt).output, worst = 0;
+        for (int i = 1; i <= 60; ++i) // 150 -> 210 (= -150), 30 °/s
+        {
+            const auto s = f.update (Measurement { wrap (150.0f + (float) i), 1 }, dt);
+            worst = std::max (worst, std::abs (wrap (s.output - last)));
+            last = s.output;
+        }
+        CHECK (worst < 3.0f);
+        CHECK (std::abs (wrap (last + 150.0f)) < 5.0f);
+    }
 }
 
 TEST_CASE ("head filter: a lost head is held, then released")
@@ -172,10 +181,13 @@ TEST_CASE ("hemisphere certainty: pitch/roll halfway means front/back is unknown
     CHECK (hemisphereCertainty (38.8f, 44.3f) < 0.6f);
 }
 
-// Replays a recorded session (tests/data/tracker-session-*.jsonl, 30 fps) and prints what the
-// filter did with it. Run: ComposerTests "[.replay]" -s
-TEST_CASE ("head filter: replay recorded sessions", "[.replay]")
+// Replays recorded sessions (tests/data/tracker-session-*.jsonl, 30 fps): the filter removes
+// every jump of the raw model output and stays close to it. See the numbers: -s
+TEST_CASE ("head filter: recorded sessions have no jumps and little lag", "[slow]")
 {
+    const auto files = juce::File (COMPOSER_TEST_DATA).findChildFiles (juce::File::findFiles, false, "tracker-session-*.jsonl");
+    REQUIRE_FALSE (files.isEmpty());
+
     for (const auto& file : juce::File (COMPOSER_TEST_DATA).findChildFiles (juce::File::findFiles, false, "tracker-session-*.jsonl"))
     {
         HeadFilter f;
@@ -207,10 +219,13 @@ TEST_CASE ("head filter: replay recorded sessions", "[.replay]")
             lastRaw = m->yaw, lastOut = s.output, first = false, ++frames;
         }
 
-        UNSCOPED_INFO (file.getFileName() << ": " << frames << " frames; steps > 30°: raw " << rawJumps << ", output " << outJumps
-                        << "; largest output step " << worstStep << "°; mean |output - raw| " << lagSum / (float) frames << "°");
+        INFO (file.getFileName() << ": " << frames << " frames; steps > 30°: raw " << rawJumps << ", output " << outJumps
+                                 << "; largest output step " << worstStep << "°; mean |output - raw| " << lagSum / (float) frames << "°");
+        CHECK (frames > 1000);
+        CHECK (rawJumps > 0); // the session does exercise the filter
+        CHECK (outJumps == 0);
+        CHECK (lagSum / (float) frames < 2.0f); // 1.2° when recorded
     }
-    CHECK (true);
 }
 
 // ---- FilterTuner -------------------------------------------------------------------------------
@@ -235,35 +250,38 @@ FilterParams settle (FilterTuner& tuner, double& t, double seconds, F yawAt, con
 }
 } // namespace
 
-TEST_CASE ("filter tuner: noisy readings raise sigmaZ")
+TEST_CASE ("filter tuner adapts: noise raises sigmaZ, motion raises turnSpeed, jumps count as outliers")
 {
-    std::mt19937 rng (3);
-    std::normal_distribution<float> small (0.0f, 1.0f), large (0.0f, 6.0f);
-    FilterTuner calm, noisy;
-    double t1 = 0, t2 = 0;
-    const auto a = settle (calm, t1, 20, [&] (double) { return std::optional<float> (small (rng)); });
-    const auto b = settle (noisy, t2, 20, [&] (double) { return std::optional<float> (large (rng)); });
-    CHECK (b.sigmaZ > 2.5f * a.sigmaZ);
-}
+    SECTION ("noisy readings raise sigmaZ")
+    {
+        std::mt19937 rng (3);
+        std::normal_distribution<float> small (0.0f, 1.0f), large (0.0f, 6.0f);
+        FilterTuner calm, noisy;
+        double t1 = 0, t2 = 0;
+        const auto a = settle (calm, t1, 20, [&] (double) { return std::optional<float> (small (rng)); });
+        const auto b = settle (noisy, t2, 20, [&] (double) { return std::optional<float> (large (rng)); });
+        CHECK (b.sigmaZ > 2.5f * a.sigmaZ);
+    }
 
-TEST_CASE ("filter tuner: moving raises turnSpeed, never below the floor when still")
-{
-    FilterTuner still, moving;
-    double t1 = 0, t2 = 0;
-    const auto a = settle (still, t1, 20, [] (double) { return std::optional<float> (10.0f); });
-    const auto b = settle (moving, t2, 20, [] (double time) { return std::optional<float> (wrap ((float) (time * 200.0))); }); // 200 °/s
-    CHECK (a.turnSpeed >= FilterTuner::minTurnSpeed);
-    CHECK (b.turnSpeed > 250.0f);
-}
+    SECTION ("moving raises turnSpeed, never below the floor when still")
+    {
+        FilterTuner still, moving;
+        double t1 = 0, t2 = 0;
+        const auto a = settle (still, t1, 20, [] (double) { return std::optional<float> (10.0f); });
+        const auto b = settle (moving, t2, 20, [] (double time) { return std::optional<float> (wrap ((float) (time * 200.0))); }); // 200 °/s
+        CHECK (a.turnSpeed >= FilterTuner::minTurnSpeed);
+        CHECK (b.turnSpeed > 250.0f);
+    }
 
-TEST_CASE ("filter tuner: model jumps count as outliers, not as speed")
-{
-    FilterTuner tuner;
-    double t = 0;
-    int frame = 0;
-    const auto p = settle (tuner, t, 20, [&] (double) { return std::optional<float> (++frame % 30 == 0 ? 170.0f : 10.0f); });
-    CHECK (p.turnSpeed < 100.0f);      // the jumps didn't make it "fast"
-    CHECK (p.outlierWeight > 0.05f);   // they raised the outlier share
+    SECTION ("model jumps count as outliers, not as speed")
+    {
+        FilterTuner tuner;
+        double t = 0;
+        int frame = 0;
+        const auto p = settle (tuner, t, 20, [&] (double) { return std::optional<float> (++frame % 30 == 0 ? 170.0f : 10.0f); });
+        CHECK (p.turnSpeed < 100.0f);    // the jumps didn't make it "fast"
+        CHECK (p.outlierWeight > 0.05f); // they raised the outlier share
+    }
 }
 
 TEST_CASE ("filter tuner: pinned values are respected")

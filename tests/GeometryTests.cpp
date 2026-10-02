@@ -14,7 +14,7 @@ TEST_CASE ("distance and delay")
     CHECK_THAT (delayMs ({ 1.005f, -2.0f }, listener), WithinAbs (0.0, 1e-9));
 }
 
-TEST_CASE ("azimuth: 0 ahead, +90 right, rear folds to front")
+TEST_CASE ("azimuth and pan: 0 ahead, +90 right, rear folds to front")
 {
     const Point l {};
 
@@ -26,12 +26,8 @@ TEST_CASE ("azimuth: 0 ahead, +90 right, rear folds to front")
     CHECK_THAT (foldedAzimuth (135.0f), WithinAbs (45.0, 1e-4));
     CHECK_THAT (foldedAzimuth (-170.0f), WithinAbs (-10.0, 1e-4));
     CHECK_THAT (foldedAzimuth (180.0f), WithinAbs (0.0, 1e-4));
-}
 
-TEST_CASE ("pan maps folded azimuth to -1..+1")
-{
-    const Point l {};
-
+    // Pan is the folded azimuth mapped to -1..+1.
     CHECK_THAT (pan ({ 0.0f, 3.0f }, l), WithinAbs (0.0, 1e-5));
     CHECK_THAT (pan ({ 3.0f, 0.0f }, l), WithinAbs (1.0, 1e-5));
     CHECK_THAT (pan ({ -3.0f, 3.0f }, l), WithinAbs (-0.5, 1e-5));
@@ -69,5 +65,6 @@ TEST_CASE ("air absorption: one-pole cutoff reproduces the 8 kHz loss")
         CHECK_THAT (lossAt8k, WithinAbs (0.0766 * metres, 1e-3));
     }
 
-    CHECK_THAT (airCutoffHz (0.001f), WithinAbs (0.0, 0.0)); // negligible: no filter
+    CHECK_THAT (airCutoffHz (0.001f), WithinAbs (0.0, 0.0));      // negligible: no filter
+    CHECK_THAT (airCutoffHz (50.0f, 0.0f), WithinAbs (0.0, 0.0)); // Pro air at 0: no filter at all
 }

@@ -16,54 +16,116 @@ juce::File tempFile (const char* name)
     return f;
 }
 
-void setTrackingFileOverride (const char* path)
+// Points the head tracking reader at `file` while in scope (read when HeadTracking is created).
+struct TrackingFileOverride
 {
-   #if JUCE_WINDOWS
-    _putenv_s ("AGOGICA_HEAD_TRACKING_FILE", path);
-   #else
-    if (*path != 0)
-        setenv ("AGOGICA_HEAD_TRACKING_FILE", path, 1);
-    else
+    explicit TrackingFileOverride (const juce::File& file)
+    {
+       #if JUCE_WINDOWS
+        _putenv_s ("AGOGICA_HEAD_TRACKING_FILE", file.getFullPathName().toRawUTF8());
+       #else
+        setenv ("AGOGICA_HEAD_TRACKING_FILE", file.getFullPathName().toRawUTF8(), 1);
+       #endif
+    }
+
+    ~TrackingFileOverride()
+    {
+       #if JUCE_WINDOWS
+        _putenv_s ("AGOGICA_HEAD_TRACKING_FILE", "");
+       #else
         unsetenv ("AGOGICA_HEAD_TRACKING_FILE");
-   #endif
+       #endif
+    }
+};
+
+Pose pose (float yaw, bool face = true, std::uint64_t ageMs = 0)
+{
+    return { yaw, 0.0f, 0.0f, (std::uint64_t) juce::Time::currentTimeMillis() - ageMs, face };
 }
 
-Pose pose (float yaw, bool face = true)
+void set (ComposerProcessor& p, const char* id, float v)
 {
-    return { yaw, 0.0f, 0.0f, (std::uint64_t) juce::Time::currentTimeMillis(), face };
+    auto* q = p.state.getParameter (id);
+    q->setValueNotifyingHost (q->convertTo0to1 (v));
 }
 } // namespace
 
-TEST_CASE ("head tracking file: write, read")
+TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/short/foreign ignored", "[integration]")
 {
-    const auto file = tempFile ("roundtrip");
-    Writer writer (file);
-    REQUIRE (writer.isOpen());
-    CHECK (file.getSize() == fileSize);
+    SECTION ("write, read")
+    {
+        const auto file = tempFile ("roundtrip");
+        Writer writer (file);
+        REQUIRE (writer.isOpen());
+        CHECK (file.getSize() == fileSize);
 
-    Reader reader (file);
-    writer.write (pose (12.5f));
-    const auto read = reader.read();
-    REQUIRE (read.has_value());
-    CHECK_THAT (read->yaw, WithinAbs (12.5, 0.0));
-    CHECK (read->face);
+        Reader reader (file);
+        writer.write (pose (12.5f));
+        const auto read = reader.read();
+        REQUIRE (read.has_value());
+        CHECK_THAT (read->yaw, WithinAbs (12.5, 0.0));
+        CHECK (read->face);
+    }
+
+    SECTION ("a file replaced under the reader is picked up")
+    {
+        const auto file = tempFile ("replaced");
+        Reader reader (file);
+
+        {
+            Writer first (file);
+            first.write (pose (10.0f));
+        }
+        REQUIRE (reader.read().has_value());
+        CHECK_THAT (reader.read()->yaw, WithinAbs (10.0, 0.0));
+
+        // A new tracker run: a new file (new identity) renamed over the old one.
+        const auto other = tempFile ("replaced-new");
+        Writer second (other);
+        second.write (pose (-40.0f));
+        REQUIRE (other.moveFileTo (file));
+
+        const auto read = reader.read();
+        REQUIRE (read.has_value());
+        CHECK_THAT (read->yaw, WithinAbs (-40.0, 0.0));
+    }
+
+    SECTION ("missing, short and foreign files are ignored")
+    {
+        const auto file = tempFile ("garbage");
+        Reader reader (file);
+        CHECK_FALSE (reader.read().has_value()); // missing
+
+        file.replaceWithText ("short");
+        CHECK_FALSE (reader.read().has_value());
+
+        juce::MemoryBlock junk (fileSize);
+        juce::Random (3).fillBitsRandomly (junk.getData(), junk.getSize());
+        file.replaceWithData (junk.getData(), junk.getSize());
+        CHECK_FALSE (reader.read().has_value());
+    }
 }
 
-TEST_CASE ("head tracking file: never a torn read (seqlock)")
+TEST_CASE ("head tracking file: never a torn read (seqlock)", "[integration]")
 {
     const auto file = tempFile ("seqlock");
     Writer writer (file);
     Reader reader (file);
 
     std::atomic<bool> stop { false };
+    std::atomic<int> writes { 0 };
     std::thread hammer ([&]
     {
-        for (float k = 0.0f; ! stop; k += 1.0f)
+        for (float k = 0.0f; ! stop; k += 1.0f, ++writes)
             writer.write ({ k, k, k, (std::uint64_t) k, true }); // all fields equal in every write
     });
 
+    while (writes < 100) // the writer is running
+        std::this_thread::yield();
+
+    // Most reads land mid-write and return nothing; read until enough complete ones were seen.
     int consistent = 0;
-    for (int i = 0; i < 200000; ++i)
+    for (int i = 0; i < 5'000'000 && consistent < 1000; ++i)
         if (const auto p = reader.read())
         {
             REQUIRE (juce::exactlyEqual (p->yaw, p->pitch));
@@ -74,45 +136,7 @@ TEST_CASE ("head tracking file: never a torn read (seqlock)")
 
     stop = true;
     hammer.join();
-    CHECK (consistent > 1000);
-}
-
-TEST_CASE ("head tracking file: missing, short and foreign files are ignored")
-{
-    const auto file = tempFile ("garbage");
-    Reader reader (file);
-    CHECK_FALSE (reader.read().has_value()); // missing
-
-    file.replaceWithText ("short");
-    CHECK_FALSE (reader.read().has_value());
-
-    juce::MemoryBlock junk (fileSize);
-    juce::Random (3).fillBitsRandomly (junk.getData(), junk.getSize());
-    file.replaceWithData (junk.getData(), junk.getSize());
-    CHECK_FALSE (reader.read().has_value());
-}
-
-TEST_CASE ("head tracking file: a file replaced under the reader is picked up")
-{
-    const auto file = tempFile ("replaced");
-    Reader reader (file);
-
-    {
-        Writer first (file);
-        first.write (pose (10.0f));
-    }
-    REQUIRE (reader.read().has_value());
-    CHECK_THAT (reader.read()->yaw, WithinAbs (10.0, 0.0));
-
-    // A new tracker run: a new file (new identity) renamed over the old one.
-    const auto other = tempFile ("replaced-new");
-    Writer second (other);
-    second.write (pose (-40.0f));
-    REQUIRE (other.moveFileTo (file));
-
-    const auto read = reader.read();
-    REQUIRE (read.has_value());
-    CHECK_THAT (read->yaw, WithinAbs (-40.0, 0.0));
+    CHECK (consistent == 1000);
 }
 
 TEST_CASE ("turning the head rotates the scene (binaural)")
@@ -153,18 +177,17 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
         REQUIRE_THAT (turned[i], WithinAbs (ahead[i], 1e-3));
 }
 
-TEST_CASE ("head tracking: live only in binaural, never in exports")
+TEST_CASE ("head tracking: live only in binaural, never in exports", "[integration]")
 {
     const auto file = tempFile ("processor");
     Writer writer (file);
-    setTrackingFileOverride (file.getFullPathName().toRawUTF8());
+    const TrackingFileOverride trackingFile (file);
 
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
-    auto set = [&] (const char* id, float v) { auto* q = p.state.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
-    set ("hall", 0.0f); // the direct sound alone
-    set ("playerY", 5.0f); // straight ahead
-    set ("outputMode", 1.0f);
+    set (p, "hall", 0.0f);    // the direct sound alone
+    set (p, "playerY", 5.0f); // straight ahead
+    set (p, "outputMode", 1.0f);
 
     writer.write (pose (90.0f)); // head turned right: the player is now on the left
     p.headTracking->pollNow();
@@ -191,13 +214,47 @@ TEST_CASE ("head tracking: live only in binaural, never in exports")
         return 10.0 * std::log10 (left / right);
     };
 
-    CHECK (leftToRight (false) > 6.0);                 // live: the player moved to the left
-    CHECK (std::abs (leftToRight (true)) < 3.0);       // export: still straight ahead
+    CHECK (leftToRight (false) > 6.0);           // live: the player moved to the left
+    CHECK (std::abs (leftToRight (true)) < 3.0); // export: still straight ahead
 
-    set ("outputMode", 0.0f);
-    CHECK (std::abs (leftToRight (false)) < 1.0);      // stereo: tracking ignored
+    set (p, "outputMode", 0.0f);
+    CHECK (std::abs (leftToRight (false)) < 1.0); // stereo: tracking ignored
+}
 
-    setTrackingFileOverride ("");
+TEST_CASE ("head tracking: stale or faceless data is not live, the scene eases back ahead", "[integration]")
+{
+    const auto file = tempFile ("stale");
+    Writer writer (file);
+    const TrackingFileOverride trackingFile (file);
+
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor p;
+    set (p, "outputMode", 1.0f); // tracking is only read while some instance is binaural
+    auto& tracking = *p.headTracking;
+
+    writer.write (pose (90.0f));
+    tracking.pollNow();
+    REQUIRE (tracking.isLive());
+    CHECK_THAT (tracking.yaw(), WithinAbs (90.0, 1e-4));
+
+    SECTION ("older than 0.5 s: the tracker stopped")
+    {
+        writer.write (pose (60.0f, true, 1000));
+    }
+
+    SECTION ("no face: the listener left")
+    {
+        writer.write (pose (60.0f, false));
+    }
+
+    tracking.pollNow();
+    CHECK_FALSE (tracking.isLive());
+    CHECK (tracking.yaw() < 90.0f); // never jumps to the stale reading (60)
+    CHECK (tracking.yaw() > 60.0f);
+
+    for (int i = 0; i < 100; ++i) // 1 s of polls at 10 ms
+        tracking.pollNow();
+    CHECK_THAT (tracking.yaw(), WithinAbs (0.0, 0.01));
 }
 
 // Manual interop check with tools/fake_tracker.py (hidden):
@@ -210,10 +267,4 @@ TEST_CASE ("head tracking: read the file written by another process", "[.interop
     REQUIRE (p.has_value());
     UNSCOPED_INFO ("yaw " << p->yaw << ", face " << (int) p->face << ", age " << juce::Time::currentTimeMillis() - (juce::int64) p->timestampMs << " ms");
     CHECK (p->face);
-}
-
-// Manual: starts the installed Agogica Tracker (opens a window, uses the camera).
-TEST_CASE ("head tracking: start the tracker app", "[.start]")
-{
-    CHECK (HeadTracking::startTracker());
 }

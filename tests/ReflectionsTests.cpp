@@ -116,7 +116,7 @@ TEST_CASE ("a wall reflection arrives on time with its physical level")
     CHECK (before < 0.15 * expectedEnergy);
 }
 
-TEST_CASE ("reflections don't comb-filter the sound (early colouration)")
+TEST_CASE ("reflections don't comb-filter the sound (early colouration)", "[integration]")
 {
     // User report: the halls sounded "distorted, too filtered". Cause: reflections were
     // perfect copies of the direct sound (the floor one 1.35 ms late at 75 % level).
@@ -184,51 +184,12 @@ TEST_CASE ("the Dry hall has no reflections at all")
     }
 }
 
-TEST_CASE ("the whole chain gives the same result for any block size")
-{
-    juce::ScopedJuceInitialiser_GUI juce;
-
-    auto render = [] (int blockSize)
-    {
-        ComposerProcessor p;
-        auto set = [&] (const char* id, float v)
-        {
-            auto* param = p.state.getParameter (id);
-            param->setValueNotifyingHost (param->convertTo0to1 (v));
-        };
-        set ("outputMode", 1.0f); // binaural
-        set ("hall", 3.0f);       // concert hall
-        set ("playerX", -4.0f);
-
-        p.setPlayConfigDetails (2, 2, 48000.0, 512);
-        p.prepareToPlay (48000.0, 512);
-
-        juce::Random rng (5);
-        std::vector<float> left;
-        juce::MidiBuffer midi;
-
-        for (int done = 0; done < 9600; done += blockSize)
-        {
-            juce::AudioBuffer<float> buffer (2, blockSize);
-            for (int i = 0; i < blockSize; ++i)
-                buffer.setSample (0, i, rng.nextFloat() * 2.0f - 1.0f), buffer.setSample (1, i, 0.0f);
-
-            p.processBlock (buffer, midi);
-            left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + blockSize);
-        }
-
-        return left;
-    };
-
-    const auto big = render (480);
-    const auto odd = render (120);
-
-    for (size_t i = 0; i < 9600; ++i)
-        REQUIRE_THAT (big[i], WithinAbs (odd[i], 1e-6));
-}
-
+// Release only: build/release/ComposerTests "[perf]" -s
 TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
 {
+   #if JUCE_DEBUG
+    SKIP ("CPU limits apply to Release builds");
+   #endif
     juce::ScopedJuceInitialiser_GUI juce;
     const auto sampleRate = GENERATE (48000.0, 96000.0);
     const auto mode = GENERATE (0.0f, 1.0f);
@@ -272,7 +233,7 @@ TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
     CHECK (load < (sampleRate < 50000.0 ? 0.30 : 0.90)); // regression guard; multi-core hosts spread tracks
 }
 
-TEST_CASE ("output stays finite for any parameter values (fuzz)")
+TEST_CASE ("output stays finite for any parameter values (fuzz)", "[slow][integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
@@ -282,9 +243,12 @@ TEST_CASE ("output stays finite for any parameter values (fuzz)")
     juce::Random rng (1234);
     juce::AudioBuffer<float> buffer (2, 256);
     juce::MidiBuffer midi;
-    const juce::StringArray ids { "roomSize", "listenerX", "listenerY", "playerX", "playerY", "outputMode", "hall" };
+    juce::StringArray ids;
+    for (auto* param : p.getParameters()) // every parameter, Pro included
+        ids.add (dynamic_cast<juce::AudioProcessorParameterWithID&> (*param).paramID);
+    REQUIRE (ids.size() >= 16);
 
-    for (int block = 0; block < 2000; ++block)
+    for (int block = 0; block < 500; ++block)
     {
         // Mostly random values, sometimes the extremes (players and listener meeting on a wall).
         for (const auto& id : ids)

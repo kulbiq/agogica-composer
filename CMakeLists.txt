@@ -131,7 +131,9 @@ target_link_libraries(ComposerTests PRIVATE Composer Catch2::Catch2WithMain)
 
 include(CTest)
 include(Catch)
-catch_discover_tests(ComposerTests)
+# The fast set (ctest -LE slow) and the slow cases (labelled "slow"); hidden [.x] cases are manual.
+catch_discover_tests(ComposerTests TEST_SPEC "~[slow]")
+catch_discover_tests(ComposerTests TEST_SPEC "[slow]" PROPERTIES LABELS slow)
 
 # --- Agogica Tracker (head tracking companion app) ---------------------------
 # ONNX Runtime (MIT) for the tracker's native head-pose engines; never linked into the plugin.

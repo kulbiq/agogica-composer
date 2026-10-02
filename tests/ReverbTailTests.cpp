@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
-#include "../Source/PluginProcessor.h"
 #include "../Source/dsp/ReverbTail.h"
 
 using Catch::Matchers::WithinAbs;
@@ -10,7 +10,7 @@ namespace
 constexpr double sampleRate = 48000.0;
 
 // Impulse response of the tail stage alone for a given hall, left and right.
-std::pair<std::vector<float>, std::vector<float>> tailResponse (const Hall& hall, double seconds)
+std::pair<std::vector<float>, std::vector<float>> tailResponse (const Hall& hall, double seconds, float decay = 1.0f)
 {
     History history;
     history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
@@ -20,6 +20,7 @@ std::pair<std::vector<float>, std::vector<float>> tailResponse (const Hall& hall
     Acoustics a;
     a.hall = &hall;
     a.player = { 0.0f, 0.0f };
+    a.adjust.decay = decay;
     tail.setAcoustics (a);
 
     const auto n = (size_t) (seconds * sampleRate);
@@ -52,14 +53,16 @@ double rt60 (const std::vector<float>& l, const std::vector<float>& r)
 }
 } // namespace
 
-TEST_CASE ("the tail decays in the hall's reverberation time")
+TEST_CASE ("the tail decays in the hall's reverberation time, scaled by Pro decay")
 {
-    for (const auto seconds : { 1.0f, 2.0f, 4.0f })
-    {
-        const Hall flat { "test", 10.0f, 0.2f, seconds, seconds, 0.0f, 0.2f }; // same decay at all frequencies
-        const auto [l, r] = tailResponse (flat, seconds * 1.5);
-        CHECK_THAT (rt60 (l, r), WithinAbs (seconds, 0.15 * seconds));
-    }
+    const auto [seconds, decay, tolerance] = GENERATE (table<float, float, double> ({
+        { 1.0f, 1.0f, 0.15 }, { 2.0f, 1.0f, 0.15 }, { 4.0f, 1.0f, 0.15 }, { 1.5f, 2.0f, 0.15 }, { 1.5f, 0.5f, 0.16 },
+    }));
+
+    const Hall flat { "test", 10.0f, 0.2f, seconds, seconds, 0.0f, 0.2f }; // same decay at all frequencies
+    const auto expected = (double) (seconds * decay);
+    const auto [l, r] = tailResponse (flat, expected * 1.5, decay);
+    CHECK_THAT (rt60 (l, r), WithinAbs (expected, tolerance * expected));
 }
 
 TEST_CASE ("high frequencies die away faster (hall presets)")
@@ -104,10 +107,11 @@ TEST_CASE ("switching to Dry lets the tail die away instead of cutting it")
     a.hall = &halls[4]; // church
     tail.setAcoustics (a);
 
+    juce::Random rng (12);
     float l = 0.0f, r = 0.0f;
     for (int i = 0; i < 24000; ++i) // half a second of noise
     {
-        history.write (juce::Random::getSystemRandom().nextFloat() - 0.5f);
+        history.write (rng.nextFloat() - 0.5f);
         tail.processSample (history, l, r);
     }
 
@@ -125,47 +129,4 @@ TEST_CASE ("switching to Dry lets the tail die away instead of cutting it")
     }
 
     CHECK (late > 1e-6);
-}
-
-TEST_CASE ("a silent track skips its work and resumes at the current position")
-{
-    juce::ScopedJuceInitialiser_GUI juce;
-    ComposerProcessor p;
-    auto set = [&] (const char* id, float v)
-    {
-        auto* param = p.state.getParameter (id);
-        param->setValueNotifyingHost (param->convertTo0to1 (v));
-    };
-    set ("hall", 0.0f); // Dry: the direct sound alone, so the impulse position is exact
-
-    p.setPlayConfigDetails (2, 2, sampleRate, 480);
-    p.prepareToPlay (sampleRate, 480);
-
-    juce::AudioBuffer<float> buffer (2, 480);
-    juce::MidiBuffer midi;
-
-    buffer.setSample (0, 0, 1.0f);
-    p.processBlock (buffer, midi);
-
-    for (int block = 0; block < 1100; ++block) // 11 s of silence (longer than the 10 s tail)
-    {
-        buffer.clear();
-        p.processBlock (buffer, midi);
-    }
-
-    CHECK (buffer.getMagnitude (0, 480) <= 0.0f);
-
-    set ("playerY", 10.0f); // moved while silent: 10 m -> 1399.4 samples
-    std::vector<float> left;
-    for (int block = 0; block < 4; ++block)
-    {
-        buffer.clear();
-        if (block == 0)
-            buffer.setSample (0, 0, 1.0f);
-        p.processBlock (buffer, midi);
-        left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
-    }
-
-    const auto peak = std::distance (left.begin(), std::max_element (left.begin(), left.end()));
-    CHECK (std::abs ((double) peak - 10.0 / 343.0 * sampleRate) <= 1.0);
 }

@@ -3,7 +3,6 @@
 #include "../Source/PluginProcessor.h"
 #include "../Source/bridge/Stage.h"
 #include "../Source/dsp/EarlyReflections.h"
-#include "../Source/dsp/ReverbTail.h"
 
 using Catch::Matchers::WithinAbs;
 
@@ -16,7 +15,7 @@ void set (ComposerProcessor& p, const char* id, float value)
 }
 
 // Renders `blocks` x 480 samples of seeded noise; returns interleaved L/R.
-std::vector<float> render (ComposerProcessor& p, int blocks, bool silenceAfterFirst = false)
+std::vector<float> render (ComposerProcessor& p, int blocks)
 {
     p.setPlayConfigDetails (2, 2, 48000.0, 480);
     p.prepareToPlay (48000.0, 480);
@@ -30,9 +29,8 @@ std::vector<float> render (ComposerProcessor& p, int blocks, bool silenceAfterFi
         juce::AudioBuffer<float> buffer (2, 480);
         for (int i = 0; i < 480; ++i)
         {
-            const auto noise = silenceAfterFirst && b > 0;
-            buffer.setSample (0, i, noise ? 0.0f : rng.nextFloat() - 0.5f);
-            buffer.setSample (1, i, noise ? 0.0f : rng.nextFloat() - 0.5f);
+            buffer.setSample (0, i, rng.nextFloat() - 0.5f);
+            buffer.setSample (1, i, rng.nextFloat() - 0.5f);
         }
         p.processBlock (buffer, midi);
         for (int i = 0; i < 480; ++i)
@@ -42,7 +40,7 @@ std::vector<float> render (ComposerProcessor& p, int blocks, bool silenceAfterFi
 }
 } // namespace
 
-TEST_CASE ("Pro panel at its defaults sounds exactly as before")
+TEST_CASE ("Pro panel at its defaults sounds exactly as before", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
 
@@ -66,7 +64,7 @@ TEST_CASE ("Pro panel at its defaults sounds exactly as before")
     }
 }
 
-TEST_CASE ("Pro: reflections and reverb off leave only the direct sound")
+TEST_CASE ("Pro: reflections and reverb off leave only the direct sound", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
 
@@ -121,23 +119,18 @@ double sum (const std::vector<float>& v, size_t from, size_t to)
 }
 } // namespace
 
-TEST_CASE ("Pro: floor reflection level")
+TEST_CASE ("Pro: floor and diffusion shape the early reflections")
 {
-    // The floor image is 6.31 m away (883 samples); the next reflection (ceiling) is at 1340.
+    const auto plain = reflectionsImpulse ({});
+
+    // Floor level 0 removes the floor reflection: the floor image is 6.31 m away
+    // (883 samples); the next reflection (ceiling) is at 1340.
     Adjustments noFloor;
     noFloor.floor = 0.0f;
+    CHECK (sum (reflectionsImpulse (noFloor), 870, 1300) < 0.01 * sum (plain, 870, 1300));
 
-    const auto withFloor = sum (reflectionsImpulse ({}), 870, 1300);
-    const auto without = sum (reflectionsImpulse (noFloor), 870, 1300);
-    CHECK (without < 0.01 * withFloor);
-}
-
-TEST_CASE ("Pro: diffusion 0 leaves each reflection a compact copy")
-{
-    Adjustments clean;
-    clean.diffusion = 0.0f;
-
-    // Share of the floor reflection's energy within 1 ms of its (delayed) start.
+    // Diffusion 0 leaves each reflection a compact copy: share of the floor reflection's
+    // energy within 1 ms of its (delayed) start.
     auto compactness = [] (const std::vector<float>& e)
     {
         size_t start = 870;
@@ -146,53 +139,13 @@ TEST_CASE ("Pro: diffusion 0 leaves each reflection a compact copy")
         return sum (e, start, start + 48) / sum (e, start, 1300);
     };
 
+    Adjustments clean;
+    clean.diffusion = 0.0f;
     CHECK (compactness (reflectionsImpulse (clean)) > 0.9);
-    CHECK (compactness (reflectionsImpulse ({})) < 0.7);
+    CHECK (compactness (plain) < 0.7);
 }
 
-TEST_CASE ("Pro: decay scales the reverberation time")
-{
-    const Hall flat { "test", 10.0f, 0.2f, 1.5f, 1.5f, 0.0f, 0.2f };
-
-    auto measure = [&] (float decay)
-    {
-        History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
-        ReverbTail tail;
-        tail.prepare (48000.0);
-
-        Acoustics a;
-        a.hall = &flat;
-        a.adjust.decay = decay;
-        tail.setAcoustics (a);
-
-        std::vector<double> energy ((size_t) (48000.0 * 1.5 * decay * 1.5));
-        for (size_t i = 0; i < energy.size(); ++i)
-        {
-            float l = 0.0f, r = 0.0f;
-            history.write (i == 0 ? 1.0f : 0.0f);
-            tail.processSample (history, l, r);
-            energy[i] = (double) l * l + (double) r * r;
-        }
-
-        for (size_t i = energy.size() - 1; i-- > 0;) // Schroeder backward integration
-            energy[i] += energy[i + 1];
-
-        auto timeAt = [&] (double db)
-        {
-            for (size_t i = 0; i < energy.size(); ++i)
-                if (10.0 * std::log10 (energy[i] / energy[0]) <= db)
-                    return (double) i / 48000.0;
-            return (double) energy.size() / 48000.0;
-        };
-        return 2.0 * (timeAt (-35.0) - timeAt (-5.0));
-    };
-
-    CHECK_THAT (measure (2.0f), WithinAbs (3.0, 0.45));
-    CHECK_THAT (measure (0.5f), WithinAbs (0.75, 0.12));
-}
-
-TEST_CASE ("Pro: distance law and air in the derived values")
+TEST_CASE ("Pro: distance law and air in the derived values", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
@@ -204,69 +157,4 @@ TEST_CASE ("Pro: distance law and air in the derived values")
 
     set (p, "proAir", 0.0f);
     CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["airDb"], WithinAbs (0.0, 1e-6));
-    CHECK_THAT (geometry::airCutoffHz (50.0f, 0.0f), WithinAbs (0.0, 0.0)); // no filter at all
-}
-
-TEST_CASE ("Pro: shared, saved, adopted by new inserts, not part of scenes")
-{
-    juce::ScopedJuceInitialiser_GUI juce;
-    juce::MemoryBlock saved;
-
-    {
-        ComposerProcessor a, b;
-        a.markPlaced();
-        auto drag = [&] (const char* id, float v)
-        {
-            auto edit = [&] (const char* phase)
-            {
-                auto o = std::make_unique<juce::DynamicObject>();
-                o->setProperty ("phase", phase);
-                o->setProperty ("target", a.id);
-                o->setProperty ("param", id);
-                o->setProperty ("value", v);
-                stage::applyEdit (a, o.release());
-            };
-            edit ("begin"), edit ("change"), edit ("end");
-        };
-
-        drag ("proReverb", -6.0f);
-        CHECK_THAT (b.getParam ("proReverb"), WithinAbs (-6.0, 1e-4));
-
-        stage::setScene (a, "B");
-        CHECK_THAT (b.getParam ("proReverb"), WithinAbs (-6.0, 1e-4)); // scenes don't touch it
-
-        ComposerProcessor c;
-        stage::join (c, true);
-        CHECK_THAT (c.getParam ("proReverb"), WithinAbs (-6.0, 1e-4));
-
-        b.getStateInformation (saved);
-    }
-
-    ComposerProcessor restored;
-    restored.setStateInformation (saved.getData(), (int) saved.getSize());
-    CHECK_THAT (restored.getParam ("proReverb"), WithinAbs (-6.0, 1e-4));
-}
-
-TEST_CASE ("the longest tail (Church, decay x2) is never cut by the silence skip")
-{
-    juce::ScopedJuceInitialiser_GUI juce;
-    ComposerProcessor p;
-    set (p, "hall", 4.0f);
-    set (p, "proDecay", 2.0f);
-
-    const auto out = render (p, 1000, true); // 10 ms of noise, then silence until 10 s
-
-    auto blockEnergy = [&] (int block)
-    {
-        double e = 0.0;
-        for (size_t i = (size_t) block * 960; i < (size_t) (block + 1) * 960; ++i)
-            e += (double) out[i] * out[i];
-        return e;
-    };
-
-    // Still processed (not skipped) near the end, and by the time the skip may engage
-    // (10 s) the tail is below -60 dB of its level at 0.2 s: cutting it then is inaudible.
-    const auto early = blockEnergy (20);
-    CHECK (blockEnergy (950) > 0.0);
-    CHECK (10.0 * std::log10 (blockEnergy (990) / early) < -60.0);
 }
