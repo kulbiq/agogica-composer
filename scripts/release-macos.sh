@@ -11,7 +11,8 @@
 #
 # Upload: R2_BUCKET=agogica-releases puts the zip at composer/<version>/<name>.zip (private;
 # the hub gets a signed link). Uses Wrangler's login (`wrangler login`).
-# Registering needs SUPABASE_URL and SUPABASE_SECRET_KEY, plus DOWNLOAD_BASE when not uploading
+# Registering needs POCKETBASE_URL and POCKETBASE_TOKEN (a superuser token, see the Agogica website
+# README), plus DOWNLOAD_BASE when not uploading
 # (a public URL prefix, e.g. a local test server).
 #
 # Signing: Developer ID + hardened runtime + secure timestamp (SIGN_IDENTITY overrides the identity).
@@ -109,12 +110,11 @@ else
   exit 0
 fi
 
-if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SECRET_KEY:-}" ]; then
-  curl -fsS -X POST "$SUPABASE_URL/rest/v1/releases" \
-    -H "apikey: $SUPABASE_SECRET_KEY" -H "Authorization: Bearer $SUPABASE_SECRET_KEY" \
-    -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+if [ -n "${POCKETBASE_URL:-}" ] && [ -n "${POCKETBASE_TOKEN:-}" ]; then
+  curl -fsS -o /dev/null -X POST "$POCKETBASE_URL/api/collections/releases/records" \
+    -H "Authorization: $POCKETBASE_TOKEN" -H "Content-Type: application/json" \
     -d "{\"product\":\"composer\",\"version\":\"$VERSION\",\"platform\":\"macos\",$LOCATION,\"sha256\":\"$SHA\",\"size_bytes\":$SIZE}"
-  echo "  registered at $SUPABASE_URL"
+  echo "  registered at $POCKETBASE_URL"
 else
-  echo "  not registered (set SUPABASE_URL, SUPABASE_SECRET_KEY)"
+  echo "  not registered (set POCKETBASE_URL, POCKETBASE_TOKEN)"
 fi
