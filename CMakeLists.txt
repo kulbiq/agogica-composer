@@ -53,7 +53,13 @@ target_sources(Composer PRIVATE
     Source/dsp/Placer.cpp
     Source/dsp/EarlyReflections.cpp
     Source/dsp/ReverbTail.cpp
-    Source/dsp/Hrtf.cpp)
+    Source/dsp/Hrtf.cpp
+    Source/licensing/LicenseCheck.cpp
+    third_party/monocypher/monocypher.c
+    third_party/monocypher/monocypher-ed25519.c)
+# Vendored as-is (third_party/monocypher/README): not held to our warning flags.
+set_source_files_properties(third_party/monocypher/monocypher.c third_party/monocypher/monocypher-ed25519.c
+    PROPERTIES COMPILE_OPTIONS "-w")
 
 target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1
@@ -99,6 +105,7 @@ target_link_libraries(Composer
     PRIVATE
         ComposerData
         juce::juce_audio_utils
+        juce::juce_cryptography
         juce::juce_dsp
         juce::juce_gui_extra
     PUBLIC
@@ -116,7 +123,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Tests link the plugin's shared code (which already contains the JUCE modules)
 # and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp)
+add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/LicenseTests.cpp)
 target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
 target_compile_definitions(ComposerTests PRIVATE COMPOSER_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")

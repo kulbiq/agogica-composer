@@ -29,6 +29,10 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     alone: false,
     // ?elsewhere: another track's window is open (the "open here anyway" screen).
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
+    // ?unlicensed: the "not active" screen.
+    licence: location.search.includes("unlicensed")
+      ? { ok: false, message: "Composer isn't activated on this Mac yet." }
+      : { ok: true, message: "Activated on this Mac." },
     room: 20,
     listener: { x: 0, y: -4 },
     players: names.map((name, i) => ({ id: i, name, colour: colours[i], self: i === 2, x: (i - 2.5) * 2.4, y: 3 + (i % 2) * 2 })),
@@ -81,6 +85,8 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       emit("stage", snapshot());
     },
     startTracker: () => true,
+    openHub: () => true,
+    checkLicence: () => scene.licence.ok,
     setScene: (name: string) => {
       scene.scene = name;
       if (!scene.scenes.includes(name)) scene.scenes = [...scene.scenes, name].sort();

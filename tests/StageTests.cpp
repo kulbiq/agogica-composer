@@ -271,7 +271,7 @@ TEST_CASE ("snapshot names another instance whose editor is open")
 
     CHECK_FALSE (stage::snapshot (b).hasProperty ("openElsewhere"));
 
-    std::unique_ptr<juce::AudioProcessorEditor> editor { a.createEditorIfNeeded() };
+    std::unique_ptr<juce::AudioProcessorEditor> editor { a.createEditorAndMakeActive() };
     CHECK (stage::snapshot (b)["openElsewhere"] == juce::var ("Violin I"));
     CHECK_FALSE (stage::snapshot (a).hasProperty ("openElsewhere")); // its own editor doesn't count
 

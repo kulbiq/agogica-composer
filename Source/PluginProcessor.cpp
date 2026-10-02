@@ -200,6 +200,17 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
          prev < peak && ! inputPeak.compare_exchange_weak (prev, peak, std::memory_order_relaxed);)
         ;
 
+    // Not activated on this Mac (or the licence ran out): pass the input through untouched.
+    if (! licence->isValid())
+    {
+        for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
+            if (getTotalNumInputChannels() > 0)
+                buffer.copyFrom (ch, 0, buffer, 0, 0, buffer.getNumSamples());
+            else
+                buffer.clear (ch, 0, buffer.getNumSamples());
+        return;
+    }
+
     // Audio depends only on this instance's own parameters (never on UI pushes or other
     // instances), so offline bounces and ahead-of-time rendering stay correct.
     Acoustics acoustics;

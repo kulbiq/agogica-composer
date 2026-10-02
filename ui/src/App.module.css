@@ -595,3 +595,8 @@ button.status:focus-visible {
 .grip:hover path {
   stroke: var(--ink-lighter);
 }
+
+.licenceActions {
+  display: flex;
+  gap: 10px;
+}

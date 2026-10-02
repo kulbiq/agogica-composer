@@ -132,6 +132,13 @@ juce::var snapshot (ComposerProcessor& self)
         hallNames.add (juce::String (h.name));
     o->setProperty ("halls", hallNames);
 
+    // Without a valid licence the plugin passes audio through; the UI says why.
+    const auto licence = self.licence->current();
+    auto lic = std::make_unique<juce::DynamicObject>();
+    lic->setProperty ("ok", licence.status == licensing::Status::valid);
+    lic->setProperty ("message", licensing::describe (licence.status));
+    o->setProperty ("licence", lic.release());
+
     auto tracking = std::make_unique<juce::DynamicObject>();
     tracking->setProperty ("live", self.headTracking->isLive());
     tracking->setProperty ("yaw", self.headTracking->yaw());

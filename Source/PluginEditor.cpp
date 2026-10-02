@@ -94,6 +94,21 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                                          {
                                              complete (HeadTracking::startTracker());
                                          })
+                    // "Not activated" screen: Agogica Hub signs in and writes the licence.
+                    .withNativeFunction ("openHub", [] (const auto&, auto complete)
+                                         {
+                                             juce::ChildProcess open;
+                                             const auto opened = open.start ("/usr/bin/open -b com.agogica.hub")
+                                                                 && open.waitForProcessToFinish (5000) && open.getExitCode() == 0;
+                                             if (! opened) // the hub isn't installed: get it from the website
+                                                 juce::URL ("https://agogica.app/dashboard").launchInDefaultBrowser();
+                                             complete (opened);
+                                         })
+                    .withNativeFunction ("checkLicence", [this] (const auto&, auto complete)
+                                         {
+                                             composer.licence->refresh();
+                                             complete (composer.licence->isValid());
+                                         })
                     .withNativeFunction ("getBuildInfo", [this] (const auto&, auto complete)
                                          {
                                              complete (getBuildInfo (composer));

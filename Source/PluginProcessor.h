@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "stage/StageRegistry.h"
 #include "stage/HeadTracking.h"
+#include "licensing/LicenseCheck.h"
 #include "dsp/DirectPath.h"
 #include "dsp/EarlyReflections.h"
 #include "dsp/ReverbTail.h"
@@ -74,6 +75,8 @@ public:
 
     juce::SharedResourcePointer<StageRegistry> registry;
     juce::SharedResourcePointer<HeadTracking> headTracking;
+    /** Offline licence (shared by every instance); without it audio passes through untouched. */
+    juce::SharedResourcePointer<licensing::Licence> licence;
 
     // A complete gesture on one parameter, in its real units.
     void writeParam (const juce::String& paramId, float value);
