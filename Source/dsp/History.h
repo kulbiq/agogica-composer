@@ -22,6 +22,7 @@ public:
     }
 
     int maxDelay() const noexcept { return size - 8; }
+    bool isPrepared() const noexcept { return size > 0; }
 
     void write (float sample) noexcept
     {

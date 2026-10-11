@@ -405,6 +405,23 @@ TEST_CASE ("channels: stereo input is summed to mono, mono input is used as is",
 
     CHECK (stereo == summed);
     CHECK (mono == summed);
+
+    SECTION ("before prepareToPlay, or with no input bus, a block is silence - never a crash")
+    {
+        juce::MidiBuffer midi;
+        ComposerProcessor unprepared;
+        juce::AudioBuffer<float> buffer (2, 64);
+        buffer.setSample (0, 3, 0.7f);
+        unprepared.processBlock (buffer, midi);
+        CHECK (buffer.getMagnitude (0, 64) <= 0.0f);
+
+        ComposerProcessor noInput;
+        noInput.setPlayConfigDetails (0, 2, 48000.0, 64);
+        noInput.prepareToPlay (48000.0, 64);
+        buffer.setSample (1, 5, 0.7f);
+        noInput.processBlock (buffer, midi);
+        CHECK (buffer.getMagnitude (0, 64) <= 0.0f);
+    }
 }
 
 TEST_CASE ("bus layouts: mono or stereo in, stereo out only", "[integration]")

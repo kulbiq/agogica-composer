@@ -211,6 +211,14 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         return;
     }
 
+    // A host calling before prepareToPlay, or with no input bus: silence, never a read past
+    // an empty history or a channel that isn't there.
+    if (! history.isPrepared() || getTotalNumInputChannels() == 0 || buffer.getNumChannels() < 2)
+    {
+        buffer.clear();
+        return;
+    }
+
     // Audio depends only on this instance's own parameters (never on UI pushes or other
     // instances), so offline bounces and ahead-of-time rendering stay correct.
     Acoustics acoustics;

@@ -65,7 +65,10 @@ target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1)
+    JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
+    # Licences signed by the local dev site are accepted by Debug builds only. Explicit, so a
+    # configure without a build type can never ship a plugin that trusts the dev key.
+    $<$<CONFIG:Debug>:COMPOSER_ACCEPT_DEV_KEY=1>)
 
 # Debug only: load the UI from `npm run dev` instead of the embedded zip.
 option(COMPOSER_UI_DEV_SERVER "Debug builds load the web UI from the Vite dev server" OFF)
