@@ -8,3 +8,4 @@ tracker/ui/models/
 tracker/models/*.onnx
 tracker/models/*.part
 .wrangler/
+.env*
