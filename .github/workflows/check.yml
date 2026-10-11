@@ -1,0 +1,33 @@
+# Pull request and branch checks: the fast test set (`ctest --preset debug -LE slow`), built
+# the way a developer builds it. Only the plugin's shared code and its tests are compiled: the
+# Tracker (onnxruntime, 125 MB of models) and the plugin bundles are not needed for the tests.
+# No secrets, no signing: releases are built from the owner's Mac (scripts/release-macos.sh).
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # JUCE
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: build/debug/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+      - run: cmake --preset debug
+      - run: cmake --build --preset debug --target ComposerTests
+      - run: ctest --preset debug -LE slow
