@@ -162,3 +162,12 @@ if [ -n "$HEADERS" ]; then
 else
   echo "  not registered (set POCKETBASE_URL, POCKETBASE_TOKEN)"
 fi
+
+# The product image on agogica.app shows this version's editor; regenerate it there and commit it
+# with the platform (its own repo). A failure here never fails the release.
+PLATFORM=${PLATFORM_DIR:-../agogica-platform}
+if [ -f "$PLATFORM/scripts/composer-shot.ts" ]; then
+  (cd "$PLATFORM" && COMPOSER_DIR="$OLDPWD" VERSION="$VERSION" bun run shot:composer) \
+    && echo "  product image updated: commit public/products/composer/hero.png in $PLATFORM" \
+    || echo "  product image NOT updated (run VERSION=$VERSION bun run shot:composer in $PLATFORM)" >&2
+fi
