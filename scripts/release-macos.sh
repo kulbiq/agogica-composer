@@ -168,6 +168,6 @@ fi
 PLATFORM=${PLATFORM_DIR:-../agogica-platform}
 if [ -f "$PLATFORM/scripts/composer-shot.ts" ]; then
   (cd "$PLATFORM" && COMPOSER_DIR="$OLDPWD" VERSION="$VERSION" bun run shot:composer) \
-    && echo "  product image updated: commit public/products/composer/hero.png in $PLATFORM" \
+    && echo "  product image updated: commit public/products/composer/hero-*.png in $PLATFORM" \
     || echo "  product image NOT updated (run VERSION=$VERSION bun run shot:composer in $PLATFORM)" >&2
 fi
