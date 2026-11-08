@@ -20,12 +20,14 @@
     {
       "name": "debug",
       "configurePreset": "debug",
-      "jobs": 0
+      "jobs": 0,
+      "configuration": "Debug"
     },
     {
       "name": "release",
       "configurePreset": "release",
-      "jobs": 0
+      "jobs": 0,
+      "configuration": "Release"
     }
   ],
   "testPresets": [
@@ -34,14 +36,16 @@
       "configurePreset": "debug",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "configuration": "Debug"
     },
     {
       "name": "release",
       "configurePreset": "release",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "configuration": "Release"
     }
   ]
 }

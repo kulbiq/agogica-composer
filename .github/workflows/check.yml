@@ -1,6 +1,7 @@
 # Pull request and branch checks: the fast test set (`ctest --preset debug -LE slow`), built
-# the way a developer builds it. Only the plugin's shared code and its tests are compiled: the
-# Tracker (onnxruntime, 125 MB of models) and the plugin bundles are not needed for the tests.
+# the way a developer builds it, on macOS and on Windows. The Tracker (onnxruntime, 125 MB of
+# models) is not built. The Windows job also uploads the Debug VST3 (it accepts licences from a
+# local dev site) for trying on a Windows machine.
 # No secrets, no signing: releases are built from the owner's Mac (scripts/release-macos.sh).
 name: Check
 
@@ -15,7 +16,11 @@ concurrency:
 
 jobs:
   tests:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +33,16 @@ jobs:
         with:
           path: build/debug/_deps
           key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+      # JUCE links WebView2 statically on Windows and looks for the NuGet package.
+      - if: runner.os == 'Windows'
+        run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       - run: cmake --preset debug
       - run: cmake --build --preset debug --target ComposerTests
       - run: ctest --preset debug -LE slow
+      - if: runner.os == 'Windows'
+        run: cmake --build --preset debug --target Composer_VST3
+      - if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Composer-vst3-windows-debug
+          path: build/debug/Composer_artefacts/Debug/VST3/Composer.vst3

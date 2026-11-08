@@ -200,7 +200,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
          prev < peak && ! inputPeak.compare_exchange_weak (prev, peak, std::memory_order_relaxed);)
         ;
 
-    // Not activated on this Mac (or the licence ran out): pass the input through untouched.
+    // Not activated on this computer (or the licence ran out): pass the input through untouched.
     if (! licence->isValid())
     {
         for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
