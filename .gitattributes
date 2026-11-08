@@ -1,0 +1,2 @@
+# Test expectations are compared byte for byte: keep LF on Windows checkouts too.
+tests/data/*.txt text eol=lf

@@ -75,7 +75,14 @@ void Reader::remapIfNeeded()
     if (! file.existsAsFile() || size < fileSize)
         return;
 
-    map = std::make_unique<juce::MemoryMappedFile> (file, juce::MemoryMappedFile::readOnly, false);
+    // Windows: JUCE opens a read-only mapping without FILE_SHARE_WRITE, which fails while the
+    // tracker holds the file for writing; a read-write mapping shares it. Nothing is written here.
+   #if JUCE_WINDOWS
+    constexpr auto mode = juce::MemoryMappedFile::readWrite;
+   #else
+    constexpr auto mode = juce::MemoryMappedFile::readOnly;
+   #endif
+    map = std::make_unique<juce::MemoryMappedFile> (file, mode, false);
 
     if (map->getData() != nullptr && map->getSize() >= (size_t) fileSize)
         record = static_cast<const Record*> (map->getData());

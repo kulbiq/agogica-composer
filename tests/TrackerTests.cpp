@@ -119,7 +119,7 @@ TEST_CASE ("head filter: re-acquisition after confirmFrames, approached at reacq
     }
 }
 
-TEST_CASE ("head filter: genuine turns are followed (fast, across ±180)")
+TEST_CASE ("head filter: genuine turns are followed (fast, across +-180)")
 {
     SECTION ("a fast turn is followed without re-acquisition")
     {
