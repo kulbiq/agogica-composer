@@ -1,7 +1,39 @@
 #include "HeadTrackingFile.h"
 
+#if JUCE_WINDOWS
+ #ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+ #endif
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
+ #include <windows.h>
+#endif
+
 namespace headtracking
 {
+namespace
+{
+// Changes when the file is replaced. On Windows JUCE's getFileIdentifier opens the file without
+// FILE_SHARE_WRITE, so it fails (0) while the tracker holds it; this asks with full sharing.
+juce::uint64 fileIdentity (const juce::File& file)
+{
+   #if JUCE_WINDOWS
+    const auto h = CreateFileW (file.getFullPathName().toWideCharPointer(), 0,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+        return 0;
+    BY_HANDLE_FILE_INFORMATION info {};
+    const auto ok = GetFileInformationByHandle (h, &info);
+    CloseHandle (h);
+    return ok ? ((juce::uint64) info.nFileIndexHigh << 32) | info.nFileIndexLow : 0;
+   #else
+    return file.getFileIdentifier();
+   #endif
+}
+} // namespace
+
 juce::File defaultFile()
 {
     if (const auto overridden = juce::SystemStats::getEnvironmentVariable ("AGOGICA_HEAD_TRACKING_FILE", {}); overridden.isNotEmpty())
@@ -61,7 +93,7 @@ Reader::Reader (juce::File f) : file (std::move (f)) {}
 
 void Reader::remapIfNeeded()
 {
-    const auto newIdentity = file.getFileIdentifier();
+    const auto newIdentity = fileIdentity (file);
     const auto newSize = file.getSize();
 
     if (map != nullptr && newIdentity == identity && newSize == size)

@@ -45,4 +45,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Composer-vst3-windows-debug
-          path: build/debug/Composer_artefacts/Debug/VST3/Composer.vst3
+          path: build/debug/Composer_artefacts/Debug/VST3 # the folder, so the zip root is Composer.vst3

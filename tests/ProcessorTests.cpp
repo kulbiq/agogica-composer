@@ -17,7 +17,7 @@ using Catch::Matchers::WithinAbs;
 // Counts heap allocations made by one thread (the "audio thread" of a test) while
 // allocationsDuring() runs; other threads (JUCE, head tracking) allocate whenever they like.
 // On macOS the malloc family itself is replaced for this binary, so juce::HeapBlock and
-// AudioBuffer (which call std::malloc, not operator new) are seen too.
+// AudioBuffer (which call std::malloc, not operator new) are seen too; elsewhere only new is.
 namespace
 {
 std::atomic<std::thread::id> countingThread {};
@@ -204,12 +204,15 @@ TEST_CASE ("processBlock: position from parameters, clamped to the room", "[inte
 TEST_CASE ("processBlock never allocates (both modes, every hall, Pro, mode and hall switches)", "[integration]")
 {
     // Control: the counter sees every way the code under test could allocate.
+    // Elsewhere only operator new is counted; the macOS run covers the malloc family.
     static void* volatile sink = nullptr;
+   #if JUCE_MAC
     CHECK (allocationsDuring ([] { sink = std::malloc (16); std::free (sink); }) == 1);
     CHECK (allocationsDuring ([] { sink = std::calloc (4, 4); std::free (sink); }) == 1);
     CHECK (allocationsDuring ([] { sink = std::malloc (16); sink = std::realloc (sink, 4096); std::free (sink); }) == 2);
-    CHECK (allocationsDuring ([] { auto* v = new std::vector<float> (64); sink = v; delete v; }) == 2);
     CHECK (allocationsDuring ([] { juce::HeapBlock<float> block (64); sink = block.get(); }) == 1);
+   #endif
+    CHECK (allocationsDuring ([] { auto* f = new float[64]; sink = f; delete[] f; }) == 1);
 
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
