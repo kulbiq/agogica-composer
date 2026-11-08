@@ -1,0 +1,32 @@
+# The Windows release build of the plug-in, on every vX.Y.Z tag and by hand. No secrets: the zip
+# it uploads is checked, signed (minisign), uploaded and registered from the owner's Mac by
+# scripts/release-windows.sh.
+name: Windows build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  vst3:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # JUCE
+          fetch-depth: 0 # CMake takes the version from the tag
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # JUCE links WebView2 statically on Windows and looks for the NuGet package.
+      - run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
+      - run: cmake --preset release
+      - run: cmake --build --preset release --target Composer_VST3
+      # Composer.vst3 at the zip root, as Agogica Hub expects.
+      - run: tar -a -c -f Composer-windows-x64.zip -C build/release/Composer_artefacts/Release/VST3 Composer.vst3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: composer-windows-x64
+          path: Composer-windows-x64.zip

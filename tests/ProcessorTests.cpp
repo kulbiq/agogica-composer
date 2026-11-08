@@ -82,13 +82,26 @@ void* operator new (std::size_t size)
     throw std::bad_alloc();
 }
 
+// Windows has no posix_memalign, and its aligned blocks must go back through _aligned_free.
+#if JUCE_WINDOWS
+ #include <malloc.h>
+static void* alignedAlloc (std::size_t alignment, std::size_t size) { return _aligned_malloc (size, alignment); }
+static void alignedFree (void* p) { _aligned_free (p); }
+#else
+static void* alignedAlloc (std::size_t alignment, std::size_t size)
+{
+    void* p = nullptr;
+    return posix_memalign (&p, alignment, size) == 0 ? p : nullptr;
+}
+static void alignedFree (void* p) { std::free (p); }
+#endif
+
 void* operator new (std::size_t size, std::align_val_t alignment)
 {
    #if ! JUCE_MAC
     countAllocation();
    #endif
-    void* p = nullptr;
-    if (posix_memalign (&p, std::max ((std::size_t) alignment, sizeof (void*)), size == 0 ? 1 : size) == 0)
+    if (auto* p = alignedAlloc (std::max ((std::size_t) alignment, sizeof (void*)), size == 0 ? 1 : size))
         return p;
 
     throw std::bad_alloc();
@@ -96,8 +109,8 @@ void* operator new (std::size_t size, std::align_val_t alignment)
 
 void operator delete (void* p) noexcept                                { std::free (p); }
 void operator delete (void* p, std::size_t) noexcept                   { std::free (p); }
-void operator delete (void* p, std::align_val_t) noexcept              { std::free (p); }
-void operator delete (void* p, std::size_t, std::align_val_t) noexcept { std::free (p); }
+void operator delete (void* p, std::align_val_t) noexcept              { alignedFree (p); }
+void operator delete (void* p, std::size_t, std::align_val_t) noexcept { alignedFree (p); }
 
 namespace
 {
