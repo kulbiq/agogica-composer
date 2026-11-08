@@ -87,10 +87,16 @@ set(UI_ZIP ${CMAKE_CURRENT_BINARY_DIR}/ui.zip)
 
 file(GLOB_RECURSE UI_SOURCES CONFIGURE_DEPENDS ${UI_DIR}/src/*)
 
+# npm is a batch file on Windows: run through cmd, or Visual Studio's build script ends after it.
+set(NPM npm)
+if(WIN32)
+    set(NPM cmd /c npm)
+endif()
+
 add_custom_command(
     OUTPUT ${UI_ZIP}
-    COMMAND npm ci --no-audit --no-fund
-    COMMAND npm run build
+    COMMAND ${NPM} ci --no-audit --no-fund
+    COMMAND ${NPM} run build
     # Zip from inside dist/ so entries are root-level (index.html, assets/...).
     COMMAND ${CMAKE_COMMAND} -E chdir ${UI_DIR}/dist ${CMAKE_COMMAND} -E tar cf ${UI_ZIP} --format=zip .
     WORKING_DIRECTORY ${UI_DIR}
@@ -188,8 +194,8 @@ if(APPLE)
 
     add_custom_command(
         OUTPUT ${TRACKER_UI_STAMP}
-        COMMAND npm ci --no-audit --no-fund
-        COMMAND npm run build
+        COMMAND ${NPM} ci --no-audit --no-fund
+        COMMAND ${NPM} run build
         COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_UI_STAMP}
         WORKING_DIRECTORY ${TRACKER_UI_DIR}
         DEPENDS ${TRACKER_UI_SOURCES} ${TRACKER_UI_DIR}/index.html ${TRACKER_UI_DIR}/package.json
