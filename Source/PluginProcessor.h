@@ -7,6 +7,7 @@
 #include "dsp/DirectPath.h"
 #include "dsp/EarlyReflections.h"
 #include "dsp/ReverbTail.h"
+#include "dsp/LoadMeter.h"
 
 class ComposerProcessor final : public juce::AudioProcessor
 {
@@ -81,6 +82,9 @@ public:
     // A complete gesture on one parameter, in its real units.
     void writeParam (const juce::String& paramId, float value);
 
+    // Development monitoring: processBlock's share of real time (realtime playback only).
+    LoadMeter load;
+
 private:
     // Cached for the audio thread (looking up by name would allocate a String).
     struct AudioParams
@@ -129,6 +133,8 @@ private:
 
     // Samples of silent input so far; a track silent for longer than the tail skips all work.
     int silentFor = 0, skipAfter = 0;
+
+    double preparedRate = 0; // from prepareToPlay (the load meter's block length)
 
     juce::String trackName, trackColour;
 

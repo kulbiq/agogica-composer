@@ -552,6 +552,15 @@ button.status:focus-visible {
   gap: 10px;
 }
 
+/* Development monitoring (Footer): never wraps, gives way before the meter does. */
+.load {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .meterName {
   max-width: 220px;
   overflow: hidden;

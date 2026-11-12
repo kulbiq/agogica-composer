@@ -171,6 +171,42 @@ TEST_CASE ("input level is shared by all readers and falls without audio", "[int
     CHECK (p.readInputLevel (3000) < 0.001f);
 }
 
+TEST_CASE ("DSP load: average, worst block and overruns per period; offline renders don't count", "[integration]")
+{
+    SECTION ("the meter")
+    {
+        LoadMeter meter;
+        meter.add (0.001, 0.010); // 10 % of its block
+        meter.add (0.020, 0.010); // twice its block: an overrun
+        const auto r = meter.read();
+        CHECK_THAT (r.average, WithinAbs (1.05, 1e-6)); // 21 ms of work in 20 ms of audio
+        CHECK_THAT (r.peak, WithinAbs (2.0, 1e-6));
+        CHECK (r.overruns == 1);
+
+        const auto next = meter.read(); // each read starts a new period
+        CHECK (next.average == 0.0f);
+        CHECK (next.peak == 0.0f);
+        CHECK (next.overruns == 0);
+    }
+
+    SECTION ("in processBlock")
+    {
+        juce::ScopedJuceInitialiser_GUI juce;
+        ComposerProcessor p;
+        p.prepareToPlay (48000.0, 256);
+        juce::AudioBuffer<float> buffer (2, 256);
+        juce::MidiBuffer midi;
+
+        buffer.clear();
+        p.processBlock (buffer, midi);
+        CHECK (p.load.read().average > 0.0f);
+
+        p.setNonRealtime (true);
+        p.processBlock (buffer, midi);
+        CHECK (p.load.read().average == 0.0f);
+    }
+}
+
 TEST_CASE ("processBlock: position from parameters, clamped to the room", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;

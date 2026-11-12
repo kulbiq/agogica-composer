@@ -39,6 +39,9 @@ juce::var getBuildInfo (const juce::AudioProcessor& processor)
     info->setProperty ("format", juce::AudioProcessor::getWrapperTypeDescription (processor.wrapperType));
     info->setProperty ("host", juce::File::getSpecialLocation (juce::File::hostApplicationPath).getFileNameWithoutExtension());
     info->setProperty ("credits", "Binaural HRTF: SADIE II database, KU100 (University of York), Apache License 2.0");
+   #if JUCE_DEBUG
+    info->setProperty ("debug", true); // the footer shows the DSP load
+   #endif
     return info.release();
 }
 
@@ -148,6 +151,42 @@ void ComposerEditor::timerCallback()
     });
 
     browser.emitEventIfBrowserIsVisible ("levels", levels.release());
+
+    // Development monitoring (LoadMeter), ~4 times a second: this track, and all Composer
+    // tracks in this process (the sum is their share of one core; host threads may spread it).
+    if (++loadTicks >= 8)
+    {
+        loadTicks = 0;
+        auto reading = [] (const LoadMeter::Reading& r)
+        {
+            auto o = std::make_unique<juce::DynamicObject>();
+            o->setProperty ("average", r.average);
+            o->setProperty ("peak", r.peak);
+            o->setProperty ("overruns", r.overruns);
+            return o;
+        };
+        LoadMeter::Reading self, all;
+        int tracks = 0;
+        composer.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+        {
+            for (auto* p : members)
+            {
+                const auto r = p->load.read();
+                if (p == &composer)
+                    self = r;
+                all.average += r.average;
+                all.peak = std::max (all.peak, r.peak);
+                all.overruns += r.overruns;
+                ++tracks;
+            }
+        });
+        auto event = std::make_unique<juce::DynamicObject>();
+        event->setProperty ("self", reading (self).release());
+        auto everyone = reading (all);
+        everyone->setProperty ("tracks", tracks);
+        event->setProperty ("all", everyone.release());
+        browser.emitEventIfBrowserIsVisible ("load", event.release());
+    }
 
     // Automation playback and other changes reach the UI here; it only draws them.
     const auto stage = stage::snapshot (composer);

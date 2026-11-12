@@ -188,8 +188,8 @@ TEST_CASE ("the Dry hall has no reflections at all")
 TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
 {
    #if JUCE_DEBUG
-    SKIP ("CPU limits apply to Release builds");
-   #endif
+    SKIP ("CPU limits apply to Release builds"); // (the body below is Release only: no unreachable code)
+   #else
     juce::ScopedJuceInitialiser_GUI juce;
     const auto sampleRate = GENERATE (48000.0, 96000.0);
     const auto mode = GENERATE (0.0f, 1.0f);
@@ -231,6 +231,7 @@ TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
     UNSCOPED_INFO (players << " players, " << (mode > 0.5f ? "binaural" : "stereo") << ", " << sampleRate << " Hz: "
                            << juce::String (load * 100.0, 1) << " % of one core");
     CHECK (load < (sampleRate < 50000.0 ? 0.30 : 0.90)); // regression guard; multi-core hosts spread tracks
+   #endif
 }
 
 TEST_CASE ("output stays finite for any parameter values (fuzz)", "[slow][integration]")

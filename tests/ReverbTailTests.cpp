@@ -7,15 +7,15 @@ using Catch::Matchers::WithinAbs;
 
 namespace
 {
-constexpr double sampleRate = 48000.0;
+constexpr double rate = 48000.0;
 
 // Impulse response of the tail stage alone for a given hall, left and right.
 std::pair<std::vector<float>, std::vector<float>> tailResponse (const Hall& hall, double seconds, float decay = 1.0f)
 {
     History history;
-    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * rate));
     ReverbTail tail;
-    tail.prepare (sampleRate);
+    tail.prepare (rate);
 
     Acoustics a;
     a.hall = &hall;
@@ -23,7 +23,7 @@ std::pair<std::vector<float>, std::vector<float>> tailResponse (const Hall& hall
     a.adjust.decay = decay;
     tail.setAcoustics (a);
 
-    const auto n = (size_t) (seconds * sampleRate);
+    const auto n = (size_t) (seconds * rate);
     std::vector<float> l (n), r (n);
     for (size_t i = 0; i < n; ++i)
     {
@@ -45,8 +45,8 @@ double rt60 (const std::vector<float>& l, const std::vector<float>& r)
     {
         for (size_t i = 0; i < energy.size(); ++i)
             if (10.0 * std::log10 (energy[i] / energy[0]) <= db)
-                return (double) i / sampleRate;
-        return (double) energy.size() / sampleRate;
+                return (double) i / rate;
+        return (double) energy.size() / rate;
     };
 
     return 2.0 * (timeAt (-35.0) - timeAt (-5.0));
@@ -99,9 +99,9 @@ TEST_CASE ("tail left and right are decorrelated")
 TEST_CASE ("switching to Dry lets the tail die away instead of cutting it")
 {
     History history;
-    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * rate));
     ReverbTail tail;
-    tail.prepare (sampleRate);
+    tail.prepare (rate);
 
     Acoustics a;
     a.hall = &halls[4]; // church

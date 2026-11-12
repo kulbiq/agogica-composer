@@ -190,6 +190,16 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
 
+    // Development monitoring: the whole block, early returns included; offline renders aren't
+    // real time, so they don't count.
+    struct Timed
+    {
+        LoadMeter& meter;
+        double blockSeconds;
+        std::int64_t start = juce::Time::getHighResolutionTicks();
+        ~Timed() { meter.add (juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - start), blockSeconds); }
+    } timed { load, isNonRealtime() || preparedRate <= 0 ? 0.0 : buffer.getNumSamples() / preparedRate };
+
     float peak = 0.0f;
 
     for (int ch = 0; ch < getTotalNumInputChannels(); ++ch)
@@ -287,6 +297,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
 void ComposerProcessor::prepareToPlay (double sampleRate, int)
 {
+    preparedRate = sampleRate;
     history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
     std::apply ([&] (auto&... stage) { (stage.prepare (sampleRate), ...); }, stages);
     skipAfter = (int) (Acoustics::tailSeconds * sampleRate);

@@ -31,6 +31,7 @@ private:
     ComposerProcessor& composer;
     Browser browser;
     juce::String lastStage;
+    int loadTicks = 0; // the DSP load goes out every 8th tick
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComposerEditor)
 };

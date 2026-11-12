@@ -30,22 +30,36 @@ public:
         buffer[(size_t) pos] = sample;
     }
 
-    // The sample written `delay` samples before the newest one (0 = newest), with
-    // 3rd-order Lagrange interpolation between samples.
-    float readAt (float delay) const noexcept
+    // A read position: 3rd-order Lagrange interpolation at one fractional delay, its weights
+    // worked out once. A path whose delay holds still (most of the time) reuses it every sample.
+    struct Tap
+    {
+        int base = 0;
+        float weights[4] {};
+    };
+
+    Tap tapAt (float delay) const noexcept
     {
         delay = std::clamp (delay, 0.0f, (float) maxDelay());
-        const auto base = std::max (0, (int) delay - 1);
-        const auto t = delay - (float) base;
-
-        const auto y0 = at (base), y1 = at (base + 1), y2 = at (base + 2), y3 = at (base + 3);
+        Tap tap;
+        tap.base = std::max (0, (int) delay - 1);
+        const auto t = delay - (float) tap.base;
         const auto t1 = t - 1.0f, t2 = t - 2.0f, t3 = t - 3.0f;
-
-        return -y0 * t1 * t2 * t3 / 6.0f
-             + y1 * t * t2 * t3 / 2.0f
-             - y2 * t * t1 * t3 / 2.0f
-             + y3 * t * t1 * t2 / 6.0f;
+        tap.weights[0] = -t1 * t2 * t3 / 6.0f;
+        tap.weights[1] = t * t2 * t3 / 2.0f;
+        tap.weights[2] = -t * t1 * t3 / 2.0f;
+        tap.weights[3] = t * t1 * t2 / 6.0f;
+        return tap;
     }
+
+    float read (const Tap& tap) const noexcept
+    {
+        return tap.weights[0] * at (tap.base) + tap.weights[1] * at (tap.base + 1)
+             + tap.weights[2] * at (tap.base + 2) + tap.weights[3] * at (tap.base + 3);
+    }
+
+    // The sample written `delay` samples before the newest one (0 = newest), interpolated.
+    float readAt (float delay) const noexcept { return read (tapAt (delay)); }
 
 private:
     float at (int age) const noexcept { return buffer[(size_t) ((pos - age) & (size - 1))]; }

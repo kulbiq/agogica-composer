@@ -23,6 +23,7 @@ public:
         fade = 1.0f;
         stillFor = waitingFor = 0;
         snap = true;
+        fromTapDelay = toTapDelay = -1.0f; // the History may have a new length
     }
 
     // In samples. The first target after prepare() is taken as-is.
@@ -66,12 +67,20 @@ public:
             waitingFor = 0;
         }
 
+        // The interpolation weights only when a delay changes (rarely): reading is most of the
+        // reflections' cost, ten paths per player per sample.
+        if (! juce::exactlyEqual (from, fromTapDelay))
+            fromTap = history.tapAt (fromTapDelay = from);
+
         if (fade >= 1.0f)
-            return history.readAt (from);
+            return history.read (fromTap);
+
+        if (! juce::exactlyEqual (to, toTapDelay))
+            toTap = history.tapAt (toTapDelay = to);
 
         fade = std::min (1.0f, fade + fadeStep);
-        const auto a = history.readAt (from);
-        const auto b = history.readAt (to);
+        const auto a = history.read (fromTap);
+        const auto b = history.read (toTap);
 
         if (fade >= 1.0f)
             from = to;
@@ -87,6 +96,8 @@ public:
 
 private:
     float from = 0.0f, to = 0.0f, target = 0.0f, lastTarget = 0.0f;
+    History::Tap fromTap, toTap; // History::tapAt (from / to), kept while they hold
+    float fromTapDelay = -1.0f, toTapDelay = -1.0f;
     float fade = 1.0f, fadeStep = 0.0f;
     int stillFor = 0, waitingFor = 0, settleSamples = 0, maxWaitSamples = 0;
     bool snap = true;
