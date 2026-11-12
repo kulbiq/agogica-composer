@@ -32,14 +32,14 @@ TEST_CASE ("head continuity: the head nearest to the previous one")
 
 namespace
 {
-constexpr float dt = 1.0f / 30.0f;
+constexpr float frameTime = 1.0f / 30.0f;
 
 // Feeds `frames` measurements at `yaw` (confidence c); returns the last state.
 FilterState feed (HeadFilter& f, float yaw, int frames, float c = 1.0f)
 {
     FilterState s;
     for (int i = 0; i < frames; ++i)
-        s = f.update (Measurement { yaw, c }, dt);
+        s = f.update (Measurement { yaw, c }, frameTime);
     return s;
 }
 } // namespace
@@ -51,11 +51,11 @@ TEST_CASE ("head filter: still with noise - the output is much calmer than the i
     std::normal_distribution<float> noise (0.0f, 4.0f);
 
     feed (f, 30.0f, 30);
-    float rawJitter = 0, outJitter = 0, lastRaw = 30, lastOut = f.update (Measurement { 30, 1 }, dt).output;
+    float rawJitter = 0, outJitter = 0, lastRaw = 30, lastOut = f.update (Measurement { 30, 1 }, frameTime).output;
     for (int i = 0; i < 300; ++i)
     {
         const auto raw = 30.0f + noise (rng);
-        const auto out = f.update (Measurement { raw, 1 }, dt).output;
+        const auto out = f.update (Measurement { raw, 1 }, frameTime).output;
         rawJitter += std::abs (raw - lastRaw);
         outJitter += std::abs (out - lastOut);
         lastRaw = raw, lastOut = out;
@@ -104,17 +104,17 @@ TEST_CASE ("head filter: re-acquisition after confirmFrames, approached at reacq
         HeadFilter f;
         feed (f, 180.0f, 30);
 
-        float last = f.update (Measurement { 180, 1 }, dt).output, worst = 0;
+        float last = f.update (Measurement { 180, 1 }, frameTime).output, worst = 0;
         bool arrived = false;
         for (int i = 0; i < 90; ++i) // 3 s at the new direction
         {
-            const auto s = f.update (Measurement { 10.0f, 1 }, dt);
+            const auto s = f.update (Measurement { 10.0f, 1 }, frameTime);
             worst = std::max (worst, std::abs (wrap (s.output - last)));
             last = s.output;
             arrived = arrived || std::abs (wrap (s.output - 10.0f)) < 2.0f;
         }
-        CHECK (worst <= f.getParams().maxSpeed * dt + 1e-3f);       // never a jump
-        CHECK (worst <= f.getParams().reacquireSpeed * dt + 1e-3f); // re-acquired at the slow speed
+        CHECK (worst <= f.getParams().maxSpeed * frameTime + 1e-3f);       // never a jump
+        CHECK (worst <= f.getParams().reacquireSpeed * frameTime + 1e-3f); // re-acquired at the slow speed
         CHECK (arrived);                                              // 170° at 90 °/s: under 2 s
     }
 }
@@ -129,7 +129,7 @@ TEST_CASE ("head filter: genuine turns are followed (fast, across +-180)")
         bool reacquired = false;
         for (int i = 1; i <= 12; ++i) // 90° in 0.4 s: 225 °/s
         {
-            s = f.update (Measurement { 90.0f * (float) i / 12.0f, 1 }, dt);
+            s = f.update (Measurement { 90.0f * (float) i / 12.0f, 1 }, frameTime);
             reacquired = reacquired || s.reacquiring;
         }
         s = feed (f, 90.0f, 6); // + 0.2 s
@@ -141,10 +141,10 @@ TEST_CASE ("head filter: genuine turns are followed (fast, across +-180)")
     {
         HeadFilter f;
         feed (f, 150.0f, 30);
-        float last = f.update (Measurement { 150, 1 }, dt).output, worst = 0;
+        float last = f.update (Measurement { 150, 1 }, frameTime).output, worst = 0;
         for (int i = 1; i <= 60; ++i) // 150 -> 210 (= -150), 30 °/s
         {
-            const auto s = f.update (Measurement { wrap (150.0f + (float) i), 1 }, dt);
+            const auto s = f.update (Measurement { wrap (150.0f + (float) i), 1 }, frameTime);
             worst = std::max (worst, std::abs (wrap (s.output - last)));
             last = s.output;
         }
@@ -159,17 +159,17 @@ TEST_CASE ("head filter: a lost head is held, then released")
     feed (f, 120.0f, 30);
     FilterState s;
     for (int i = 0; i < 60; ++i) // 2 s without a head, turned away: held
-        s = f.update (std::nullopt, dt);
+        s = f.update (std::nullopt, frameTime);
     CHECK (s.tracking);
     CHECK (std::abs (wrap (s.output - 120.0f)) < 5.0f);
     for (int i = 0; i < 40; ++i) // past 3 s: released
-        s = f.update (std::nullopt, dt);
+        s = f.update (std::nullopt, frameTime);
     CHECK_FALSE (s.tracking);
 
     HeadFilter g;
     feed (g, 5.0f, 30);
     for (int i = 0; i < 20; ++i) // facing the camera and gone for 0.67 s: the listener left
-        s = g.update (std::nullopt, dt);
+        s = g.update (std::nullopt, frameTime);
     CHECK_FALSE (s.tracking);
 }
 
@@ -205,7 +205,7 @@ TEST_CASE ("head filter: recorded sessions have no jumps and little lag", "[slow
             if (v.hasProperty ("yaw"))
                 m = Measurement { (float) v["yaw"], hemisphereCertainty ((float) v["pitch"], (float) v["roll"]) };
 
-            const auto s = f.update (m, dt);
+            const auto s = f.update (m, frameTime);
             if (! m || ! s.tracking)
                 continue;
 
@@ -294,4 +294,78 @@ TEST_CASE ("filter tuner: pinned values are respected")
     const auto p = settle (tuner, t, 10, [] (double time) { return std::optional<float> (wrap ((float) (time * 100.0))); }, pins);
     CHECK_THAT (p.sigmaZ, WithinAbs (9.0, 1e-6));
     CHECK (p.confirmFrames == 10);
+}
+
+#include "../tracker/engines/PoseSmoother.h"
+
+TEST_CASE ("pose smoother: 8 fps steps become a smooth turn at 60 Hz, the short way round, no runaway at a stop")
+{
+    using engines::PoseSmoother;
+    PoseSmoother s;
+    constexpr double frame = 1.0 / 8, tick = 1.0 / 60;
+    constexpr float speed = 90.0f; // degrees per second: from 150 through +-180 to -120
+    auto input = [&] (double t) { return wrap (150.0f + speed * (float) std::min (t, 1.0)); };
+
+    float last = 0, worstStep = 0, worstLag = 0, worstOvershoot = 0;
+    double nextFrame = 0;
+    for (double t = 0; t < 2.0; t += tick)
+    {
+        if (t >= nextFrame)
+            s.push (input (nextFrame), nextFrame), nextFrame += frame;
+        const auto y = s.step (t);
+        if (t > 0.3)
+        {
+            worstStep = std::max (worstStep, std::abs (wrap (y - last)));
+            if (t < 1.0)
+                worstLag = std::max (worstLag, std::abs (wrap (input (t) - y)));
+            else
+                worstOvershoot = std::max (worstOvershoot, wrap (y - input (1.0)));
+        }
+        last = y;
+    }
+    CHECK (worstStep < speed * (float) tick * 2);        // no steps: at most twice the true motion per tick
+    CHECK (worstLag < speed * (float) frame);            // behind by less than one camera frame
+    CHECK (worstOvershoot < speed * (float) frame);      // a stop runs on by less than one frame
+    CHECK_THAT (last, WithinAbs (input (2.0), 0.5));     // and settles where the head stopped
+
+    s.reset();                                           // head lost, found elsewhere: start there
+    s.push (-30.0f, 3.0);
+    CHECK_THAT (s.step (3.0), WithinAbs (-30.0, 1e-3));
+}
+
+#include "../tracker/engines/StillGate.h"
+
+TEST_CASE ("still gate: a still head reuses the estimate, a moving one or an old one doesn't")
+{
+    using engines::StillGate;
+    // A "head": a bright disc with a dark eye at `eyeX`, plus camera noise.
+    auto frame = [] (float eyeX, int noiseSeed)
+    {
+        juce::Image image (juce::Image::RGB, 160, 120, true);
+        juce::Graphics g (image);
+        g.fillAll (juce::Colours::darkgrey);
+        g.setColour (juce::Colours::bisque);
+        g.fillEllipse (50, 30, 60, 60);
+        g.setColour (juce::Colours::black);
+        g.fillEllipse (eyeX, 50, 10, 10);
+        juce::Random random (noiseSeed);
+        for (int i = 0; i < 2000; ++i)
+        {
+            const auto x = random.nextInt (160), y = random.nextInt (120);
+            image.setPixelAt (x, y, image.getPixelAt (x, y).brighter (0.05f));
+        }
+        return image;
+    };
+    const juce::Rectangle<float> head { 50 / 160.0f, 30 / 120.0f, 60 / 160.0f, 60 / 120.0f };
+
+    StillGate gate;
+    CHECK_FALSE (gate.unchanged (frame (70, 1), 0.0)); // nothing to compare with yet
+    gate.reset (frame (70, 1), head, 0.0);
+
+    CHECK (gate.unchanged (frame (70, 2), 0.1));       // only noise
+    CHECK_FALSE (gate.unchanged (frame (85, 3), 0.2)); // the head turned
+    CHECK_FALSE (gate.unchanged (frame (70, 4), StillGate::maxAgeSeconds)); // due for a full estimate
+
+    gate.clear();                                      // head lost
+    CHECK_FALSE (gate.unchanged (frame (70, 5), 0.3));
 }

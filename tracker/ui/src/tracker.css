@@ -23,6 +23,7 @@
 }
 
 .status {
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -57,8 +58,8 @@
 
 .dial {
   align-self: center;
-  width: 180px;
-  height: 180px;
+  width: 200px;
+  height: 200px;
 }
 
 .dial svg {
@@ -72,9 +73,22 @@
   stroke-width: 1;
 }
 
+/* The grid: a tick every 30 degrees (longer every 90), each labelled. */
 .tick {
   stroke: var(--ink-faint);
-  stroke-width: 1;
+  stroke-width: 0.75;
+}
+
+.tick.major {
+  stroke: var(--ink-lighter);
+}
+
+.angle {
+  font-family: var(--font-mono);
+  font-size: 6px;
+  fill: var(--ink-faint);
+  text-anchor: middle;
+  dominant-baseline: central;
 }
 
 .headArrow {
@@ -116,7 +130,7 @@
   color: var(--paper);
 }
 
-.more video {
+.more .frame {
   display: block;
   width: 100%;
   border-radius: var(--radius-chip);
@@ -125,12 +139,6 @@
 
 .more summary {
   cursor: pointer;
-}
-
-.foot {
-  margin-top: auto;
-  font-size: 10px;
-  color: var(--ink-faint);
 }
 
 .field {
@@ -238,14 +246,10 @@ p.small {
   .side {
     flex: 1.4 1 320px;
   }
-
-  .foot {
-    flex-basis: 100%;
-  }
 }
 
 /* The preview never takes over the window. */
-.more video {
+.more .frame {
   max-height: 60vh;
   object-fit: contain;
 }
@@ -315,6 +319,37 @@ p.small {
   color: var(--paper);
 }
 
+/* About (Help menu, or the app menu on macOS): in place of everything else until Back. */
+.about {
+  display: none;
+  flex-direction: column;
+  gap: 18px;
+  flex-basis: 100%;
+}
+
+body[data-about] .about {
+  display: flex;
+}
+
+body[data-about] .controls,
+body[data-about] .side {
+  display: none;
+}
+
+.credits {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.credits dd {
+  margin: 0;
+}
+
 /* Debugging off (View > Debugging): only the status, dial, buttons and camera. The window
    is fixed and fitted to the content (native fitHeight), so the page takes its natural height. */
 body:not([data-debug]) .debug {
@@ -327,6 +362,6 @@ body:not([data-debug]) .app {
 }
 
 /* The window follows the page here, so a cap relative to the window would feed back. */
-body:not([data-debug]) .more video {
+body:not([data-debug]) .more .frame {
   max-height: none;
 }

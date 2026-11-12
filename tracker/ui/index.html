@@ -17,7 +17,7 @@
       <div class="dial" aria-hidden="true">
         <svg viewBox="-60 -60 120 120">
           <circle class="ring" r="50" />
-          <line class="tick" x1="0" y1="-50" x2="0" y2="-42" />
+          <g id="grid"></g>
           <path id="head" class="headArrow" d="M0 -30 L9 12 L0 5 L-9 12 Z" />
         </svg>
       </div>
@@ -34,6 +34,7 @@
       </div>
 
       <p class="note small debug" id="stats"></p>
+      <p class="note small debug" id="perf"></p>
 
       <section class="stability debug">
         <span class="label">Stability</span>
@@ -51,13 +52,31 @@
       <details class="more">
         <summary class="label">Camera</summary>
         <div class="preview">
-          <video id="video" autoplay playsinline muted></video>
+          <img class="frame" id="frame" alt="" hidden />
           <div class="box" id="box" hidden></div>
         </div>
       </details>
       </div>
 
-      <footer class="foot label">Head tracking for Composer · video never leaves this Mac · 6DRepNet360 (MIT; non-commercial training data)</footer>
+      <section class="about" id="about">
+        <header class="head">
+          <span class="label">About</span>
+          <span class="label" id="version"></span>
+        </header>
+        <p class="note">Head tracking for Composer: the camera follows your head, so the ensemble stays where it is in the room while you turn.</p>
+        <p class="note">Video never leaves this computer.</p>
+        <dl class="credits">
+          <dt class="label">Head pose</dt>
+          <dd class="note">6DRepNet360 · MIT licence · trained on data for non-commercial research</dd>
+          <dt class="label">Head detection</dt>
+          <dd class="note">YOLOX Body-Head-Hand from PINTO's model zoo · Apache 2.0</dd>
+          <dt class="label">Inference</dt>
+          <dd class="note">ONNX Runtime · MIT licence</dd>
+        </dl>
+        <div class="buttons">
+          <button class="ghost" id="aboutBack">Back</button>
+        </div>
+      </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

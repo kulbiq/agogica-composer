@@ -1,8 +1,10 @@
 #include "EngineHost.h"
 #include "engines/FilterTuner.h"
+#include "engines/StillGate.h"
+#include "ProcessCpu.h"
 
-EngineHost::EngineHost (juce::File dir, std::function<void (const juce::var&)> e)
-    : juce::Thread ("head-pose engine"), modelsDir (std::move (dir)), emit (std::move (e))
+EngineHost::EngineHost (juce::File dir, Emit e, Output o)
+    : juce::Thread ("head-pose engine"), modelsDir (std::move (dir)), emit (std::move (e)), output (std::move (o))
 {
 }
 
@@ -50,6 +52,7 @@ void EngineHost::setFilterParam (const juce::String& name, const juce::var& valu
 
 void EngineHost::imageReceived (const juce::Image& image)
 {
+    framesReceived.fetch_add (1, std::memory_order_relaxed);
     {
         const juce::ScopedLock sl (frameLock);
         latestFrame = image;
@@ -72,15 +75,44 @@ void EngineHost::post (juce::DynamicObject::Ptr payload)
     triggerAsyncUpdate();
 }
 
+// A small JPEG of the frame for the page's preview (the page can't open the camera itself on
+// Windows; it mirrors the picture), ~10 a second while the preview is open. Engine thread.
+void EngineHost::postPreview (const juce::Image& frame)
+{
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    if (! previewWanted || now - lastPreview < 100.0 || frame.getWidth() <= 0)
+        return;
+    lastPreview = now;
+
+    constexpr int width = 480; // sharp at 2x in the compact window's ~320 px
+    const auto small = frame.rescaled (width, juce::jmax (1, width * frame.getHeight() / frame.getWidth()),
+                                       juce::Graphics::mediumResamplingQuality);
+    juce::MemoryOutputStream jpeg;
+    juce::JPEGImageFormat format;
+    format.setQuality (0.7f);
+    if (! format.writeImageToStream (small, jpeg))
+        return;
+
+    {
+        const juce::ScopedLock sl (postLock);
+        pendingPreview = "data:image/jpeg;base64," + juce::Base64::toBase64 (jpeg.getData(), jpeg.getDataSize());
+    }
+    triggerAsyncUpdate();
+}
+
 void EngineHost::handleAsyncUpdate()
 {
     juce::DynamicObject::Ptr payload;
+    juce::String preview;
     {
         const juce::ScopedLock sl (postLock);
         payload = std::move (pending);
+        preview = std::exchange (pendingPreview, {});
     }
     if (payload != nullptr)
-        emit (juce::var (payload.get()));
+        emit ("estimate", juce::var (payload.get()));
+    if (preview.isNotEmpty())
+        emit ("frame", preview);
 }
 
 void EngineHost::run()
@@ -113,9 +145,20 @@ void EngineHost::run()
     // The temporal gate: 6DRepNet360's raw headings -> a stable output (see HeadFilter.h).
     engines::HeadFilter filter;
     engines::FilterTuner tuner;
+    engines::StillGate still;
+    std::optional<engines::Estimate> last;
     const auto started = juce::Time::getMillisecondCounterHiRes();
     auto lastFrame = started;
     double lastRetune = 0;
+
+    // Development monitoring, once a second in the "estimate" payload ("perf") and the log:
+    // the whole process's CPU (in cores), frames the models ran on, frames a still head
+    // reused, and camera frames the engine never got to (it was busy).
+    struct
+    {
+        double time = 0, cpu = 0;
+        int received = 0, full = 0, reused = 0;
+    } perf { started / 1000.0, processCpuSeconds(), framesReceived.load(), 0, 0 };
 
     while (! threadShouldExit())
     {
@@ -133,6 +176,7 @@ void EngineHost::run()
         if (first)
             status ("compiling", engine->provider()); // CoreML compiles on the first run
         first = false;
+        postPreview (frame);
 
         try
         {
@@ -142,16 +186,30 @@ void EngineHost::run()
 
             const auto now = juce::Time::getMillisecondCounterHiRes();
             const auto dt = (float) (now - std::exchange (lastFrame, now)) / 1000.0f;
-            const auto e = engine->estimate (frame);
+            const auto time = (now - started) / 1000.0;
+
+            // A still head repeats the last reading instead of running the models: the filter,
+            // the page and Composer's file go on as usual (the file is stale after 0.5 s).
+            const bool reused = last.has_value() && still.unchanged (frame, time);
+            if (! reused)
+            {
+                last = engine->estimate (frame);
+                if (last)
+                    still.reset (frame, last->box, time);
+                else
+                    still.clear();
+            }
+            const auto& e = last;
 
             std::optional<engines::Measurement> m;
             if (e)
                 m = engines::Measurement { e->yaw, engines::hemisphereCertainty (e->pitch, e->roll) };
 
-            // Adapt the parameters from the recent raw readings (and the user's pins). The
-            // filter re-calibrates on setParams, so apply them at most once a second.
-            const auto time = (now - started) / 1000.0;
-            tuner.add (time, e ? std::optional<float> (e->yaw) : std::nullopt, m ? m->confidence : 0.0f);
+            // Adapt the parameters from the recent raw readings (and the user's pins); repeated
+            // readings would fake a perfectly still head. The filter re-calibrates on
+            // setParams, so apply them at most once a second.
+            if (! reused)
+                tuner.add (time, e ? std::optional<float> (e->yaw) : std::nullopt, m ? m->confidence : 0.0f);
             std::array<std::optional<float>, (size_t) engines::Param::count> currentPins;
             {
                 const juce::ScopedLock sl (pinsLock);
@@ -165,6 +223,7 @@ void EngineHost::run()
             }
 
             const auto s = filter.update (m, dt);
+            output (s.tracking, s.output, e ? e->pitch : 0.0f, e ? e->roll : 0.0f);
 
             auto parameters = std::make_unique<juce::DynamicObject>();
             for (int i = 0; i < (int) engines::Param::count; ++i)
@@ -195,8 +254,27 @@ void EngineHost::run()
                 o->setProperty ("roll", e->roll);
                 o->setProperty ("confidence", m->confidence);
                 o->setProperty ("box", juce::Array<juce::var> { e->box.getX(), e->box.getY(), e->box.getWidth(), e->box.getHeight() });
-                o->setProperty ("detectMs", e->detectMs);
-                o->setProperty ("poseMs", e->poseMs);
+                if (! reused)
+                {
+                    o->setProperty ("detectMs", e->detectMs);
+                    o->setProperty ("poseMs", e->poseMs);
+                }
+            }
+            o->setProperty ("reused", reused);
+            o->setProperty ("change", still.difference);
+
+            ++(reused ? perf.reused : perf.full);
+            if (const auto seconds = now / 1000.0 - perf.time; seconds >= 1.0)
+            {
+                const auto cpu = processCpuSeconds();
+                const auto received = framesReceived.load (std::memory_order_relaxed);
+                auto p = std::make_unique<juce::DynamicObject>();
+                p->setProperty ("cpu", (cpu - perf.cpu) / seconds);
+                p->setProperty ("models", perf.full / seconds);
+                p->setProperty ("reused", perf.reused / seconds);
+                p->setProperty ("dropped", juce::jmax (0, received - perf.received - perf.full - perf.reused) / seconds);
+                o->setProperty ("perf", p.release());
+                perf = { now / 1000.0, cpu, received, 0, 0 };
             }
             post (o);
         }

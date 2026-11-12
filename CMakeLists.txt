@@ -148,16 +148,46 @@ catch_discover_tests(ComposerTests TEST_SPEC "~[slow]")
 catch_discover_tests(ComposerTests TEST_SPEC "[slow]" PROPERTIES LABELS slow)
 
 # --- Agogica Tracker (head tracking companion app) ---------------------------
-# macOS only for now: Windows ships the plugin without head tracking (Hub plan phase 7b).
-if(APPLE)
+# macOS: an app bundle. Windows (Hub plan phase 7b): a folder with the exe, onnxruntime.dll,
+# ui\ and models\ next to each other.
+option(COMPOSER_TRACKER_DIRECTML "Windows, development: the Tracker runs its models on the GPU through DirectML" OFF)
+if(APPLE OR WIN32)
     # ONNX Runtime (MIT) for the tracker's native head-pose engines; never linked into the plugin.
     # ponytail: arm64 only - 1.30 ships no universal macOS build; Intel Macs need a source build.
     include(FetchContent)
-    FetchContent_Declare(onnxruntime
-        URL https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-osx-arm64-1.30.0.tgz
-        URL_HASH SHA256=6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    if(APPLE)
+        FetchContent_Declare(onnxruntime
+            URL https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-osx-arm64-1.30.0.tgz
+            URL_HASH SHA256=6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    elseif(COMPOSER_TRACKER_DIRECTML)
+        # Development, to measure the GPU (Hub plan 7b): ONNX Runtime's last DirectML build
+        # (1.24.4; Microsoft ships none after it) and DirectML itself, as NuGet packages.
+        FetchContent_Declare(onnxruntime
+            URL https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/1.24.4/microsoft.ml.onnxruntime.directml.1.24.4.nupkg
+            URL_HASH SHA256=57e9f11b73437bef7a309496135d4c1f96b1a8e9ddba60013fa27bfc1d788681
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        FetchContent_Declare(directml
+            URL https://api.nuget.org/v3-flatcontainer/microsoft.ai.directml/1.15.4/microsoft.ai.directml.1.15.4.nupkg
+            URL_HASH SHA256=4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        FetchContent_MakeAvailable(directml)
+    else()
+        FetchContent_Declare(onnxruntime
+            URL https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-x64-1.30.0.zip
+            URL_HASH SHA256=c6ba983baf5681af108599675d2a89c2d145512d02de28aed0bff177cd0ba949
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    endif()
     FetchContent_MakeAvailable(onnxruntime)
+    # The two archives differ: the release zip has include/ and lib/, the NuGet package
+    # build/native/include and runtimes/win-x64/native.
+    if(WIN32 AND COMPOSER_TRACKER_DIRECTML)
+        set(ONNXRUNTIME_INCLUDE ${onnxruntime_SOURCE_DIR}/build/native/include)
+        set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/runtimes/win-x64/native)
+    else()
+        set(ONNXRUNTIME_INCLUDE ${onnxruntime_SOURCE_DIR}/include)
+        set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/lib)
+    endif()
 
     juce_add_gui_app(ComposerTracker
         COMPANY_NAME Agogica
@@ -165,6 +195,8 @@ if(APPLE)
         PRODUCT_NAME "Agogica Tracker"
         VERSION ${COMPOSER_VERSION}
         NEEDS_WEB_BROWSER TRUE
+        NEEDS_WEBVIEW2 TRUE
+        ICON_BIG ${CMAKE_CURRENT_SOURCE_DIR}/tracker/icon.svg
         CAMERA_PERMISSION_ENABLED TRUE
         CAMERA_PERMISSION_TEXT "Agogica Tracker follows your head with the camera so Composer can keep the ensemble fixed in the room. Video never leaves this Mac.")
 
@@ -173,14 +205,22 @@ if(APPLE)
         tracker/EngineHost.cpp
         tracker/engines/Engines.cpp
         tracker/engines/Onnx.cpp
+        tracker/ProcessCpu.cpp
         Source/stage/HeadTrackingFile.cpp)
-    target_include_directories(ComposerTracker SYSTEM PRIVATE ${onnxruntime_SOURCE_DIR}/include) # third-party warnings off
-    target_link_libraries(ComposerTracker PRIVATE ${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.1.dylib)
-    set_target_properties(ComposerTracker PROPERTIES BUILD_RPATH "@executable_path/../Frameworks" INSTALL_RPATH "@executable_path/../Frameworks")
+    target_include_directories(ComposerTracker SYSTEM PRIVATE ${ONNXRUNTIME_INCLUDE}) # third-party warnings off
+    if(APPLE)
+        target_link_libraries(ComposerTracker PRIVATE ${ONNXRUNTIME_LIB}/libonnxruntime.1.dylib)
+        set_target_properties(ComposerTracker PROPERTIES BUILD_RPATH "@executable_path/../Frameworks" INSTALL_RPATH "@executable_path/../Frameworks")
+    else()
+        # The exe's own folder is searched first, before System32's Windows ML onnxruntime.dll.
+        target_link_libraries(ComposerTracker PRIVATE ${ONNXRUNTIME_LIB}/onnxruntime.lib)
+    endif()
     target_compile_definitions(ComposerTracker PRIVATE
+        $<$<BOOL:${COMPOSER_TRACKER_DIRECTML}>:COMPOSER_TRACKER_DIRECTML=1>
         JUCE_USE_CAMERA=1
         JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0
+        JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
         JUCE_APPLICATION_VERSION_STRING="${COMPOSER_VERSION}")
     target_link_libraries(ComposerTracker
         PRIVATE juce::juce_gui_extra juce::juce_video
@@ -203,14 +243,26 @@ if(APPLE)
         COMMENT "Building tracker UI"
         VERBATIM)
     add_custom_target(ComposerTrackerUI DEPENDS ${TRACKER_UI_STAMP})
+    # The page imports Composer's fonts and tokens, which need ui/node_modules (npm ci in the
+    # Composer UI build): without this a clean tree builds the tracker page first and fails.
+    add_dependencies(ComposerTrackerUI ComposerData)
     add_dependencies(ComposerTracker ComposerTrackerUI)
 
     # The native engines' models (downloaded, not committed: tracker/models/MODELS.md).
     set(TRACKER_MODELS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tracker/models)
     set(TRACKER_MODELS_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-models.stamp)
+    set(TRACKER_MODEL_FILES ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx
+        ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx)
+    # ponytail: Windows has no python3 by default - the two .onnx files are put in tracker/models
+    # by hand (the build only checks they are there); CI needs a fetch step of its own.
+    if(WIN32)
+        set(TRACKER_FETCH_MODELS ${CMAKE_COMMAND} -E sha256sum ${TRACKER_MODEL_FILES})
+    else()
+        set(TRACKER_FETCH_MODELS python3 ${TRACKER_MODELS_DIR}/fetch_models.py)
+    endif()
     add_custom_command(
         OUTPUT ${TRACKER_MODELS_STAMP}
-        COMMAND python3 ${TRACKER_MODELS_DIR}/fetch_models.py
+        COMMAND ${TRACKER_FETCH_MODELS}
         COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_MODELS_STAMP}
         DEPENDS ${TRACKER_MODELS_DIR}/fetch_models.py
         COMMENT "Fetching tracker models"
@@ -222,22 +274,41 @@ if(APPLE)
     # page or new models re-link it (otherwise a page-only change never reaches the bundle).
     set_target_properties(ComposerTracker PROPERTIES LINK_DEPENDS "${TRACKER_UI_STAMP};${TRACKER_MODELS_STAMP}")
 
+    # Where the page and models go (tracker/Main.cpp `resources()`).
+    if(APPLE)
+        set(TRACKER_RESOURCES "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources")
+    else()
+        set(TRACKER_RESOURCES "$<TARGET_FILE_DIR:ComposerTracker>")
+    endif()
     add_custom_command(TARGET ComposerTracker POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/ui"
-        COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
-        COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx
-                ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx ${TRACKER_MODELS_DIR}/MODELS.md
-                "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources/models"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks"
-        COMMAND ${CMAKE_COMMAND} -E copy ${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.1.30.0.dylib "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks/libonnxruntime.1.dylib"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${TRACKER_RESOURCES}/ui"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "${TRACKER_RESOURCES}/ui"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${TRACKER_RESOURCES}/models"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${TRACKER_RESOURCES}/models"
+        COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_MODEL_FILES} ${TRACKER_MODELS_DIR}/MODELS.md "${TRACKER_RESOURCES}/models"
         VERBATIM)
 
-    # Install per user (no admin), like the plugins: Composer starts it from there.
-    set(TRACKER_INSTALL_DIR "$ENV{HOME}/Applications/Agogica Tracker.app")
-    add_custom_command(TARGET ComposerTracker POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E rm -rf "${TRACKER_INSTALL_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ComposerTracker>" "${TRACKER_INSTALL_DIR}"
-        VERBATIM)
+    if(APPLE)
+        add_custom_command(TARGET ComposerTracker POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks"
+            COMMAND ${CMAKE_COMMAND} -E copy ${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.1.30.0.dylib "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks/libonnxruntime.1.dylib"
+            VERBATIM)
+
+        # Install per user (no admin), like the plugins: Composer starts it from there.
+        set(TRACKER_INSTALL_DIR "$ENV{HOME}/Applications/Agogica Tracker.app")
+        add_custom_command(TARGET ComposerTracker POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${TRACKER_INSTALL_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ComposerTracker>" "${TRACKER_INSTALL_DIR}"
+            VERBATIM)
+    else()
+        # ponytail: runs from the build folder; the install folder (%LOCALAPPDATA%\Programs\Agogica
+        # Tracker) and Composer's startTracker come with phase 7b proper.
+        set(TRACKER_DLLS ${ONNXRUNTIME_LIB}/onnxruntime.dll ${ONNXRUNTIME_LIB}/onnxruntime_providers_shared.dll)
+        if(COMPOSER_TRACKER_DIRECTML)
+            list(APPEND TRACKER_DLLS ${directml_SOURCE_DIR}/bin/x64-win/DirectML.dll)
+        endif()
+        add_custom_command(TARGET ComposerTracker POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_DLLS} "$<TARGET_FILE_DIR:ComposerTracker>"
+            VERBATIM)
+    endif()
 endif()

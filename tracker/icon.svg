@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Agogica Tracker app icon: the Agogica Hub tile and ictus ring (agogica-platform
+       desktop/src-tauri/app-icon.svg), with the app's own dial inside - the "front" tick and
+       the head's heading, turned a little - instead of the point of strike. Ink only: the
+       accent is kept for the live pulse. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#0f172a" />
+  <circle cx="512" cy="512" r="236" fill="none" stroke="#f1f5f9" stroke-width="50" />
+  <rect x="494" y="316" width="36" height="52" fill="#f1f5f9" />
+  <path transform="translate(512 538) rotate(28)" d="M0 -196 L66 84 L0 38 L-66 84 Z" fill="#f1f5f9" />
+</svg>

@@ -1,4 +1,7 @@
 #include "Onnx.h"
+#if COMPOSER_TRACKER_DIRECTML
+ #include <dml_provider_factory.h>
+#endif
 
 namespace engines
 {
@@ -10,10 +13,26 @@ Ort::Env& environment()
     return env;
 }
 
+// ONNX Runtime takes wide paths on Windows (ORTCHAR_T), UTF-8 elsewhere.
+std::basic_string<ORTCHAR_T> modelPath (const juce::File& file)
+{
+   #if JUCE_WINDOWS
+    return file.getFullPathName().toWideCharPointer();
+   #else
+    return file.getFullPathName().toStdString();
+   #endif
+}
+
 Ort::Session openSession (const juce::File& file, juce::String& provider)
 {
     // Development: AGOGICA_TRACKER_EP=cpu compares against ONNX Runtime's own CPU kernels.
+   #if JUCE_MAC
     const auto wanted = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_EP", "coreml");
+   #elif COMPOSER_TRACKER_DIRECTML
+    const auto wanted = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_EP", "dml");
+   #else
+    const auto wanted = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_EP", "cpu");
+   #endif
 
     if (wanted == "coreml")
     {
@@ -31,16 +50,40 @@ Ort::Session openSession (const juce::File& file, juce::String& provider)
                                                          { "RequireStaticInputShapes", "1" },
                                                          { "ModelCacheDirectory", cache.getFullPathName().toStdString() } });
             provider = "CoreML";
-            return Ort::Session (environment(), file.getFullPathName().toRawUTF8(), options);
+            return Ort::Session (environment(), modelPath (file).c_str(), options);
         }
         catch (const Ort::Exception&) {}
     }
 
+   #if COMPOSER_TRACKER_DIRECTML
+    if (wanted == "dml")
+    {
+        try
+        {
+            // DirectML needs these two (ONNX Runtime's DirectML notes).
+            Ort::SessionOptions options;
+            options.DisableMemPattern();
+            options.SetExecutionMode (ExecutionMode::ORT_SEQUENTIAL);
+            options.SetGraphOptimizationLevel (GraphOptimizationLevel::ORT_ENABLE_ALL);
+            Ort::ThrowOnError (OrtSessionOptionsAppendExecutionProvider_DML (options, 0));
+            provider = "DirectML";
+            return Ort::Session (environment(), modelPath (file).c_str(), options);
+        }
+        catch (const Ort::Exception&) {}
+    }
+   #endif
+
     Ort::SessionOptions options;
-    options.SetIntraOpNumThreads (4);
+    // Measured on an i5-10210U (6DRepNet360 = ResNet-50): denormals in the activations made
+    // pose 4x slower (404 -> 97 ms), and the detector's and the pose model's thread pools
+    // spinning against each other cost another 40 % (-> 57 ms). Two threads (79 ms) leave
+    // cores to the DAW's audio and spend less CPU time per frame than four.
+    options.SetIntraOpNumThreads (2);
     options.SetGraphOptimizationLevel (GraphOptimizationLevel::ORT_ENABLE_ALL);
+    options.AddConfigEntry ("session.set_denormal_as_zero", "1");
+    options.AddConfigEntry ("session.intra_op.allow_spinning", "0");
     provider = "CPU";
-    return Ort::Session (environment(), file.getFullPathName().toRawUTF8(), options);
+    return Ort::Session (environment(), modelPath (file).c_str(), options);
 }
 } // namespace
 

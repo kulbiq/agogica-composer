@@ -3,11 +3,15 @@ import "../../../ui/src/styles/tokens.css";
 import "./tracker.css";
 import { getNativeFunction } from "@juce-framework/webview";
 
-// The app runs 6DRepNet360 natively (ONNX Runtime + CoreML) and sends raw estimates as
-// "estimate" events. This page applies Invert / Recenter / smoothing / hold
-// and writes the pose to Composer (protocol: Source/stage/HeadTracking.h; yaw clockwise =
-// head turned right).
-const sendPose = getNativeFunction("pose") as (yaw: number, pitch: number, roll: number, face: boolean) => Promise<void>;
+// The app runs 6DRepNet360 natively (ONNX Runtime) and writes the pose for Composer itself
+// (tracker/PoseOutput.h: Invert, Recenter, Pause and the smoothing between camera frames;
+// yaw clockwise = head turned right). This page shows it: "pose" events (60 Hz) turn the dial,
+// "estimate" events (one per camera frame) carry the status, readouts and plot.
+const getInvert = getNativeFunction("getInvert") as () => Promise<boolean>;
+const setInvert = getNativeFunction("setInvert") as (on: boolean) => Promise<void>;
+const recenter = getNativeFunction("recenter") as () => Promise<void>;
+const setPaused = getNativeFunction("setPaused") as (on: boolean) => Promise<void>;
+const setPreview = getNativeFunction("setPreview") as (on: boolean) => Promise<void>;
 const setEngine = getNativeFunction("setEngine") as (id: string) => Promise<void>;
 const setFilterParam = getNativeFunction("setFilterParam") as (name: string, value: number | null) => Promise<void>;
 const getDebug = getNativeFunction("getDebug") as () => Promise<boolean>;
@@ -16,12 +20,9 @@ const fitHeight = getNativeFunction("fitHeight") as (height: number) => Promise<
 const engine = "6drepnet360";
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = $("status");
-const video = $<HTMLVideoElement>("video");
-const settings = {
-  paused: false,
-  invert: localStorage.getItem(`invert:${engine}`) === "1",
-};
-let centre = 0;
+const frame = $<HTMLImageElement>("frame");
+const settings = { paused: false, invert: false }; // invert: read from the app in main()
+let centre = 0; // the plot's frame (the app keeps its own for Composer)
 
 const wrap = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 
@@ -34,10 +35,34 @@ function show(yaw: number) {
   $("head").setAttribute("transform", `rotate(${yaw})`);
 }
 
+// The dial's grid: a tick every 30 degrees (longer every 90) inside the ring, each labelled in
+// Composer's convention (clockwise positive = head turned right; 180 behind).
+function buildGrid() {
+  const svg = "http://www.w3.org/2000/svg";
+  const grid = $("grid");
+  for (let a = -150; a <= 180; a += 30) {
+    const r = (a * Math.PI) / 180, sx = Math.sin(r), cy = -Math.cos(r);
+    const major = a % 90 === 0;
+    const tick = document.createElementNS(svg, "line");
+    tick.setAttribute("class", major ? "tick major" : "tick");
+    const inner = major ? 44 : 46.5;
+    tick.setAttribute("x1", String(sx * inner));
+    tick.setAttribute("y1", String(cy * inner));
+    tick.setAttribute("x2", String(sx * 50));
+    tick.setAttribute("y2", String(cy * 50));
+    const label = document.createElementNS(svg, "text");
+    label.setAttribute("class", "angle");
+    label.setAttribute("x", String(sx * 38.5));
+    label.setAttribute("y", String(cy * 38.5));
+    label.textContent = a < 0 ? `−${-a}` : String(a);
+    grid.append(tick, label);
+  }
+}
+
 // ---- Output ----------------------------------------------------------------------------------
-// The app's temporal gate (tracker/engines/HeadFilter.h) already smooths, rejects the model's
-// jumps and holds through short losses; here only Invert and Recenter apply (after the gate:
-// the model's front/back error happens in the camera's frame).
+// The app's temporal gate (tracker/engines/HeadFilter.h) smooths, rejects the model's jumps and
+// holds through short losses; the app then applies Invert and Recenter and writes the pose.
+// Here: the status and readouts per camera frame.
 
 class Output {
   private recent: { t: number; raw: number }[] = [];
@@ -46,14 +71,13 @@ class Output {
   frames = 0;
   dropouts = 0;
 
-  feed(e: { found: boolean; output: number; measured?: boolean; yaw?: number; pitch?: number; roll?: number; reacquiring?: boolean }) {
+  feed(e: { found: boolean; output: number; measured?: boolean; yaw?: number; reacquiring?: boolean }) {
     const now = performance.now();
     this.frames++;
     if (!e.measured) this.dropouts++;
 
     if (!e.found) {
       setStatus("No head", false);
-      void sendPose(0, 0, 0, false);
       return;
     }
 
@@ -62,13 +86,14 @@ class Output {
       this.recent = [...this.recent.filter((r) => now - r.t < 2000), { t: now, raw: sign * e.yaw }];
 
     this.lastOutput = sign * e.output;
-    const yaw = wrap(this.lastOutput - centre);
+    setStatus(e.reacquiring ? "Re-acquiring" : e.measured ? "Tracking" : "Holding", true);
+  }
+
+  // What Composer hears (the app's "pose" event).
+  pose(yaw: number) {
     this.range.min = Math.min(this.range.min, yaw);
     this.range.max = Math.max(this.range.max, yaw);
-
-    setStatus(e.reacquiring ? "Tracking (re-acquiring)" : e.measured ? "Tracking" : "Holding", true);
     show(yaw);
-    void sendPose(yaw, e.pitch ?? 0, e.roll ?? 0, true);
   }
 
   // Frame-to-frame noise of the model's raw yaw over the last 2 s (hold still to read it).
@@ -207,25 +232,54 @@ async function main() {
   new ResizeObserver(() => setDebug(document.body.hasAttribute("data-debug"))).observe(document.querySelector(".app")!);
 
   // The camera section stays as the user left it.
+  // The preview: frames from the app's own camera (a second reader isn't allowed on Windows),
+  // sent only while the section is open.
   const camera = document.querySelector<HTMLDetailsElement>("details.more")!;
   camera.open = localStorage.getItem("cameraOpen") === "1";
   camera.ontoggle = () => {
     localStorage.setItem("cameraOpen", camera.open ? "1" : "0");
-    if (camera.open) void video.play(); // WebKit pauses a video started while it was hidden
+    void setPreview(camera.open);
   };
+  void setPreview(camera.open);
+  window.__JUCE__.backend.addEventListener("frame", (src) => {
+    frame.src = src as string;
+    frame.hidden = false;
+  });
+  buildGrid();
 
-  $("recenter").onclick = () => (centre = output.lastOutput);
+  window.__JUCE__.backend.addEventListener("about", (version) => {
+    $("version").textContent = `Version ${version as string}`;
+    document.body.toggleAttribute("data-about", true);
+  });
+  $("aboutBack").onclick = () => document.body.toggleAttribute("data-about", false);
+
+  // Invert lives in the app's settings now; an older page kept it here (one-off move).
+  const legacyInvert = localStorage.getItem(`invert:${engine}`);
+  if (legacyInvert !== null) {
+    if (legacyInvert === "1") await setInvert(true);
+    localStorage.removeItem(`invert:${engine}`);
+  }
+  settings.invert = await getInvert();
+
+  $("recenter").onclick = () => {
+    centre = output.lastOutput;
+    void recenter();
+  };
   $("invert").setAttribute("aria-pressed", String(settings.invert));
   $("invert").onclick = () => {
     settings.invert = !settings.invert;
-    localStorage.setItem(`invert:${engine}`, settings.invert ? "1" : "0");
+    void setInvert(settings.invert);
     $("invert").setAttribute("aria-pressed", String(settings.invert));
   };
   $("pause").onclick = () => {
     settings.paused = !settings.paused;
     $("pause").setAttribute("aria-pressed", String(settings.paused));
-    if (settings.paused) void sendPose(0, 0, 0, false);
+    void setPaused(settings.paused);
   };
+  window.__JUCE__.backend.addEventListener("pose", (payload) => {
+    const p = payload as { yaw: number; live: boolean };
+    if (p.live && !settings.paused) output.pose(p.yaw);
+  });
 
   const showParams = buildParams();
   startPlot();
@@ -244,8 +298,11 @@ async function main() {
       return;
     }
 
-    ms = (e.detectMs ?? 0) + (e.poseMs ?? 0);
-    $("source").textContent = `${e.provider} · detect ${(e.detectMs ?? 0).toFixed(1)} ms · pose ${(e.poseMs ?? 0).toFixed(1)} ms`;
+    // Timings come with frames the models ran on (a still head repeats the last reading).
+    if (e.detectMs !== undefined) {
+      ms = e.detectMs + (e.poseMs ?? 0);
+      $("source").textContent = `${e.provider} · detect ${e.detectMs.toFixed(1)} ms · pose ${(e.poseMs ?? 0).toFixed(1)} ms`;
+    }
 
     const box = $("box");
     if (e.measured && e.box) {
@@ -270,14 +327,15 @@ async function main() {
         output: wrap(sign * e.output - centre),
       });
     if (ev.params) showParams(ev.params);
+
+    // Monitoring, once a second: the app's CPU (all threads) and where camera frames went.
+    const perf = (e as { perf?: { cpu: number; models: number; reused: number; dropped: number } }).perf;
+    if (perf)
+      $("perf").textContent = `CPU ${perf.cpu.toFixed(2)} cores · models ${perf.models.toFixed(0)}/s · reused ${perf.reused.toFixed(0)}/s · dropped ${perf.dropped.toFixed(0)}/s`;
   });
 
   setStatus("Loading", false);
   void setEngine(engine);
-
-  // The preview (the app reads the camera natively; macOS lets both run).
-  video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" } });
-  await video.play();
 
   setInterval(() => {
     $("stats").textContent = output.frames
