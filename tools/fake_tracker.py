@@ -44,12 +44,13 @@ def open_record(path: pathlib.Path) -> mmap.mmap:
 
 
 def write(m: mmap.mmap, yaw: float):
-    seq = struct.unpack_from("<I", m, OFFSETS["sequence"])[0]
-    struct.pack_into("<I", m, OFFSETS["sequence"], seq + 1)  # odd: writing
+    # Even first: a run killed mid-write (Ctrl+C) leaves the count odd (Writer::write does the same).
+    seq = struct.unpack_from("<I", m, OFFSETS["sequence"])[0] & ~1
+    struct.pack_into("<I", m, OFFSETS["sequence"], (seq + 1) & 0xFFFFFFFF)  # odd: writing
     struct.pack_into("<fff", m, OFFSETS["yaw"], yaw, 0.0, 0.0)
     struct.pack_into("<Q", m, OFFSETS["timestamp"], int(time.time() * 1000))
     struct.pack_into("<I", m, OFFSETS["flags"], 1)
-    struct.pack_into("<I", m, OFFSETS["sequence"], seq + 2)  # even: done
+    struct.pack_into("<I", m, OFFSETS["sequence"], (seq + 2) & 0xFFFFFFFF)  # even: done
 
 
 def main():

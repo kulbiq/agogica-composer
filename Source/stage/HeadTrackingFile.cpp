@@ -76,7 +76,9 @@ void Writer::write (const Pose& pose) noexcept
     if (record == nullptr)
         return;
 
-    const auto s = record->sequence.load (std::memory_order_relaxed);
+    // Even before every write: a writer killed between its two stores leaves the count odd,
+    // and without this every later "done" would be odd too - readers would never see one.
+    const auto s = record->sequence.load (std::memory_order_relaxed) & ~1u;
     record->sequence.store (s + 1, std::memory_order_relaxed); // odd: writing
     std::atomic_thread_fence (std::memory_order_release);
 
@@ -89,10 +91,16 @@ void Writer::write (const Pose& pose) noexcept
     record->sequence.store (s + 2, std::memory_order_release); // even: done
 }
 
-Reader::Reader (juce::File f) : file (std::move (f)) {}
+Reader::Reader (juce::File f, juce::uint32 checkEvery) : file (std::move (f)), checkEveryMs (checkEvery) {}
 
 void Reader::remapIfNeeded()
 {
+    const auto now = juce::Time::getMillisecondCounter();
+    if (checked && now - checkedAt < checkEveryMs)
+        return;
+    checked = true;
+    checkedAt = now;
+
     const auto newIdentity = fileIdentity (file);
     const auto newSize = file.getSize();
 

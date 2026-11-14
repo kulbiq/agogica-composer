@@ -65,10 +65,12 @@ private:
 
 // Reads the latest pose from the file (message thread). Tolerates a missing, short or
 // foreign file and a file replaced under it (re-maps when its identity changes).
+// The file itself is looked at (exists? replaced?) at most every `checkEveryMs`: reads come
+// 100 times a second on the host's message thread, and each look is a few system calls.
 class Reader
 {
 public:
-    explicit Reader (juce::File);
+    explicit Reader (juce::File, juce::uint32 checkEveryMs = 500);
 
     // The latest consistent pose, or nothing if there's no valid file.
     std::optional<Pose> read();
@@ -81,5 +83,7 @@ private:
     const Record* record = nullptr;
     juce::uint64 identity = 0;
     juce::int64 size = 0;
+    juce::uint32 checkEveryMs, checkedAt = 0;
+    bool checked = false;
 };
 } // namespace headtracking
