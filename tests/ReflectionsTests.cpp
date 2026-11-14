@@ -3,6 +3,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "../Source/PluginProcessor.h"
 #include "../Source/dsp/EarlyReflections.h"
+#include "TrackingFileOverride.h"
 
 using Catch::Matchers::WithinAbs;
 using namespace geometry;
@@ -190,11 +191,18 @@ TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
    #if JUCE_DEBUG
     SKIP ("CPU limits apply to Release builds"); // (the body below is Release only: no unreachable code)
    #else
-    juce::ScopedJuceInitialiser_GUI juce;
     const auto sampleRate = GENERATE (48000.0, 96000.0);
-    const auto mode = GENERATE (0.0f, 1.0f);
+    // A turning head (binaural, live) re-places every source all the time: direction fades
+    // double the HRIR convolutions while they run.
+    const auto [mode, headTurning] = GENERATE (table<float, bool> ({ { 0.0f, false }, { 1.0f, false }, { 1.0f, true } }));
     constexpr int players = 32, block = 512;
     constexpr double seconds = 10.0;
+
+    const auto trackingFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("composer-perf-head-tracking");
+    trackingFile.deleteFile();
+    const TrackingFileOverride trackingOverride (trackingFile);
+    headtracking::Writer head (trackingFile);
+    juce::ScopedJuceInitialiser_GUI juce;
 
     std::vector<std::unique_ptr<ComposerProcessor>> instances;
     for (int i = 0; i < players; ++i)
@@ -220,17 +228,36 @@ TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
 
     const auto start = juce::Time::getMillisecondCounterHiRes();
     for (int b = 0; b < blocks; ++b)
+    {
+        if (headTurning) // 90 degrees a second, back and forth, polled like the 100 Hz timer
+        {
+            const auto t = b * block / sampleRate;
+            head.write ({ (float) (90.0 * std::sin (t)), 0.0f, 0.0f, (std::uint64_t) juce::Time::currentTimeMillis(), true });
+            instances.front()->headTracking->pollNow();
+        }
+
         for (auto& p : instances)
         {
             for (int i = 0; i < block; ++i)
                 buffer.setSample (0, i, rng.nextFloat() - 0.5f), buffer.setSample (1, i, 0.0f);
             p->processBlock (buffer, midi);
         }
+    }
     const auto load = (juce::Time::getMillisecondCounterHiRes() - start) / 1000.0 / seconds;
 
-    UNSCOPED_INFO (players << " players, " << (mode > 0.5f ? "binaural" : "stereo") << ", " << sampleRate << " Hz: "
-                           << juce::String (load * 100.0, 1) << " % of one core");
-    CHECK (load < (sampleRate < 50000.0 ? 0.30 : 0.90)); // regression guard; multi-core hosts spread tracks
+    UNSCOPED_INFO (players << " players, " << (mode > 0.5f ? "binaural" : "stereo") << (headTurning ? ", head turning" : "")
+                           << ", " << sampleRate << " Hz: " << juce::String (load * 100.0, 1) << " % of one core");
+
+    // Regression guards per platform (multi-core hosts spread tracks over cores). A turning head
+    // costs ~1.5x in binaural (M4 Pro: 22 -> 33 % at 48 kHz, 63 -> 104 % at 96 kHz).
+    const auto rate48k = sampleRate < 50000.0;
+   #if JUCE_WINDOWS
+    // ponytail: from the i5-10210U figures in CLAUDE.md (38/73 % at 48 kHz, 73/197 % at 96 kHz) with
+    // margin, x1.6 for a turning head; re-measure there.
+    CHECK (load < (rate48k ? 1.0 : 2.6) * (headTurning ? 1.6 : 1.0));
+   #else
+    CHECK (load < (rate48k ? 0.30 : 0.90) * (headTurning ? 1.4 : 1.0));
+   #endif
    #endif
 }
 

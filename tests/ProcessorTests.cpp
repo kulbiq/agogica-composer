@@ -18,6 +18,16 @@ using Catch::Matchers::WithinAbs;
 // allocationsDuring() runs; other threads (JUCE, head tracking) allocate whenever they like.
 // On macOS the malloc family itself is replaced for this binary, so juce::HeapBlock and
 // AudioBuffer (which call std::malloc, not operator new) are seen too; elsewhere only new is.
+// Sanitizer builds (asan/tsan presets) own malloc themselves: nothing is counted there.
+#if defined (__has_feature)
+ #if __has_feature (address_sanitizer) || __has_feature (thread_sanitizer)
+  #define COMPOSER_SANITIZED 1
+ #endif
+#endif
+#if defined (__SANITIZE_ADDRESS__) || defined (__SANITIZE_THREAD__)
+ #define COMPOSER_SANITIZED 1
+#endif
+
 namespace
 {
 std::atomic<std::thread::id> countingThread {};
@@ -40,6 +50,7 @@ int allocationsDuring (Function&& f)
 }
 } // namespace
 
+#if ! COMPOSER_SANITIZED
 #if JUCE_MAC
 // Defined in the executable, so every call from this binary (tests, JUCE, the plugin code)
 // binds here; system libraries keep their own. Memory comes from the default zone, which
@@ -111,6 +122,7 @@ void operator delete (void* p) noexcept                                { std::fr
 void operator delete (void* p, std::size_t) noexcept                   { std::free (p); }
 void operator delete (void* p, std::align_val_t) noexcept              { alignedFree (p); }
 void operator delete (void* p, std::size_t, std::align_val_t) noexcept { alignedFree (p); }
+#endif // ! COMPOSER_SANITIZED
 
 namespace
 {
@@ -241,14 +253,20 @@ TEST_CASE ("processBlock never allocates (both modes, every hall, Pro, mode and 
 {
     // Control: the counter sees every way the code under test could allocate.
     // Elsewhere only operator new is counted; the macOS run covers the malloc family.
+   #if COMPOSER_SANITIZED
+    WARN ("sanitizer build: allocations aren't counted (the regular build checks them)");
+   #else
     static void* volatile sink = nullptr;
-   #if JUCE_MAC
+   #endif
+   #if JUCE_MAC && ! COMPOSER_SANITIZED
     CHECK (allocationsDuring ([] { sink = std::malloc (16); std::free (sink); }) == 1);
     CHECK (allocationsDuring ([] { sink = std::calloc (4, 4); std::free (sink); }) == 1);
     CHECK (allocationsDuring ([] { sink = std::malloc (16); sink = std::realloc (sink, 4096); std::free (sink); }) == 2);
     CHECK (allocationsDuring ([] { juce::HeapBlock<float> block (64); sink = block.get(); }) == 1);
    #endif
+   #if ! COMPOSER_SANITIZED
     CHECK (allocationsDuring ([] { auto* f = new float[64]; sink = f; delete[] f; }) == 1);
+   #endif
 
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
@@ -363,6 +381,45 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
 
         CHECK (allocated == 0);
         CHECK (std::abs ((double) peakIndex (left) - 10.0 / 343.0 * sampleRate) <= 1.0);
+    }
+
+    SECTION ("a hall switched back on after a silence in Dry starts clean, never with old reflections")
+    {
+        constexpr double sampleRate = 48000.0;
+        const auto mode = GENERATE (0.0f, 1.0f);
+        set (p, "outputMode", mode);
+        set (p, "hall", 4.0f); // Church
+        p.setPlayConfigDetails (2, 2, sampleRate, 480);
+        p.prepareToPlay (sampleRate, 480);
+
+        juce::AudioBuffer<float> buffer (2, 480);
+        juce::Random rng (5);
+        auto run = [&] (int blocks, bool noise)
+        {
+            for (int b = 0; b < blocks; ++b)
+            {
+                if (noise)
+                    fillNoise (buffer, rng);
+                else
+                    buffer.clear();
+                p.processBlock (buffer, midi);
+            }
+        };
+
+        run (100, true);   // 1 s in the Church
+        set (p, "hall", 0.0f);
+        run (200, true);   // 2 s in Dry: the reflections fade out and stop being processed
+        run (1100, false); // 11 s of silence: the track skips its work
+
+        set (p, "hall", 4.0f);
+        buffer.clear();
+        buffer.setSample (0, 0, 1.0f);
+        buffer.setSample (1, 0, 1.0f);
+        p.processBlock (buffer, midi);
+
+        // Nothing can arrive before the direct sound (5 m: ~700 samples later).
+        CHECK (buffer.getMagnitude (0, 0, 480) <= 0.0f);
+        CHECK (buffer.getMagnitude (1, 0, 480) <= 0.0f);
     }
 }
 

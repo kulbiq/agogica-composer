@@ -19,8 +19,18 @@ project(Composer VERSION ${COMPOSER_VERSION} LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# build/<preset>/compile_commands.json: the editor's IntelliSense reads the real flags and include
+# paths (JUCE modules, ONNX Runtime, BinaryData) from it (.vscode/settings.json).
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Static MSVC runtime: Windows testers need no Visual C++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+# Sources are UTF-8 (degree signs, +-, dashes in comments and test messages); without this
+# MSVC reads them in the system code page (C4819, mangled strings).
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
 
 add_subdirectory(JUCE)
 
@@ -93,17 +103,29 @@ if(WIN32)
     set(NPM cmd /c npm)
 endif()
 
+# npm ci only when the lockfile changes (it wipes and reinstalls node_modules: slow). npm writes
+# node_modules/.package-lock.json, so a deleted node_modules installs again too.
+function(composer_npm_ci dir)
+    add_custom_command(
+        OUTPUT ${dir}/node_modules/.package-lock.json
+        COMMAND ${NPM} ci --no-audit --no-fund
+        COMMAND ${CMAKE_COMMAND} -E touch ${dir}/node_modules/.package-lock.json
+        WORKING_DIRECTORY ${dir}
+        DEPENDS ${dir}/package.json ${dir}/package-lock.json
+        COMMENT "Installing packages in ${dir}"
+        VERBATIM)
+endfunction()
+composer_npm_ci(${UI_DIR})
+
 add_custom_command(
     OUTPUT ${UI_ZIP}
-    COMMAND ${NPM} ci --no-audit --no-fund
     COMMAND ${NPM} run build
     # Zip from inside dist/ so entries are root-level (index.html, assets/...).
     COMMAND ${CMAKE_COMMAND} -E chdir ${UI_DIR}/dist ${CMAKE_COMMAND} -E tar cf ${UI_ZIP} --format=zip .
     WORKING_DIRECTORY ${UI_DIR}
     DEPENDS ${UI_SOURCES}
         ${UI_DIR}/index.html
-        ${UI_DIR}/package.json
-        ${UI_DIR}/package-lock.json
+        ${UI_DIR}/node_modules/.package-lock.json
         ${UI_DIR}/vite.config.ts
         ${UI_DIR}/tsconfig.json
     COMMENT "Building web UI"
@@ -232,14 +254,14 @@ if(APPLE OR WIN32)
     set(TRACKER_UI_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-ui.stamp)
     file(GLOB_RECURSE TRACKER_UI_SOURCES CONFIGURE_DEPENDS ${TRACKER_UI_DIR}/src/* ${TRACKER_UI_DIR}/scripts/*)
 
+    composer_npm_ci(${TRACKER_UI_DIR})
     add_custom_command(
         OUTPUT ${TRACKER_UI_STAMP}
-        COMMAND ${NPM} ci --no-audit --no-fund
         COMMAND ${NPM} run build
         COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_UI_STAMP}
         WORKING_DIRECTORY ${TRACKER_UI_DIR}
-        DEPENDS ${TRACKER_UI_SOURCES} ${TRACKER_UI_DIR}/index.html ${TRACKER_UI_DIR}/package.json
-            ${TRACKER_UI_DIR}/package-lock.json ${TRACKER_UI_DIR}/vite.config.ts ${UI_SOURCES}
+        DEPENDS ${TRACKER_UI_SOURCES} ${TRACKER_UI_DIR}/index.html ${TRACKER_UI_DIR}/node_modules/.package-lock.json
+            ${TRACKER_UI_DIR}/vite.config.ts ${UI_SOURCES}
         COMMENT "Building tracker UI"
         VERBATIM)
     add_custom_target(ComposerTrackerUI DEPENDS ${TRACKER_UI_STAMP})
@@ -254,17 +276,18 @@ if(APPLE OR WIN32)
     set(TRACKER_MODEL_FILES ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx
         ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx)
     # ponytail: Windows has no python3 by default - the two .onnx files are put in tracker/models
-    # by hand (the build only checks they are there); CI needs a fetch step of its own.
+    # by hand; CI needs a fetch step of its own. Either way their hashes are checked.
     if(WIN32)
-        set(TRACKER_FETCH_MODELS ${CMAKE_COMMAND} -E sha256sum ${TRACKER_MODEL_FILES})
+        set(TRACKER_FETCH_MODELS ${CMAKE_COMMAND} -E true)
     else()
         set(TRACKER_FETCH_MODELS python3 ${TRACKER_MODELS_DIR}/fetch_models.py)
     endif()
     add_custom_command(
         OUTPUT ${TRACKER_MODELS_STAMP}
         COMMAND ${TRACKER_FETCH_MODELS}
+        COMMAND ${CMAKE_COMMAND} -P ${TRACKER_MODELS_DIR}/check_models.cmake
         COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_MODELS_STAMP}
-        DEPENDS ${TRACKER_MODELS_DIR}/fetch_models.py
+        DEPENDS ${TRACKER_MODELS_DIR}/fetch_models.py ${TRACKER_MODELS_DIR}/check_models.cmake
         COMMENT "Fetching tracker models"
         VERBATIM)
     add_custom_target(ComposerTrackerModels DEPENDS ${TRACKER_MODELS_STAMP})

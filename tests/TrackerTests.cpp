@@ -137,7 +137,7 @@ TEST_CASE ("head filter: genuine turns are followed (fast, across +-180)")
         CHECK (std::abs (wrap (s.output - 90.0f)) < 5.0f);
     }
 
-    SECTION ("a continuous turn across ±180 without a jump")
+    SECTION ("a continuous turn across +-180 without a jump")
     {
         HeadFilter f;
         feed (f, 150.0f, 30);

@@ -14,6 +14,30 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "asan",
+      "binaryDir": "${sourceDir}/build/asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
+      }
+    },
+    {
+      "name": "tsan",
+      "binaryDir": "${sourceDir}/build/tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer"
+      }
     }
   ],
   "buildPresets": [
@@ -28,6 +52,22 @@
       "configurePreset": "release",
       "jobs": 0,
       "configuration": "Release"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "jobs": 0,
+      "targets": [
+        "ComposerTests"
+      ]
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "jobs": 0,
+      "targets": [
+        "ComposerTests"
+      ]
     }
   ],
   "testPresets": [
@@ -46,6 +86,27 @@
         "outputOnFailure": true
       },
       "configuration": "Release"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1",
+        "ASAN_OPTIONS": "detect_leaks=0"
+      }
     }
   ]
 }

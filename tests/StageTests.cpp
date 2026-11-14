@@ -143,6 +143,43 @@ TEST_CASE ("a new insert adopts the stage's scene, room/listener and takes a fre
     CHECK (b.isPlaced());
 }
 
+TEST_CASE ("seats: everyone fits in the room, nobody sits on another")
+{
+    const auto [roomSize, minimumGap] = GENERATE (table<float, float> ({ { 20.0f, 2.0f }, { 10.0f, 1.0f }, { 5.0f, 0.35f } }));
+    const auto listener = GENERATE (geometry::Point { 0.0f, 0.0f }, geometry::Point { 0.0f, 9.0f }, geometry::Point { -2.0f, -2.0f });
+    const auto clamped = geometry::clampToRoom (listener, roomSize);
+
+    std::vector<geometry::Point> taken { { 0.0f, 5.0f } }; // the first insert stays at its default
+    taken.front() = geometry::clampToRoom (taken.front(), roomSize);
+    for (int i = 0; i < 31; ++i)
+        taken.push_back (stage::freeSeat (clamped, roomSize, taken));
+
+    for (size_t i = 1; i < taken.size(); ++i)
+    {
+        INFO ("room " << roomSize << ", seat " << i << " at " << taken[i].x << ", " << taken[i].y);
+        CHECK (std::abs (taken[i].x) <= roomSize * 0.5f - 0.5f + 1e-3f);
+        CHECK (std::abs (taken[i].y) <= roomSize * 0.5f - 0.5f + 1e-3f);
+        for (size_t j = 0; j < i; ++j) // the first player stands off the grid: half the gap from it
+            CHECK (geometry::distance (taken[i], taken[j]) >= (j == 0 ? 0.5f : 1.0f) * minimumGap - 1e-3f);
+    }
+}
+
+TEST_CASE ("seats: rows of 7 in front of the listener, centre-out, as before in a 20 m room")
+{
+    std::vector<geometry::Point> taken;
+    for (int i = 0; i < 9; ++i)
+        taken.push_back (stage::freeSeat ({ 0.0f, 0.0f }, 20.0f, taken));
+
+    const std::array<float, 7> xs { 0.0f, -2.0f, 2.0f, -4.0f, 4.0f, -6.0f, 6.0f };
+    for (size_t i = 0; i < 7; ++i)
+    {
+        CHECK_THAT (taken[i].x, WithinAbs (xs[i], 1e-4));
+        CHECK_THAT (taken[i].y, WithinAbs (6.0, 1e-4));
+    }
+    CHECK_THAT (taken[7].x, WithinAbs (0.0, 1e-4)); // the next row, 2 m further back
+    CHECK_THAT (taken[7].y, WithinAbs (8.0, 1e-4));
+}
+
 TEST_CASE ("scenes store and recall every instance's layout", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;

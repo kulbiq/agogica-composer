@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include "../Source/PluginProcessor.h"
 #include "../Source/dsp/DirectPath.h"
+#include "../Source/dsp/EarlyReflections.h"
+#include "TrackingFileOverride.h"
 
 using Catch::Matchers::WithinAbs;
 using namespace headtracking;
@@ -15,28 +18,6 @@ juce::File tempFile (const char* name)
     f.deleteFile();
     return f;
 }
-
-// Points the head tracking reader at `file` while in scope (read when HeadTracking is created).
-struct TrackingFileOverride
-{
-    explicit TrackingFileOverride (const juce::File& file)
-    {
-       #if JUCE_WINDOWS
-        _putenv_s ("AGOGICA_HEAD_TRACKING_FILE", file.getFullPathName().toRawUTF8());
-       #else
-        setenv ("AGOGICA_HEAD_TRACKING_FILE", file.getFullPathName().toRawUTF8(), 1);
-       #endif
-    }
-
-    ~TrackingFileOverride()
-    {
-       #if JUCE_WINDOWS
-        _putenv_s ("AGOGICA_HEAD_TRACKING_FILE", "");
-       #else
-        unsetenv ("AGOGICA_HEAD_TRACKING_FILE");
-       #endif
-    }
-};
 
 Pose pose (float yaw, bool face = true, std::uint64_t ageMs = 0)
 {
@@ -59,7 +40,7 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         REQUIRE (writer.isOpen());
         CHECK (file.getSize() == fileSize);
 
-        Reader reader (file);
+        Reader reader (file, 0); // looks at the file on every read
         writer.write (pose (12.5f));
         const auto read = reader.read();
         REQUIRE (read.has_value());
@@ -70,7 +51,7 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
     SECTION ("a file replaced under the reader is picked up")
     {
         const auto file = tempFile ("replaced");
-        Reader reader (file);
+        Reader reader (file, 0); // looks at the file on every read
 
         {
             Writer first (file);
@@ -90,10 +71,50 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         CHECK_THAT (read->yaw, WithinAbs (-40.0, 0.0));
     }
 
+    SECTION ("a writer killed mid-write (odd sequence left in the file) doesn't block readers")
+    {
+        const auto file = tempFile ("odd-sequence");
+        {
+            Writer crashed (file);
+            crashed.write (pose (5.0f));
+        }
+
+        // Leave the counter odd, as a tracker killed between its two stores would.
+        {
+            juce::MemoryMappedFile map (file, juce::MemoryMappedFile::readWrite, false);
+            REQUIRE (map.getData() != nullptr);
+            auto* sequence = static_cast<std::uint32_t*> (map.getData()) + 2; // offset 8
+            *sequence |= 1u;
+        }
+
+        Writer restarted (file);
+        Reader reader (file, 0); // looks at the file on every read
+        restarted.write (pose (20.0f));
+        const auto read = reader.read();
+        REQUIRE (read.has_value());
+        CHECK_THAT (read->yaw, WithinAbs (20.0, 0.0));
+    }
+
+    SECTION ("the file is looked at only every so often (not on every 10 ms poll)")
+    {
+        const auto file = tempFile ("throttled");
+        Reader reader (file, 50);
+        CHECK_FALSE (reader.read().has_value()); // missing: looked at now
+
+        Writer writer (file);
+        writer.write (pose (7.0f));
+        CHECK_FALSE (reader.read().has_value()); // not looked at again yet
+
+        juce::Thread::sleep (60);
+        const auto read = reader.read();
+        REQUIRE (read.has_value());
+        CHECK_THAT (read->yaw, WithinAbs (7.0, 0.0));
+    }
+
     SECTION ("missing, short and foreign files are ignored")
     {
         const auto file = tempFile ("garbage");
-        Reader reader (file);
+        Reader reader (file, 0); // looks at the file on every read
         CHECK_FALSE (reader.read().has_value()); // missing
 
         file.replaceWithText ("short");
@@ -110,7 +131,7 @@ TEST_CASE ("head tracking file: never a torn read (seqlock)", "[integration]")
 {
     const auto file = tempFile ("seqlock");
     Writer writer (file);
-    Reader reader (file);
+    Reader reader (file, 0); // looks at the file on every read
 
     std::atomic<bool> stop { false };
     std::atomic<int> writes { 0 };
@@ -175,6 +196,62 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
 
     for (size_t i = 0; i < turned.size(); ++i)
         REQUIRE_THAT (turned[i], WithinAbs (ahead[i], 1e-3));
+}
+
+TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees (reflections included)")
+{
+    // Stages place sources at azimuth - yaw, which can leave -180..180: a player behind and a
+    // head turned far must still put every reflection (the pan-only corners too) on its side.
+    auto render = [] (float headYaw)
+    {
+        History history;
+        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        EarlyReflections reflections;
+        reflections.prepare (48000.0);
+
+        Acoustics a;
+        a.mode = OutputMode::binaural;
+        a.hall = &halls.back(); // Church: strong corner reflections
+        a.player = { 3.0f, -6.0f };
+        a.headYaw = headYaw;
+        reflections.setAcoustics (a);
+
+        juce::Random rng (8);
+        std::vector<float> out;
+        for (int i = 0; i < 9600; ++i)
+        {
+            float l = 0.0f, r = 0.0f;
+            history.write (rng.nextFloat() - 0.5f);
+            reflections.processSample (history, l, r);
+            out.push_back (l), out.push_back (r);
+        }
+        return out;
+    };
+
+    const auto [yaw, same] = GENERATE (table<float, float> ({ { 170.0f, -190.0f }, { -150.0f, 210.0f }, { 100.0f, -260.0f } }));
+    const auto a = render (yaw), b = render (same);
+
+    for (size_t i = 0; i < a.size(); ++i)
+        REQUIRE_THAT (a[i], WithinAbs (b[i], 1e-5));
+
+    SECTION ("a pan-only placer folds a wrapped angle to the correct side")
+    {
+        auto gains = [] (float azimuth)
+        {
+            Placer placer;
+            placer.prepare (48000.0, Placer::Binaural::panOnly);
+            placer.setDirection (azimuth, true);
+            float l = 0.0f, r = 0.0f;
+            placer.process (1.0f, l, r);
+            return std::pair { l, r };
+        };
+
+        const auto [l1, r1] = gains (260.0f); // = -100: behind, to the left
+        const auto [l2, r2] = gains (-100.0f);
+        CHECK_THAT (l1, WithinAbs (l2, 1e-6));
+        CHECK_THAT (r1, WithinAbs (r2, 1e-6));
+        CHECK (l1 > r1);
+    }
 }
 
 TEST_CASE ("head tracking: live only in binaural, never in exports", "[integration]")
