@@ -23,7 +23,17 @@ jobs:
       # JUCE links WebView2 statically on Windows and looks for the NuGet package.
       - run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       - run: cmake --preset release
-      - run: cmake --build --preset release --target Composer_VST3
+      - run: cmake --build --preset release --target Composer_VST3 ComposerTests
+      # The build that ships is tested too: the fast set and pluginval (strictness 10; no licence
+      # in CI, so audio passes through - see check.yml).
+      - run: ctest --preset release -LE slow
+      - shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+          $p = Start-Process pluginval/pluginval.exe -Wait -NoNewWindow -PassThru -ArgumentList `
+            '--strictness-level', '10', '--timeout-ms', '120000', '--validate', 'build/release/Composer_artefacts/Release/VST3/Composer.vst3'
+          exit $p.ExitCode
       # Composer.vst3 at the zip root, as Agogica Hub expects.
       - run: tar -a -c -f Composer-windows-x64.zip -C build/release/Composer_artefacts/Release/VST3 Composer.vst3
       - uses: actions/upload-artifact@v4

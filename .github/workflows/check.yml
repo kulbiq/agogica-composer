@@ -1,6 +1,6 @@
-# Pull request and branch checks: the fast test set (`ctest --preset debug -LE slow`), built
-# the way a developer builds it, on macOS and on Windows. The Tracker (onnxruntime, 125 MB of
-# models) is not built. The Windows job also uploads the Debug VST3 (it accepts licences from a
+# Pull request and branch checks: the fast test set (`ctest --preset debug -LE slow`; everything
+# nightly) and pluginval, built the way a developer builds it, on macOS and on Windows. The
+# Tracker (onnxruntime, 125 MB of models) is not built. The Windows job also uploads the Debug VST3 (it accepts licences from a
 # local dev site) for trying on a Windows machine.
 # No secrets, no signing: releases are built from the owner's Mac (scripts/release-macos.sh).
 name: Check
@@ -9,9 +9,11 @@ on:
   push:
     branches: [master]
   pull_request:
+  schedule:
+    - cron: "0 3 * * *" # nightly: the [slow] tests too (fuzz, silence skip, recorded tracker sessions)
 
 concurrency:
-  group: check-${{ github.ref }}
+  group: check-${{ github.ref }}-${{ github.event_name }} # a push never cancels the nightly run
   cancel-in-progress: true
 
 jobs:
@@ -38,9 +40,23 @@ jobs:
         run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       - run: cmake --preset debug
       - run: cmake --build --preset debug --target ComposerTests
-      - run: ctest --preset debug -LE slow
+      - run: ctest --preset debug ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
+      # pluginval (strictness 10), as CLAUDE.md asks. CI has no licence for its machine, so the
+      # plugin passes audio through here: this covers loading, state, parameters, bus layouts and
+      # threading; the DSP is covered by ctest. Run scripts/pluginval.sh locally (licensed) too.
+      - if: runner.os == 'macOS'
+        run: cmake --build --preset debug --target Composer_VST3 Composer_AU && scripts/pluginval.sh
       - if: runner.os == 'Windows'
         run: cmake --build --preset debug --target Composer_VST3
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+          # A GUI-subsystem exe: wait for it explicitly, or PowerShell moves on at once.
+          $p = Start-Process pluginval/pluginval.exe -Wait -NoNewWindow -PassThru -ArgumentList `
+            '--strictness-level', '10', '--timeout-ms', '120000', '--validate', 'build/debug/Composer_artefacts/Debug/VST3/Composer.vst3'
+          exit $p.ExitCode
       - if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
