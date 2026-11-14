@@ -316,35 +316,34 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
     ComposerProcessor p;
     juce::MidiBuffer midi;
 
-    SECTION ("the longest tail (Church, decay x2) is never cut")
+    SECTION ("the longest delay (opposite corners of the largest room) is never cut")
     {
-        set (p, "hall", 4.0f);
-        set (p, "proDecay", 2.0f);
-        p.setPlayConfigDetails (2, 2, 48000.0, 480);
-        p.prepareToPlay (48000.0, 480);
+        // The direct sound alone: the output ends with the longest delay (70.7 m, 0.21 s), well
+        // inside the 0.5 s the track keeps processing after its input stops.
+        constexpr double sampleRate = 48000.0;
+        set (p, "roomSize", 50.0f);
+        set (p, "playerX", 25.0f);
+        set (p, "playerY", 25.0f);
+        set (p, "listenerX", -25.0f);
+        set (p, "listenerY", -25.0f);
+        p.setPlayConfigDetails (2, 2, sampleRate, 480);
+        p.prepareToPlay (sampleRate, 480);
 
-        // 10 ms of noise, then silence until 10 s.
-        juce::Random rng (77);
-        std::vector<double> energy;
-        for (int b = 0; b < 1000; ++b)
+        juce::AudioBuffer<float> buffer (2, 480);
+        std::vector<float> left;
+        for (int b = 0; b < 100; ++b) // an impulse, then 1 s of silence
         {
-            juce::AudioBuffer<float> buffer (2, 480);
             buffer.clear();
             if (b == 0)
-                fillNoise (buffer, rng);
+                buffer.setSample (0, 0, 1.0f), buffer.setSample (1, 0, 1.0f);
             p.processBlock (buffer, midi);
-
-            double e = 0.0;
-            for (int ch = 0; ch < 2; ++ch)
-                for (int i = 0; i < 480; ++i)
-                    e += (double) buffer.getSample (ch, i) * buffer.getSample (ch, i);
-            energy.push_back (e);
+            left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
         }
 
-        // Still processed (not skipped) near the end, and by the time the skip may engage
-        // (10 s) the tail is below -60 dB of its level at 0.2 s: cutting it then is inaudible.
-        CHECK (energy[950] > 0.0);
-        CHECK (10.0 * std::log10 (energy[990] / energy[20]) < -60.0);
+        const auto arrival = std::hypot (50.0, 50.0) / 343.0 * sampleRate;
+        REQUIRE (arrival < ComposerProcessor::tailSeconds * sampleRate);
+        CHECK (std::abs ((double) peakIndex (left) - arrival) <= 1.0);
+        CHECK (std::abs (left[peakIndex (left)]) > 0.01f);
     }
 
     SECTION ("a silent track skips its work and resumes at the current position, without allocating")
@@ -359,7 +358,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
         buffer.setSample (0, 0, 1.0f);
         p.processBlock (buffer, midi);
 
-        for (int block = 0; block < 1100; ++block) // 11 s of silence (longer than the 10 s tail)
+        for (int block = 0; block < 100; ++block) // 1 s of silence (longer than the 0.5 s tail)
         {
             buffer.clear();
             p.processBlock (buffer, midi);
@@ -409,7 +408,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
         run (100, true);   // 1 s in the Church
         set (p, "hall", 0.0f);
         run (200, true);   // 2 s in Dry: the reflections fade out and stop being processed
-        run (1100, false); // 11 s of silence: the track skips its work
+        run (100, false);  // 1 s of silence: the track skips its work
 
         set (p, "hall", 4.0f);
         buffer.clear();

@@ -3,6 +3,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "../Source/PluginProcessor.h"
 #include "../Source/dsp/EarlyReflections.h"
+#include "../Source/dsp/ReverbTail.h"
 #include "TrackingFileOverride.h"
 
 using Catch::Matchers::WithinAbs;
@@ -117,34 +118,41 @@ TEST_CASE ("a wall reflection arrives on time with its physical level")
     CHECK (before < 0.15 * expectedEnergy);
 }
 
-TEST_CASE ("reflections don't comb-filter the sound (early colouration)", "[integration]")
+TEST_CASE ("reflections don't comb-filter the sound (early colouration)")
 {
     // User report: the halls sounded "distorted, too filtered". Cause: reflections were
     // perfect copies of the direct sound (the floor one 1.35 ms late at 75 % level).
-    // Measure: the first 50 ms of the whole chain, smoothed over ~1/3 octave, 200 Hz-4 kHz.
-    // Before diffusion + surface/floor absorption: 10-13 dB. Real seats: roughly ±3 dB.
-    juce::ScopedJuceInitialiser_GUI juce;
-
+    // Measure: the first 50 ms of direct + reflections + tail, smoothed over ~1/3 octave,
+    // 200 Hz-4 kHz. Before diffusion + surface/floor absorption: 10-13 dB. Real seats: roughly
+    // ±3 dB. The stages are wired here, not in a processor: reflections and tail are out of
+    // the processor's chain for now.
     for (const int hall : { 1, 2, 3, 4 })
     {
-        ComposerProcessor p;
-        auto set = [&] (const char* id, float v) { auto* q = p.state.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
-        set ("hall", (float) hall);
-        set ("playerX", 0.0f);
-        set ("playerY", 6.0f);
-        p.setPlayConfigDetails (2, 2, 48000.0, 480);
-        p.prepareToPlay (48000.0, 480);
+        History history;
+        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        DirectPath direct;
+        EarlyReflections reflections;
+        ReverbTail tail;
+        direct.prepare (48000.0);
+        reflections.prepare (48000.0);
+        tail.prepare (48000.0);
 
-        std::vector<float> ir;
-        juce::MidiBuffer midi;
-        for (int b = 0; b < 5; ++b)
+        Acoustics a;
+        a.hall = &halls[(size_t) hall];
+        a.player = { 0.0f, 6.0f };
+        direct.setAcoustics (a);
+        reflections.setAcoustics (a);
+        tail.setAcoustics (a);
+
+        std::vector<float> ir (2400);
+        for (size_t i = 0; i < ir.size(); ++i)
         {
-            juce::AudioBuffer<float> buffer (2, 480);
-            buffer.clear();
-            if (b == 0)
-                buffer.setSample (0, 0, 1.0f), buffer.setSample (1, 0, 1.0f);
-            p.processBlock (buffer, midi);
-            ir.insert (ir.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
+            history.write (i == 0 ? 1.0f : 0.0f);
+            float l = 0.0f, r = 0.0f;
+            direct.processSample (history, l, r);
+            reflections.processSample (history, l, r);
+            tail.processSample (history, l, r);
+            ir[i] = l;
         }
 
         auto power = [&] (double f) // |DFT|² of the first 50 ms at frequency f
@@ -186,7 +194,7 @@ TEST_CASE ("the Dry hall has no reflections at all")
 }
 
 // Release only: build/release/ComposerTests "[perf]" -s
-TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
+TEST_CASE ("CPU: 32 players, the processor's chain", "[.perf]")
 {
    #if JUCE_DEBUG
     SKIP ("CPU limits apply to Release builds"); // (the body below is Release only: no unreachable code)
@@ -253,8 +261,9 @@ TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
     // the Windows laptop.
     const auto rate48k = sampleRate < 50000.0;
    #if JUCE_WINDOWS
-    // i5-10210U laptop on mains power (2026-11-14, median of 3 runs): stereo / binaural / binaural
-    // with a turning head 40 / 75 / 128 % at 48 kHz, 81 / 212 / 375 % at 96 kHz; ~30 % margin.
+    // i5-10210U laptop on mains power (2026-11-14, median of 3 runs, the whole chain before stage 1):
+    // stereo / binaural / binaural with a turning head 40 / 75 / 128 % at 48 kHz, 81 / 212 / 375 %
+    // at 96 kHz; ~30 % margin. The direct sound alone takes far less (see CLAUDE.md).
     const auto stereo = mode < 0.5f;
     CHECK (load < (rate48k ? (stereo ? 0.52 : headTurning ? 1.67 : 0.97)
                            : (stereo ? 1.05 : headTurning ? 4.9 : 2.76)));

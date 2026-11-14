@@ -5,8 +5,6 @@
 #include "stage/HeadTracking.h"
 #include "licensing/LicenseCheck.h"
 #include "dsp/DirectPath.h"
-#include "dsp/EarlyReflections.h"
-#include "dsp/ReverbTail.h"
 #include "dsp/LoadMeter.h"
 
 class ComposerProcessor final : public juce::AudioProcessor
@@ -28,7 +26,7 @@ public:
     bool acceptsMidi() const override                   { return false; }
     bool producesMidi() const override                  { return false; }
     bool isMidiEffect() const override                  { return false; }
-    double getTailLengthSeconds() const override        { return Acoustics::tailSeconds; }
+    double getTailLengthSeconds() const override        { return tailSeconds; }
 
     int getNumPrograms() override                       { return 1; }
     int getCurrentProgram() override                    { return 0; }
@@ -82,6 +80,10 @@ public:
     // A complete gesture on one parameter, in its real units.
     void writeParam (const juce::String& paramId, float value);
 
+    // How long the output goes on after the input stops (reported to the host; also how long a
+    // silent track keeps processing): with the direct sound alone, the longest delay.
+    static constexpr double tailSeconds = Acoustics::maxDelaySeconds;
+
     // Development monitoring: processBlock's share of real time (realtime playback only).
     LoadMeter load;
 
@@ -128,8 +130,9 @@ private:
     History history;
 
     // The processing chain: every stage reads `history` and adds its stereo output.
-    // Plug a stage in or out here.
-    std::tuple<DirectPath, EarlyReflections, ReverbTail> stages;
+    // Plug a stage in or out here. For now the direct sound only: EarlyReflections and ReverbTail
+    // are out of the chain until they are rebuilt for CPU (their classes and parameters stay).
+    std::tuple<DirectPath> stages;
 
     // Samples of silent input so far; a track silent for longer than the tail skips all work.
     int silentFor = 0, skipAfter = 0;

@@ -300,7 +300,7 @@ void ComposerProcessor::prepareToPlay (double sampleRate, int)
     preparedRate = sampleRate;
     history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
     std::apply ([&] (auto&... stage) { (stage.prepare (sampleRate), ...); }, stages);
-    skipAfter = (int) (Acoustics::tailSeconds * sampleRate);
+    skipAfter = (int) (tailSeconds * sampleRate);
     silentFor = 0;
 }
 

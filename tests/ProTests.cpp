@@ -3,6 +3,7 @@
 #include "../Source/PluginProcessor.h"
 #include "../Source/bridge/Stage.h"
 #include "../Source/dsp/EarlyReflections.h"
+#include "LegacyDirectPath.h"
 
 using Catch::Matchers::WithinAbs;
 
@@ -40,8 +41,10 @@ std::vector<float> render (ComposerProcessor& p, int blocks)
 }
 } // namespace
 
-TEST_CASE ("Pro panel at its defaults sounds exactly as before", "[integration]")
+TEST_CASE ("Pro panel at its defaults: the direct sound exactly as before", "[integration]")
 {
+    // The chain is the direct sound alone for now, so the processor must sound like the
+    // per-sample direct-path stage it shipped with (tests/LegacyDirectPath.h).
     juce::ScopedJuceInitialiser_GUI juce;
 
     for (const auto mode : { 0, 1 })
@@ -54,13 +57,28 @@ TEST_CASE ("Pro panel at its defaults sounds exactly as before", "[integration]"
         set (p, "roomSize", 25.0f);
         const auto out = render (p, 25);
 
-        juce::MemoryBlock reference;
-        REQUIRE (juce::File (juce::String (COMPOSER_TEST_DATA) + "/reference_" + (mode ? "binaural" : "stereo") + ".f32").loadFileAsData (reference));
-        REQUIRE (reference.getSize() == out.size() * sizeof (float));
+        History history;
+        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        legacy::DirectPath path;
+        path.prepare (48000.0);
+        Acoustics a;
+        a.roomSize = 25.0f;
+        a.player = { -4.0f, 7.0f };
+        a.mode = mode == 1 ? OutputMode::binaural : OutputMode::stereo;
 
-        juce::MemoryInputStream in (reference, false);
-        for (size_t i = 0; i < out.size(); ++i)
-            REQUIRE_THAT (out[i], WithinAbs (in.readFloat(), 1e-4)); // written by the pre-Pro build
+        juce::Random rng (77); // render()'s input
+        for (size_t i = 0; i < out.size() / 2; ++i)
+        {
+            if (i % 480 == 0)
+                path.setAcoustics (a);
+
+            const auto l = rng.nextFloat() - 0.5f, r = rng.nextFloat() - 0.5f;
+            history.write (0.5f * (l + r));
+            float left = 0.0f, right = 0.0f;
+            path.processSample (history, left, right);
+            REQUIRE_THAT (out[2 * i], WithinAbs (left, 1e-5));
+            REQUIRE_THAT (out[2 * i + 1], WithinAbs (right, 1e-5));
+        }
     }
 }
 
