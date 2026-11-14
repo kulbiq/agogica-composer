@@ -46,6 +46,8 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   const view = useRef({ cx: 0, cy: 0, scale: 1 });
   const levels = useRef<Levels>({});
   useJuceEvent<Levels>("levels", (l) => (levels.current = l));
+  const headYaw = useRef(0); // degrees clockwise; its own event, so the stage doesn't change every frame
+  useJuceEvent<number>("headYaw", (yaw) => (headYaw.current = yaw));
 
   // A fresh stage from C++ supersedes local positions, except for a node still in a gesture.
   useEffect(() => {
@@ -197,7 +199,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
       const l = drawn.get("listener")!;
       ctx.save();
       ctx.translate(sx(l.x), sy(l.y));
-      ctx.rotate((stage.headTracking.yaw * Math.PI) / 180);
+      ctx.rotate((headYaw.current * Math.PI) / 180);
       ctx.beginPath();
       ctx.moveTo(0, -8);
       ctx.lineTo(5.5, 6);

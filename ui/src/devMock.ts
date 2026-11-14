@@ -12,7 +12,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     scene: "A",
     scenes: ["A", "B"],
     hall: 2,
-    headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), yaw: location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0 },
+    headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true },
     pro: {
       proReflections: 0,
       proDiffusion: 1,
@@ -124,5 +124,6 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     const levels: Record<string, number> = {};
     for (const p of scene.players) levels[p.id] = p.id === 4 ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
     emit("levels", levels);
+    emit("headYaw", location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0);
   }, 33);
 }

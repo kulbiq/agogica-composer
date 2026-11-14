@@ -69,7 +69,7 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
           ))}
         </div>
         {stage.outputMode === "binaural" ? (
-          <HeadTracking live={stage.headTracking.live} />
+          <HeadTracking {...stage.headTracking} />
         ) : (
           <p className={styles.note}>For speakers. Players behind the listener are mirrored to the front.</p>
         )}
@@ -180,13 +180,21 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
 
 
 // Head tracking status; while it isn't running, the same chip starts Agogica Tracker.
-function HeadTracking({ live }: { live: boolean }) {
+function HeadTracking({ live, canStart }: { live: boolean; canStart: boolean }) {
   const [failed, setFailed] = useState(false);
 
   if (live)
     return (
       <span className={styles.status} data-status="live">
         Head tracking · live
+      </span>
+    );
+
+  // Windows: Composer can't start the tracker yet (start it by hand).
+  if (!canStart)
+    return (
+      <span className={styles.status} data-status="soon">
+        Head tracking · off
       </span>
     );
 

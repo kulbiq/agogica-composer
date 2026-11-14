@@ -19,7 +19,7 @@ export type Stage = {
   hall: number; // index into `halls`, stored per scene
   halls: string[];
   pro: Record<string, number>; // Pro panel parameter values (project-wide)
-  headTracking: { live: boolean; yaw: number }; // degrees clockwise (head turned right)
+  headTracking: { live: boolean; canStart: boolean }; // the yaw comes as its own "headYaw" event (degrees clockwise)
   alone: boolean;
   openElsewhere?: string; // name of another track whose Composer window is open
   licence?: { ok: boolean; message: string }; // offline licence (Source/licensing); not ok = audio passes through

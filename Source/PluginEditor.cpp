@@ -45,6 +45,17 @@ juce::var getBuildInfo (const juce::AudioProcessor& processor)
     return info.release();
 }
 
+// WebView2's profile: our own folder (like the Tracker's), not the temp folder that every app
+// or plugin built from JUCE's WebView demo shares.
+juce::File webViewProfile()
+{
+   #if JUCE_WINDOWS
+    return juce::File::getSpecialLocation (juce::File::windowsLocalAppData).getChildFile ("Agogica/Composer/WebView2");
+   #else
+    return {}; // WebView2 is Windows only
+   #endif
+}
+
 // Debug builds configured with COMPOSER_UI_DEV_SERVER load the Vite dev server (hot reload).
 #ifdef COMPOSER_UI_DEV_SERVER_URL
 const juce::String uiUrl { COMPOSER_UI_DEV_SERVER_URL };
@@ -66,7 +77,7 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
       browser { juce::WebBrowserComponent::Options{}
                     .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
                     .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
-                                                 .withUserDataFolder (juce::File::getSpecialLocation (juce::File::tempDirectory)))
+                                                 .withUserDataFolder (webViewProfile()))
                     .withNativeIntegrationEnabled()
                     .withNativeFunction ("getStage", [this] (const auto&, auto complete)
                                          {
@@ -93,19 +104,19 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
-                    .withNativeFunction ("startTracker", [] (const auto&, auto complete)
+                    .withNativeFunction ("startTracker", [this] (const auto&, auto complete)
                                          {
-                                             complete (HeadTracking::startTracker());
+                                             if (HeadTracking::startInstalledTracker())
+                                                 complete (true);
+                                             else
+                                                 openApp ("com.agogica.tracker", std::move (complete));
                                          })
                     // "Not activated" screen: Agogica Hub signs in and writes the licence.
-                    .withNativeFunction ("openHub", [] (const auto&, auto complete)
+                    .withNativeFunction ("openHub", [this] (const auto&, auto complete)
                                          {
-                                             juce::ChildProcess open;
-                                             const auto opened = open.start ("/usr/bin/open -b com.agogica.hub")
-                                                                 && open.waitForProcessToFinish (5000) && open.getExitCode() == 0;
-                                             if (! opened) // the hub isn't installed: get it from the website
-                                                 juce::URL ("https://agogica.app/dashboard").launchInDefaultBrowser();
-                                             complete (opened);
+                                             // Not installed: get it from the website.
+                                             openApp ("com.agogica.hub", std::move (complete),
+                                                      [] { juce::URL ("https://agogica.app/dashboard").launchInDefaultBrowser(); });
                                          })
                     .withNativeFunction ("checkLicence", [this] (const auto&, auto complete)
                                          {
@@ -137,8 +148,53 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
     browser.goToURL (uiUrl);
 }
 
+void ComposerEditor::openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion complete,
+                              std::function<void()> ifFailed)
+{
+    auto process = std::make_unique<juce::ChildProcess>();
+   #if JUCE_MAC
+    const auto started = process->start (juce::StringArray { "/usr/bin/open", "-b", bundleId });
+   #else
+    juce::ignoreUnused (bundleId);
+    const auto started = false; // ponytail: no launcher on Windows yet (Hub plan 7b)
+   #endif
+
+    if (! started)
+    {
+        if (ifFailed)
+            ifFailed();
+        complete (false);
+        return;
+    }
+
+    opening.push_back ({ std::move (process), std::move (complete), std::move (ifFailed), juce::Time::getMillisecondCounter() });
+}
+
+void ComposerEditor::finishOpening()
+{
+    const auto now = juce::Time::getMillisecondCounter();
+
+    for (auto it = opening.begin(); it != opening.end();)
+    {
+        const auto running = it->process->isRunning();
+        if (running && now - it->startedAt < 5000)
+        {
+            ++it;
+            continue;
+        }
+
+        const auto ok = ! running && it->process->getExitCode() == 0;
+        if (! ok && it->ifFailed)
+            it->ifFailed();
+        it->complete (ok);
+        it = opening.erase (it);
+    }
+}
+
 void ComposerEditor::timerCallback()
 {
+    finishOpening();
+
     // Every track's input level in dB, by player id; its own event so the stage diff
     // below stays quiet while audio plays.
     auto levels = std::make_unique<juce::DynamicObject>();
@@ -186,6 +242,13 @@ void ComposerEditor::timerCallback()
         everyone->setProperty ("tracks", tracks);
         event->setProperty ("all", everyone.release());
         browser.emitEventIfBrowserIsVisible ("load", event.release());
+    }
+
+    // The listener's head (degrees), only when it moved: 30 times a second while tracking.
+    if (const auto yaw = composer.headTracking->yaw(); std::abs (yaw - lastHeadYaw) > 0.01f)
+    {
+        lastHeadYaw = yaw;
+        browser.emitEventIfBrowserIsVisible ("headYaw", yaw);
     }
 
     // Automation playback and other changes reach the UI here; it only draws them.

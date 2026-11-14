@@ -22,8 +22,9 @@ public:
     // One poll (the timer calls this; tests too, having no message loop).
     void pollNow();
 
-    // Opens the Agogica Tracker app (installed per user in ~/Applications). Message thread.
-    static bool startTracker();
+    // Starts the per-user install of the Agogica Tracker app (~/Applications) if there is one;
+    // false otherwise (the editor then asks LaunchServices, without waiting on the message thread).
+    static bool startInstalledTracker();
 
 private:
     void timerCallback() override;

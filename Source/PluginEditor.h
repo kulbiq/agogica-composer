@@ -28,9 +28,26 @@ private:
 
     void timerCallback() override;
 
+    // Opens an app by bundle id (`open -b`) without waiting on the host's message thread:
+    // the timer completes the call when `open` has finished (or after 5 s), true if it worked.
+    // `ifFailed` runs before completing with false.
+    void openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion,
+                  std::function<void()> ifFailed = {});
+    void finishOpening();
+
+    struct Opening
+    {
+        std::unique_ptr<juce::ChildProcess> process;
+        juce::WebBrowserComponent::NativeFunctionCompletion complete;
+        std::function<void()> ifFailed;
+        juce::uint32 startedAt;
+    };
+    std::vector<Opening> opening;
+
     ComposerProcessor& composer;
     Browser browser;
     juce::String lastStage;
+    float lastHeadYaw = 0.0f; // the page starts at 0
     int loadTicks = 0; // the DSP load goes out every 8th tick
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComposerEditor)

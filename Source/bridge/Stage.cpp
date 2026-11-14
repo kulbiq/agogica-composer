@@ -75,13 +75,61 @@ void apply (ComposerProcessor& p, const juce::String& phase, const juce::String&
         param->endChangeGesture();
 }
 
-// Seats fill rows of 7, centre-out, 2 m apart, starting 6 m in front of the listener.
-geometry::Point seat (int index, geometry::Point listener)
-{
-    static constexpr int order[] { 0, -1, 1, -2, 2, -3, 3 };
-    return { listener.x + 2.0f * (float) order[index % 7], listener.y + 6.0f + 2.0f * (float) (index / 7) };
-}
 } // namespace
+
+geometry::Point freeSeat (geometry::Point listener, float roomSize, const std::vector<geometry::Point>& taken)
+{
+    const auto spacing = std::clamp (roomSize / 10.0f, 0.75f, 2.0f);
+    const auto edge = roomSize * 0.5f - 0.5f; // seats keep 0.5 m from the walls
+    const auto inside = [&] (geometry::Point p) { return std::abs (p.x) <= edge + 1.0e-4f && std::abs (p.y) <= edge + 1.0e-4f; };
+    const auto nearest = [&] (geometry::Point p)
+    {
+        auto d = std::numeric_limits<float>::max();
+        for (const auto& t : taken)
+            d = std::min (d, geometry::distance (p, t));
+        return d;
+    };
+
+    // The first row: 3 spacings in front of the listener, or as far as the front wall allows.
+    const geometry::Point front { listener.x, std::min (listener.y + 3.0f * spacing, edge) };
+    const auto reach = (int) std::ceil (roomSize / spacing) + 1;
+
+    // Seats on a grid through the first row, in order of preference (lower = better): rows of 7
+    // front first, then wider rows, then rows nearer the listener, then beside and behind;
+    // within a row, centre-out (0, -1, 1, -2, 2 ...).
+    struct Seat { std::array<int, 3> rank; geometry::Point at; };
+    std::vector<Seat> seats;
+
+    for (int row = -2 * reach; row <= reach; ++row)
+        for (int column = -reach; column <= reach; ++column)
+        {
+            const geometry::Point at { front.x + spacing * (float) column, front.y + spacing * (float) row };
+            if (! inside (at) || geometry::distance (at, listener) < spacing)
+                continue;
+
+            const auto tier = row >= 0 ? (std::abs (column) <= 3 ? 0 : 1)
+                                       : (at.y > listener.y + 0.5f * spacing ? 2 : 3);
+            seats.push_back ({ { tier, std::abs (row), 2 * std::abs (column) - (column < 0 ? 1 : 0) }, at });
+        }
+
+    std::sort (seats.begin(), seats.end(), [] (const Seat& a, const Seat& b) { return a.rank < b.rank; });
+
+    for (const auto& seat : seats)
+        if (nearest (seat.at) >= 0.5f * spacing)
+            return seat.at;
+
+    // Full: the point (on a finer grid) farthest from everyone, never on top of another.
+    auto best = front;
+    auto bestDistance = -1.0f;
+    const auto step = 0.25f * spacing;
+    for (auto y = -edge; y <= edge + 1.0e-4f; y += step)
+        for (auto x = -edge; x <= edge + 1.0e-4f; x += step)
+            if (const auto d = nearest ({ x, y }); d > bestDistance)
+                best = { x, y }, bestDistance = d;
+
+    return best;
+}
+
 
 juce::var snapshot (ComposerProcessor& self)
 {
@@ -139,9 +187,15 @@ juce::var snapshot (ComposerProcessor& self)
     lic->setProperty ("message", licensing::describe (licence.status));
     o->setProperty ("licence", lic.release());
 
+    // The yaw itself changes every tick while tracking: it goes out as its own "headYaw"
+    // event (ComposerEditor), so the stage stays quiet.
     auto tracking = std::make_unique<juce::DynamicObject>();
     tracking->setProperty ("live", self.headTracking->isLive());
-    tracking->setProperty ("yaw", self.headTracking->yaw());
+   #if JUCE_MAC
+    tracking->setProperty ("canStart", true); // the editor can start Agogica Tracker
+   #else
+    tracking->setProperty ("canStart", false); // ponytail: not installed on Windows yet (Hub plan 7b)
+   #endif
     o->setProperty ("headTracking", tracking.release());
 
     // Pro panel values (raw parameter values; the UI shows them with their units).
@@ -224,26 +278,16 @@ void join (ComposerProcessor& self, bool takeSeat)
 
         if (takeSeat && source != nullptr)
         {
-            const auto listener = geometry::Point { self.getParam ("listenerX"), self.getParam ("listenerY") };
+            // Where everyone is drawn (clamped to the room), not their stored values.
+            const auto roomSize = self.getParam ("roomSize");
+            std::vector<geometry::Point> taken;
+            for (auto* p : members)
+                if (p != &self)
+                    taken.push_back (playerOf (*p, roomSize));
 
-            auto taken = [&] (geometry::Point s)
-            {
-                for (auto* p : members)
-                    if (p != &self && geometry::distance ({ p->getParam ("playerX"), p->getParam ("playerY") }, s) < 0.5f)
-                        return true;
-
-                return false;
-            };
-
-            for (int i = 0; i < 49; ++i)
-            {
-                if (const auto s = seat (i, listener); ! taken (s))
-                {
-                    self.writeParam ("playerX", s.x);
-                    self.writeParam ("playerY", s.y);
-                    break;
-                }
-            }
+            const auto s = freeSeat (listenerOf (self), roomSize, taken);
+            self.writeParam ("playerX", s.x);
+            self.writeParam ("playerY", s.y);
         }
 
         self.markPlaced();
