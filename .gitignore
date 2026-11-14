@@ -9,3 +9,6 @@ tracker/models/*.onnx
 tracker/models/*.part
 .wrangler/
 .env*
+
+# Review notes, shared outside the repo
+brief-review*.md
