@@ -1,6 +1,7 @@
 # Tracker models
 
 Downloaded by `fetch_models.py` for development builds; **not committed**.
+The build checks both files against the SHA-256 pinned in `check_models.cmake`.
 Licence status is for evaluation only - **check before shipping any of these**.
 
 | File | Source | Code / weights licence | Training data | Colour order |

@@ -33,7 +33,10 @@ public:
         toTensor (frame, frame.getBounds().toFloat(), w, h, ColourOrder::bgr, 1.0f, zero, one, input.data());
 
         const auto outputs = model.run (input, { 1, 3, h, w });
-        const auto count = outputs[0].GetTensorTypeAndShapeInfo().GetShape()[0];
+        const auto shape = outputs[0].GetTensorTypeAndShapeInfo().GetShape();
+        if (shape.size() != 2 || shape[1] != 7)
+            throw std::runtime_error ("unexpected head detector output"); // a frame without a head
+        const auto count = shape[0];
         const auto* rows = outputs[0].GetTensorData<float>();
 
         std::vector<Detection> heads;
@@ -77,6 +80,8 @@ public:
         const auto start = Clock::now();
         const auto cx = centreX (*head), cy = centreY (*head);
         const auto side = std::max (head->x2 - head->x1, head->y2 - head->y1) * 1.2f * 224.0f / 256.0f;
+        if (! (side >= 1.0f)) // a degenerate box (NaN included): no head this frame
+            return std::nullopt;
         input.resize (3 * 224 * 224);
         toTensor (frame, { cx - side / 2, cy - side / 2, side, side }, 224, 224, ColourOrder::rgb, 1.0f / 255.0f,
                   imagenetMean, imagenetStd, input.data());

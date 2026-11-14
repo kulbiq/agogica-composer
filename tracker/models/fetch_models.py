@@ -7,6 +7,8 @@ PINTO's archives are streamed and abandoned as soon as the needed file has been 
 only a fraction of each (up to ~250 MB) is downloaded.
 """
 
+from __future__ import annotations  # `str | None` on the macOS system Python (3.9)
+
 import pathlib
 import tarfile
 import urllib.request

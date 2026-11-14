@@ -54,13 +54,20 @@ class HeadFilter
 public:
     static constexpr int bins = 180;
     static constexpr float binDegrees = 360.0f / bins;
+    static constexpr int maxReach = bins; // a kernel wider than the circle adds nothing
 
     explicit HeadFilter (FilterParams p = {}) { setParams (p); }
 
+    // Re-calibrates the teleport probability (~2000 filter steps, several ms) only when a value
+    // it depends on has moved by more than 5 %: the tuner's values glide all the time.
     void setParams (FilterParams p)
     {
         params = p;
-        teleport = calibrateTeleport (p);
+        if (! calibratedFor || ! closeForCalibration (*calibratedFor, p))
+        {
+            teleport = calibrateTeleport (p);
+            calibratedFor = p;
+        }
     }
 
     const FilterParams& getParams() const { return params; }
@@ -138,7 +145,15 @@ private:
         // Drift by velocity·dt, blur by turnSpeed·dt: one wrapped Gaussian kernel.
         const auto shift = velocity * dt / binDegrees;
         const auto sigma = std::max (0.6f, params.turnSpeed * dt / binDegrees);
-        const auto reach = (int) std::ceil (3.0f * sigma + std::abs (shift));
+        const auto reach = std::min ((int) std::ceil (3.0f * sigma + std::abs (shift)), maxReach);
+
+        // The kernel depends only on the step, not on where it starts: worked out once.
+        std::array<float, 2 * maxReach + 1> kernel;
+        for (int d = -reach; d <= reach; ++d)
+        {
+            const auto x = ((float) d - shift) / sigma;
+            kernel[(size_t) (d + reach)] = std::exp (-0.5f * x * x);
+        }
 
         std::array<float, bins> next {};
         for (int from = 0; from < bins; ++from)
@@ -146,10 +161,7 @@ private:
             if (prob[(size_t) from] < 1.0e-12f)
                 continue;
             for (int d = -reach; d <= reach; ++d)
-            {
-                const auto x = ((float) d - shift) / sigma;
-                next[(size_t) ((from + d) % bins + bins) % bins] += prob[(size_t) from] * std::exp (-0.5f * x * x);
-            }
+                next[(size_t) ((from + d) % bins + bins) % bins] += prob[(size_t) from] * kernel[(size_t) (d + reach)];
         }
 
         // Teleport: a small chance of being anywhere.
@@ -251,7 +263,15 @@ private:
 
     HeadFilter (FilterParams p, float t) : params (p), teleport (t) {} // no calibration (used by it)
 
+    static bool closeForCalibration (const FilterParams& a, const FilterParams& b)
+    {
+        const auto close = [] (float x, float y) { return std::abs (x - y) <= 0.05f * std::max (std::abs (x), std::abs (y)); };
+        return a.confirmFrames == b.confirmFrames && close (a.frameRate, b.frameRate) && close (a.sigmaZ, b.sigmaZ)
+            && close (a.turnSpeed, b.turnSpeed) && close (a.flipWeight, b.flipWeight) && close (a.outlierWeight, b.outlierWeight);
+    }
+
     FilterParams params;
+    std::optional<FilterParams> calibratedFor;
     float teleport = 1.0e-3f;
     std::array<float, bins> prob {};
     FilterState state;
