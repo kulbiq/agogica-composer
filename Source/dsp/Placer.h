@@ -25,6 +25,9 @@ public:
     void setDirection (float azimuthDegrees, bool snap) noexcept;
     void setMode (OutputMode) noexcept;
 
+    // Forgets the recent input (the HRIR window): nothing from before is heard again.
+    void clear() noexcept { std::fill (recent.begin(), recent.end(), 0.0f); }
+
     // Adds the placed sample to `left` / `right`.
     void process (float in, float& left, float& right) noexcept;
 

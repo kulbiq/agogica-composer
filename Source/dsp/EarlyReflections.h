@@ -18,10 +18,14 @@ public:
     {
         for (auto& r : reflections)
             r.delay.jumpToTarget();
+        clearState();
         snap = true;
     }
 
 private:
+    // Filter and diffusion state: kept while silent, it would come back as old sound.
+    void clearState() noexcept;
+
     struct Reflection
     {
         DelayTap delay;

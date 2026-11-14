@@ -17,7 +17,7 @@ public:
     void prepare (double sampleRate);
     void setAcoustics (const Acoustics&) noexcept;
     void processSample (const History&, float& left, float& right) noexcept;
-    void jumpToTargets() noexcept { input.jumpToTarget(); snap = true; }
+    void jumpToTargets() noexcept;
 
 private:
     // ponytail: every instance uses the same line lengths, so many tails reinforce the same

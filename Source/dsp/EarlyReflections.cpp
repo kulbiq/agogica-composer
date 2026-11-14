@@ -87,7 +87,24 @@ void EarlyReflections::setAcoustics (const Acoustics& a) noexcept
         diffusion.setTargetValue (g);
 
     snap = false;
-    silent = (hall.ceiling <= 0.0f || adjust.reflections <= 0.0f) && ! reflections[0].gain.isSmoothing() && reflections[0].gain.getCurrentValue() <= 0.0f;
+
+    const auto nowSilent = (hall.ceiling <= 0.0f || adjust.reflections <= 0.0f) && ! reflections[0].gain.isSmoothing() && reflections[0].gain.getCurrentValue() <= 0.0f;
+    if (nowSilent && ! silent)
+        clearState(); // stops being processed now: start from silence when it comes back
+    silent = nowSilent;
+}
+
+void EarlyReflections::clearState() noexcept
+{
+    for (auto& r : reflections)
+    {
+        r.airState = 0.0f;
+        for (auto& a : r.diffusion)
+            a.clear();
+    }
+
+    for (auto& p : placers)
+        p.clear();
 }
 
 void EarlyReflections::processSample (const History& history, float& left, float& right) noexcept

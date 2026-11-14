@@ -52,6 +52,20 @@ void ReverbTail::prepare (double newSampleRate)
     drySilentAfter = (int) (Acoustics::tailSeconds * sampleRate);
 }
 
+void ReverbTail::jumpToTargets() noexcept
+{
+    // After a silence longer than the tail: what's left in the lines is inaudible, but cleared
+    // anyway so a render doesn't depend on what played before the silence.
+    for (auto& line : lines)
+    {
+        std::fill (line.buffer.begin(), line.buffer.end(), 0.0f);
+        line.state = 0.0f;
+    }
+
+    input.jumpToTarget();
+    snap = true;
+}
+
 void ReverbTail::setAcoustics (const Acoustics& a) noexcept
 {
     const auto& adjust = a.adjust;

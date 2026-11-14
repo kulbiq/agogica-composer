@@ -73,6 +73,8 @@ public:
         pos = 0;
     }
 
+    void clear() noexcept { std::fill (buffer.begin(), buffer.end(), 0.0f); }
+
     // g = 0 is a pure delay of the allpass length (no scattering).
     float process (float x, float g) noexcept
     {
