@@ -7,33 +7,15 @@ namespace
 {
 std::atomic<int> nextId { 0 };
 
-constexpr float proOffDb = -24.0f;                     // bottom of a level control = off
 const float dbPerDoublingFreeField = 20.0f * std::log10 (2.0f); // 6.02 dB
 
-float levelFromDb (float db) { return db <= proOffDb + 0.05f ? 0.0f : juce::Decibels::decibelsToGain (db); }
-
-// Pro panel parameter helpers (see Adjustments in dsp/Acoustics.h).
-auto decibels (const juce::String& id, const juce::String& name)
-{
-    return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name,
-                                                        juce::NormalisableRange<float> { proOffDb, 6.0f, 0.1f }, 0.0f,
-                                                        juce::AudioParameterFloatAttributes{}.withLabel ("dB"));
-}
-
+// Pro panel parameter helper (see Adjustments in dsp/Acoustics.h).
 auto amount (const juce::String& id, const juce::String& name, float max, float defaultValue)
 {
     return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name,
                                                         juce::NormalisableRange<float> { 0.0f, max, 0.01f }, defaultValue,
                                                         juce::AudioParameterFloatAttributes{}.withLabel ("%")
                                                             .withStringFromValueFunction ([] (float v, int) { return juce::String (juce::roundToInt (v * 100.0f)); }));
-}
-
-auto factor (const juce::String& id, const juce::String& name)
-{
-    juce::NormalisableRange<float> range { 0.5f, 2.0f };
-    range.setSkewForCentre (1.0f);
-    return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name, range, 1.0f,
-                                                        juce::AudioParameterFloatAttributes{}.withLabel ("x"));
 }
 
 auto metres (const juce::String& id, const juce::String& name, float defaultValue)
@@ -89,21 +71,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createPar
                                                       "Output",
                                                       juce::StringArray { "Stereo", "Binaural" },
                                                       0),
-        std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "hall", 1 },
-                                                      "Hall",
-                                                      [] { juce::StringArray names; for (const auto& h : halls) names.add (h.name); return names; }(),
-                                                      defaultHall),
 
         // Pro panel: project-wide, not part of scenes; neutral defaults.
-        decibels ("proReflections", "Reflections"),
-        amount ("proDiffusion", "Diffusion", 1.0f, 1.0f),
-        amount ("proFloor", "Floor reflection", 1.0f, 1.0f),
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "proBrightness", 1 }, "Brightness",
-                                                     juce::NormalisableRange<float> { -12.0f, 12.0f, 0.1f }, 0.0f,
-                                                     juce::AudioParameterFloatAttributes{}.withLabel ("st")),
-        decibels ("proReverb", "Reverb"),
-        factor ("proDecay", "Decay"),
-        factor ("proPreDelay", "Pre-delay"),
         // No step: the default must be exactly today's -20·log10(2)/3 dB per doubling.
         std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "proDistanceLaw", 1 }, "Distance law",
                                                      juce::NormalisableRange<float> { 0.0f, dbPerDoublingFreeField },
@@ -236,20 +205,12 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, acoustics.roomSize);
     acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, acoustics.roomSize);
     acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
-    acoustics.hall = &halls[(size_t) juce::jlimit (0, (int) halls.size() - 1, (int) audioParams.hall->load())];
 
     // Head tracking is a live monitoring aid: never in exports, never in stereo.
     if (acoustics.mode == OutputMode::binaural && ! isNonRealtime())
         acoustics.headYaw = headTracking->yaw();
 
     auto& adjust = acoustics.adjust;
-    adjust.reflections = levelFromDb (audioParams.proReflections->load());
-    adjust.diffusion = audioParams.proDiffusion->load();
-    adjust.floor = audioParams.proFloor->load();
-    adjust.brightness = std::exp2 (audioParams.proBrightness->load() / 12.0f);
-    adjust.reverb = levelFromDb (audioParams.proReverb->load());
-    adjust.decay = audioParams.proDecay->load();
-    adjust.preDelay = audioParams.proPreDelay->load();
     adjust.distanceExponent = audioParams.proDistanceLaw->load() / dbPerDoublingFreeField;
     adjust.air = audioParams.proAir->load();
 

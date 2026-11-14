@@ -21,26 +21,6 @@ Hrtf::Hrtf (const void* binary, int size)
     for (size_t ir = 0; ir < (size_t) numDirections * 2; ++ir)
         for (int tap = numTaps; --tap >= 0;)
             data[ir * (size_t) numTaps + (size_t) tap] = in.readFloat();
-
-    // Short responses: the head of each (reversed, so the end of each reversed array),
-    // with a raised-cosine fade over the last 16 taps at 48 kHz (a hard cut adds ripple).
-    const auto scale = rate / 48000.0;
-    numShortTaps = std::min (numTaps, (int) std::lround (96.0 * scale));
-    const auto fade = (int) std::lround (16.0 * scale);
-    shortData.resize ((size_t) numDirections * 2 * (size_t) numShortTaps);
-
-    for (size_t ir = 0; ir < (size_t) numDirections * 2; ++ir)
-    {
-        const auto* full = data.data() + ir * (size_t) numTaps + (size_t) (numTaps - numShortTaps);
-        auto* shortIr = shortData.data() + ir * (size_t) numShortTaps;
-
-        for (int j = 0; j < numShortTaps; ++j)
-        {
-            // j = 0 is the latest tap of the shortened response.
-            const auto g = j < fade ? 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * (float) j / (float) fade) : 1.0f;
-            shortIr[j] = full[j] * g;
-        }
-    }
 }
 
 const Hrtf& Hrtf::forSampleRate (double sampleRate)

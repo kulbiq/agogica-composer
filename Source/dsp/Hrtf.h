@@ -19,7 +19,6 @@ public:
     static int nearestIndex (float azimuthDegrees) noexcept;
 
     int taps() const noexcept               { return numTaps; }
-    int shortTaps() const noexcept          { return numShortTaps; }
     double sampleRate() const noexcept      { return rate; }
 
     // Impulse response for direction `index`, ear 0 = left, 1 = right, stored
@@ -29,18 +28,10 @@ public:
         return data.data() + ((size_t) index * 2 + (size_t) ear) * (size_t) numTaps;
     }
 
-    // The first ~2 ms of each response (96 taps at 48 kHz) with a short fade-out, for the
-    // many quieter paths (reflections). Keeps the interaural time difference and the main
-    // spectral cues (>= 93 % of each response's energy at 48 kHz) at a fraction of the cost.
-    const float* shortReversedIr (int index, int ear) const noexcept
-    {
-        return shortData.data() + ((size_t) index * 2 + (size_t) ear) * (size_t) numShortTaps;
-    }
-
     Hrtf (const void* binary, int size);
 
 private:
-    int numTaps = 0, numShortTaps = 0;
+    int numTaps = 0;
     double rate = 0.0;
-    std::vector<float> data, shortData;
+    std::vector<float> data;
 };

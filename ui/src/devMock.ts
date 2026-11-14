@@ -11,20 +11,11 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   const scene = {
     scene: "A",
     scenes: ["A", "B"],
-    hall: 2,
     headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true },
     pro: {
-      proReflections: 0,
-      proDiffusion: 1,
-      proFloor: 1,
-      proBrightness: 0,
-      proReverb: -3,
-      proDecay: 1,
-      proPreDelay: 1,
       proDistanceLaw: 6.0206 / 3,
       proAir: 1,
     } as Record<string, number>,
-    halls: ["Dry", "Studio", "Chamber", "Concert hall", "Church"],
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
     // ?elsewhere: another track's window is open (the "open here anyway" screen).
@@ -75,7 +66,6 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (e.phase !== "change") return;
       const p = scene.players.find((pl) => pl.id === e.target);
       if (e.param === "roomSize") scene.room = e.value;
-      if (e.param === "hall") scene.hall = e.value;
       if (e.param.startsWith("pro")) scene.pro = { ...scene.pro, [e.param]: e.value };
       if (e.param === "outputMode") scene.outputMode = e.value > 0.5 ? "binaural" : "stereo";
       if (e.param === "listenerX") scene.listener.x = e.value;

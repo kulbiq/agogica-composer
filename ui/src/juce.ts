@@ -16,8 +16,6 @@ export type Stage = {
   scene: string; // active scene, "A".."H"
   scenes: string[]; // scenes that hold a layout (the active one included)
   outputMode: "stereo" | "binaural";
-  hall: number; // index into `halls`, stored per scene
-  halls: string[];
   pro: Record<string, number>; // Pro panel parameter values (project-wide)
   headTracking: { live: boolean; canStart: boolean }; // the yaw comes as its own "headYaw" event (degrees clockwise)
   alone: boolean;
@@ -29,14 +27,6 @@ export type Stage = {
 };
 
 export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode"
-  | "hall"
-  | "proReflections"
-  | "proDiffusion"
-  | "proFloor"
-  | "proBrightness"
-  | "proReverb"
-  | "proDecay"
-  | "proPreDelay"
   | "proDistanceLaw"
   | "proAir";
 

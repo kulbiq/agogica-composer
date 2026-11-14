@@ -250,7 +250,7 @@ TEST_CASE ("processBlock: position from parameters, clamped to the room", "[inte
     CHECK (std::abs ((double) peakIndex (left) - expected) <= 1.0);
 }
 
-TEST_CASE ("processBlock never allocates (both modes, every hall, Pro, mode and hall switches)", "[integration]")
+TEST_CASE ("processBlock never allocates (both modes, Pro, moves and mode switches)", "[integration]")
 {
     // Control: the counter sees every way the code under test could allocate.
     // Elsewhere only operator new is counted; the macOS run covers the malloc family.
@@ -292,16 +292,14 @@ TEST_CASE ("processBlock never allocates (both modes, every hall, Pro, mode and 
     for (const auto mode : { 1.0f, 0.0f })
     {
         set (p, "outputMode", mode);
-        for (size_t hall = 0; hall < halls.size(); ++hall)
+        for (const auto x : { -8.0f, 3.0f, 9.0f })
         {
-            set (p, "hall", (float) hall); // a hall switch mid-stream
+            set (p, "playerX", x); // a player dragged mid-stream: direction and delay fades
             play (2);
         }
     }
 
-    set (p, "proReverb", -6.0f);
-    set (p, "proDecay", 2.0f);
-    set (p, "proBrightness", 3.0f);
+    set (p, "proAir", 2.0f);
     set (p, "proDistanceLaw", 6.0f);
     play (2);
 
@@ -350,7 +348,6 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
     SECTION ("a silent track skips its work and resumes at the current position, without allocating")
     {
         constexpr double sampleRate = 48000.0;
-        set (p, "hall", 0.0f); // Dry: the direct sound alone, so the impulse position is exact
         p.setPlayConfigDetails (2, 2, sampleRate, 480);
         p.prepareToPlay (sampleRate, 480);
 
@@ -383,12 +380,11 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
         CHECK (std::abs ((double) peakIndex (left) - 10.0 / 343.0 * sampleRate) <= 1.0);
     }
 
-    SECTION ("a hall switched back on after a silence in Dry starts clean, never with old reflections")
+    SECTION ("after a silence a track starts clean, never with old input")
     {
         constexpr double sampleRate = 48000.0;
         const auto mode = GENERATE (0.0f, 1.0f);
         set (p, "outputMode", mode);
-        set (p, "hall", 4.0f); // Church
         p.setPlayConfigDetails (2, 2, sampleRate, 480);
         p.prepareToPlay (sampleRate, 480);
 
@@ -406,12 +402,9 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
             }
         };
 
-        run (100, true);   // 1 s in the Church
-        set (p, "hall", 0.0f);
-        run (200, true);   // 2 s in Dry: the reflections fade out and stop being processed
+        run (100, true);   // 1 s of noise
         run (100, false);  // 1 s of silence: the track skips its work
 
-        set (p, "hall", 4.0f);
         buffer.clear();
         buffer.setSample (0, 0, 1.0f);
         buffer.setSample (1, 0, 1.0f);
@@ -433,7 +426,6 @@ TEST_CASE ("block size doesn't change the result (1-sample blocks included)", "[
     {
         ComposerProcessor p;
         set (p, "outputMode", mode);
-        set (p, "hall", 3.0f); // concert hall: the whole chain
         set (p, "playerX", -4.0f);
         p.setPlayConfigDetails (2, 2, 48000.0, blockSize);
         p.prepareToPlay (48000.0, blockSize);
@@ -589,9 +581,6 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK_THAT (p.getParam ("playerX"), WithinAbs (6.0, 1e-4));
         CHECK_THAT (p.getParam ("playerY"), WithinAbs (4.0, 1e-4));
         CHECK_THAT (p.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
-        CHECK_THAT (p.getParam ("hall"), WithinAbs (4.0, 1e-4));
-        CHECK_THAT (p.getParam ("proReverb"), WithinAbs (-6.0, 1e-4));
-        CHECK_THAT (p.getParam ("proDecay"), WithinAbs (1.5, 1e-4));
         CHECK_THAT (p.getParam ("proAir"), WithinAbs (0.5, 1e-4));
         CHECK (p.getDisplayName() == "Viola");
         CHECK (p.getScene() == "D");
@@ -606,15 +595,15 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         const auto data = savedProject();
         auto xml = juce::AudioProcessor::getXmlFromBinary (data.getData(), (int) data.getSize());
         REQUIRE (xml != nullptr);
-        auto* reverb = xml->getChildByAttribute ("id", "proReverb");
-        REQUIRE (reverb != nullptr);
-        xml->removeChildElement (reverb, true);
+        auto* air = xml->getChildByAttribute ("id", "proAir");
+        REQUIRE (air != nullptr);
+        xml->removeChildElement (air, true);
 
         juce::MemoryBlock older;
         juce::AudioProcessor::copyXmlToBinary (*xml, older);
         load (p, older);
 
-        CHECK_THAT (p.getParam ("proReverb"), WithinAbs (0.0, 1e-4));
+        CHECK_THAT (p.getParam ("proAir"), WithinAbs (1.0, 1e-4));
         CHECK_THAT (p.getParam ("roomSize"), WithinAbs (35.0, 1e-4));
     }
 
@@ -668,6 +657,38 @@ TEST_CASE ("parameters: IDs, ranges, defaults and choices never change silently"
     const auto expected = juce::File (juce::String (COMPOSER_TEST_DATA) + "/parameters.txt").loadFileAsString();
     INFO (actual);
     CHECK (actual == expected);
+}
+
+TEST_CASE ("output stays finite for any parameter values (fuzz)", "[slow][integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor p;
+    p.setPlayConfigDetails (2, 2, 48000.0, 256);
+    p.prepareToPlay (48000.0, 256);
+
+    juce::Random rng (1234);
+    juce::AudioBuffer<float> buffer (2, 256);
+    juce::MidiBuffer midi;
+    juce::StringArray ids;
+    for (auto* param : p.getParameters()) // every parameter, Pro included
+        ids.add (dynamic_cast<juce::AudioProcessorParameterWithID&> (*param).paramID);
+    REQUIRE (ids.size() >= 8);
+
+    for (int block = 0; block < 500; ++block)
+    {
+        // Mostly random values, sometimes the extremes (players and listener meeting on a wall).
+        for (const auto& id : ids)
+            p.state.getParameter (id)->setValueNotifyingHost (rng.nextInt (4) == 0 ? (float) rng.nextInt (2) : rng.nextFloat());
+
+        for (int i = 0; i < 256; ++i)
+            buffer.setSample (0, i, rng.nextFloat() * 2.0f - 1.0f), buffer.setSample (1, i, rng.nextFloat() * 2.0f - 1.0f);
+
+        p.processBlock (buffer, midi);
+
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 256; ++i)
+                REQUIRE (std::isfinite (buffer.getSample (ch, i)));
+    }
 }
 
 // Release only: build/release/ComposerTests "[perf]" -s

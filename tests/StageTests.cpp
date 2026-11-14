@@ -214,13 +214,13 @@ TEST_CASE ("scenes store and recall every instance's layout", "[integration]")
     CHECK (a.getScene() == "B");
 }
 
-TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; only hall is per scene", "[integration]")
+TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room is per scene", "[integration]")
 {
     // first: set in scene A; second: set in scene B; shown: how the snapshot reports `first`.
     const auto [id, first, second, perScene, shown] = GENERATE (table<const char*, float, float, bool, juce::var> ({
         { "outputMode", 1.0f, 0.0f, false, juce::var ("binaural") },
-        { "hall", 4.0f, 1.0f, true, juce::var (4) }, // church, then studio
-        { "proReverb", -6.0f, -12.0f, false, juce::var() },
+        { "roomSize", 35.0f, 10.0f, true, juce::var() },
+        { "proAir", 0.5f, 1.5f, false, juce::var() },
     }));
     CAPTURE (id);
 

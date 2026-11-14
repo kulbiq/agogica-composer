@@ -9,11 +9,10 @@ constexpr int spareWindow = 2048;
 static_assert (spareWindow >= History::maxBlock + 8);
 } // namespace
 
-void Placer::prepare (double sampleRate, Binaural binauralQuality)
+void Placer::prepare (double sampleRate)
 {
     hrtf = &Hrtf::forSampleRate (sampleRate);
-    quality = binauralQuality;
-    taps = quality == Binaural::shortHrir ? hrtf->shortTaps() : hrtf->taps();
+    taps = hrtf->taps();
     convolve = dsp::bestConvolveTwo();
 
     window.assign ((size_t) (taps + spareWindow), 0.0f);
@@ -28,13 +27,6 @@ void Placer::prepare (double sampleRate, Binaural binauralQuality)
     fadePosition = fadeLength;
     modeFade = 1.0f;
     lastPan = 2.0f;
-}
-
-void Placer::clear() noexcept
-{
-    std::fill (window.begin(), window.end(), 0.0f);
-    end = taps - 1;
-    filled = taps; // silence on purpose: nothing to wait for
 }
 
 void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
@@ -73,7 +65,7 @@ void Placer::setMode (OutputMode newMode) noexcept
 
 const float* Placer::ir (int index, int ear) const noexcept
 {
-    return quality == Binaural::shortHrir ? hrtf->shortReversedIr (index, ear) : hrtf->reversedIr (index, ear);
+    return hrtf->reversedIr (index, ear);
 }
 
 void Placer::pushWindow (const float* in, int n) noexcept
@@ -160,8 +152,7 @@ void Placer::process (const float* in, float* left, float* right, int n) noexcep
     // Constant-power pan law: -1..+1 -> 0..pi/2. Recomputed only when the pan moves, and only
     // while the stereo pan is heard (a turning head moves it all the time).
     float gainL[History::maxBlock] {}, gainR[History::maxBlock] {};
-    const auto needStereo = quality == Binaural::panOnly || mode == OutputMode::stereo
-                         || (modeFade < 1.0f && fadingFrom == OutputMode::stereo);
+    const auto needStereo = mode == OutputMode::stereo || (modeFade < 1.0f && fadingFrom == OutputMode::stereo);
 
     if (! needStereo)
     {
@@ -179,16 +170,6 @@ void Placer::process (const float* in, float* left, float* right, int n) noexcep
 
         gainL[i] = panLeft;
         gainR[i] = panRight;
-    }
-
-    if (quality == Binaural::panOnly)
-    {
-        for (int i = 0; i < n; ++i)
-        {
-            left[i] += in[i] * gainL[i];
-            right[i] += in[i] * gainR[i];
-        }
-        return;
     }
 
     const auto needBinaural = mode == OutputMode::binaural || (modeFade < 1.0f && fadingFrom == OutputMode::binaural);

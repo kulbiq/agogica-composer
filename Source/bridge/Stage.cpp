@@ -5,11 +5,9 @@ namespace stage
 {
 namespace
 {
-// Shared by every instance (each keeps its own copy). outputMode is a listening setting,
-// not part of scenes (ComposerProcessor::sceneParams); hall is.
-const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "hall",
-                                      "proReflections", "proDiffusion", "proFloor", "proBrightness", "proReverb",
-                                      "proDecay", "proPreDelay", "proDistanceLaw", "proAir" };
+// Shared by every instance (each keeps its own copy). outputMode and the Pro values are
+// project-wide, not part of scenes (ComposerProcessor::sceneParams); room and listener are.
+const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "proDistanceLaw", "proAir" };
 const juce::StringArray playerParams { "playerX", "playerY" };
 
 // Positions are stored on a 1 cm grid; the float range conversion leaves residue like -5.6e-7.
@@ -173,12 +171,6 @@ juce::var snapshot (ComposerProcessor& self)
 
     o->setProperty ("scene", self.getScene());
     o->setProperty ("outputMode", self.getParam ("outputMode") > 0.5f ? "binaural" : "stereo");
-    o->setProperty ("hall", (int) self.getParam ("hall"));
-
-    juce::Array<juce::var> hallNames;
-    for (const auto& h : halls)
-        hallNames.add (juce::String (h.name));
-    o->setProperty ("halls", hallNames);
 
     // Without a valid licence the plugin passes audio through; the UI says why.
     const auto licence = self.licence->current();

@@ -4,13 +4,5 @@ listenerY v1 "Listener Y" -25.0000..25.0000 step 0.0100 skew 1.0000 default 0.00
 playerX v1 "Player X" -25.0000..25.0000 step 0.0100 skew 1.0000 default 0.0000
 playerY v1 "Player Y" -25.0000..25.0000 step 0.0100 skew 1.0000 default 5.0000
 outputMode v1 "Output" 0.0000..1.0000 step 1.0000 skew 1.0000 default 0.0000 choices Stereo|Binaural
-hall v1 "Hall" 0.0000..4.0000 step 1.0000 skew 1.0000 default 2.0000 choices Dry|Studio|Chamber|Concert hall|Church
-proReflections v1 "Reflections" -24.0000..6.0000 step 0.1000 skew 1.0000 default 0.0000
-proDiffusion v1 "Diffusion" 0.0000..1.0000 step 0.0100 skew 1.0000 default 1.0000
-proFloor v1 "Floor reflection" 0.0000..1.0000 step 0.0100 skew 1.0000 default 1.0000
-proBrightness v1 "Brightness" -12.0000..12.0000 step 0.1000 skew 1.0000 default 0.0000
-proReverb v1 "Reverb" -24.0000..6.0000 step 0.1000 skew 1.0000 default 0.0000
-proDecay v1 "Decay" 0.5000..2.0000 step 0.0000 skew 0.6309 default 1.0000
-proPreDelay v1 "Pre-delay" 0.5000..2.0000 step 0.0000 skew 0.6309 default 1.0000
 proDistanceLaw v1 "Distance law" 0.0000..6.0206 step 0.0000 skew 1.0000 default 2.0069
 proAir v1 "Air absorption" 0.0000..2.0000 step 0.0100 skew 1.0000 default 1.0000

@@ -28,26 +28,16 @@ public:
     // one: a head tracker's jitter around x.5 degrees would otherwise fade back and forth.
     static constexpr float hysteresisDegrees = 0.35f;
 
-    // How binaural mode places the signal: the full HRIR, the ~2 ms HRIR (reflections),
-    // or just the stereo pan (weak late reflections, where direction detail isn't heard).
-    enum class Binaural { full, shortHrir, panOnly };
-
     // Allocates. Not on the audio thread.
-    void prepare (double sampleRate, Binaural binauralQuality = Binaural::full);
+    void prepare (double sampleRate);
 
     // Azimuth in degrees (0 = ahead, +90 = right, ±180 = behind). Stereo folds rear
     // angles to the front; binaural doesn't. `snap` jumps without a fade.
     void setDirection (float azimuthDegrees, bool snap) noexcept;
     void setMode (OutputMode) noexcept;
 
-    // Forgets the recent input (the HRIR window): nothing from before is heard again.
-    void clear() noexcept;
-
     // Adds the placed block (n <= History::maxBlock) to `left` / `right`.
     void process (const float* in, float* left, float* right, int n) noexcept;
-
-    // One sample (stages that still run one sample at a time).
-    void process (float in, float& left, float& right) noexcept { process (&in, &left, &right, 1); }
 
 private:
     void pushWindow (const float* in, int n) noexcept;
@@ -58,7 +48,6 @@ private:
     float panLeft = 0.0f, panRight = 0.0f, lastPan = 2.0f; // gains for `lastPan` (2 = none yet)
 
     const Hrtf* hrtf = nullptr;
-    Binaural quality = Binaural::full;
     int taps = 0;
     dsp::ConvolveTwo convolve = nullptr;
 

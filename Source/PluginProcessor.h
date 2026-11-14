@@ -47,7 +47,7 @@ public:
     float readInputLevel (juce::uint32 nowMs);
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-    static inline const juce::StringArray sceneParams { "roomSize", "listenerX", "listenerY", "playerX", "playerY", "hall" };
+    static inline const juce::StringArray sceneParams { "roomSize", "listenerX", "listenerY", "playerX", "playerY" };
 
     // Stage data (message thread). Positions are unclamped, in metres.
     float getParam (const juce::String& paramId) const  { return state.getRawParameterValue (paramId)->load(); }
@@ -97,14 +97,6 @@ private:
         std::atomic<float>* playerX;
         std::atomic<float>* playerY;
         std::atomic<float>* outputMode;
-        std::atomic<float>* hall;
-        std::atomic<float>* proReflections;
-        std::atomic<float>* proDiffusion;
-        std::atomic<float>* proFloor;
-        std::atomic<float>* proBrightness;
-        std::atomic<float>* proReverb;
-        std::atomic<float>* proDecay;
-        std::atomic<float>* proPreDelay;
         std::atomic<float>* proDistanceLaw;
         std::atomic<float>* proAir;
     };
@@ -115,14 +107,6 @@ private:
                                     state.getRawParameterValue ("playerX"),
                                     state.getRawParameterValue ("playerY"),
                                     state.getRawParameterValue ("outputMode"),
-                                    state.getRawParameterValue ("hall"),
-                                    state.getRawParameterValue ("proReflections"),
-                                    state.getRawParameterValue ("proDiffusion"),
-                                    state.getRawParameterValue ("proFloor"),
-                                    state.getRawParameterValue ("proBrightness"),
-                                    state.getRawParameterValue ("proReverb"),
-                                    state.getRawParameterValue ("proDecay"),
-                                    state.getRawParameterValue ("proPreDelay"),
                                     state.getRawParameterValue ("proDistanceLaw"),
                                     state.getRawParameterValue ("proAir") };
 
@@ -130,8 +114,8 @@ private:
     History history;
 
     // The processing chain: every stage reads `history` and adds its stereo output.
-    // Plug a stage in or out here. For now the direct sound only: EarlyReflections and ReverbTail
-    // are out of the chain until they are rebuilt for CPU (their classes and parameters stay).
+    // Plug a stage in or out here. For now the direct sound alone (reflections and a reverb
+    // tail come back once they are affordable).
     std::tuple<DirectPath> stages;
 
     // Samples of silent input so far; a track silent for longer than the tail skips all work.

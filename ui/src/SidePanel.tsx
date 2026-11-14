@@ -86,20 +86,6 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
           format={(v) => `${v} m`}
           selfId={selfId}
         />
-        <label className={styles.field}>
-          <span className={styles.label}>Hall</span>
-          <select
-            className={styles.select}
-            value={stage.hall}
-            onChange={(e) => setParams(selfId, { hall: Number(e.target.value) })}
-          >
-            {stage.halls.map((name, i) => (
-              <option key={name} value={i}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
       </section>
 
       {node && (

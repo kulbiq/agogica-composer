@@ -201,7 +201,9 @@ public:
 
     void processSample (const History& history, float& left, float& right) noexcept
     {
-        airState += airCoefficient.getNextValue() * (delay.read (history) - airState);
+        float delayed;
+        delay.read (history, &delayed, 1); // one sample at a time, as it was
+        airState += airCoefficient.getNextValue() * (delayed - airState);
         placer.process (airState * gain.getNextValue(), left, right);
     }
 

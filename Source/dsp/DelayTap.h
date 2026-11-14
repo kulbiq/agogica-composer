@@ -38,11 +38,8 @@ public:
         }
     }
 
-    // Call once per sample, after the History has been written.
-    float read (const History& history) noexcept { return readOne (history, 0); }
-
-    // The last n samples written to the History (n <= History::maxBlock), oldest first: the
-    // same as n calls of read() interleaved with the writes.
+    // The last n samples written to the History (n <= History::maxBlock), oldest first. Call
+    // after each block is written.
     void read (const History& history, float* out, int n) noexcept
     {
         for (int i = 0; i < n; ++i)

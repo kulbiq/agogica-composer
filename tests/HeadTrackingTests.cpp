@@ -3,7 +3,6 @@
 #include <catch2/generators/catch_generators.hpp>
 #include "../Source/PluginProcessor.h"
 #include "../Source/dsp/DirectPath.h"
-#include "../Source/dsp/EarlyReflections.h"
 #include "TrackingFileOverride.h"
 
 using Catch::Matchers::WithinAbs;
@@ -237,32 +236,33 @@ TEST_CASE ("head yaw: tracker jitter around a half degree doesn't switch HRIRs b
     CHECK (render (moved) != render (still));
 }
 
-TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees (reflections included)")
+TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees")
 {
-    // Stages place sources at azimuth - yaw, which can leave -180..180: a player behind and a
-    // head turned far must still put every reflection (the pan-only corners too) on its side.
+    // The direct path places the player at azimuth - yaw, which can leave -180..180: a player
+    // behind and a head turned far must still land on the right side.
     auto render = [] (float headYaw)
     {
         History history;
         history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
-        EarlyReflections reflections;
-        reflections.prepare (48000.0);
+        DirectPath path;
+        path.prepare (48000.0);
 
         Acoustics a;
         a.mode = OutputMode::binaural;
-        a.hall = &halls.back(); // Church: strong corner reflections
         a.player = { 3.0f, -6.0f };
         a.headYaw = headYaw;
-        reflections.setAcoustics (a);
+        path.setAcoustics (a);
 
         juce::Random rng (8);
         std::vector<float> out;
-        for (int i = 0; i < 9600; ++i)
+        for (int start = 0; start < 9600; start += History::maxBlock)
         {
-            float l = 0.0f, r = 0.0f;
-            history.write (rng.nextFloat() - 0.5f);
-            reflections.processSample (history, l, r);
-            out.push_back (l), out.push_back (r);
+            float l[History::maxBlock] {}, r[History::maxBlock] {};
+            for (int i = 0; i < History::maxBlock; ++i)
+                history.write (rng.nextFloat() - 0.5f);
+            path.process (history, l, r, History::maxBlock);
+            for (int i = 0; i < History::maxBlock; ++i)
+                out.push_back (l[i]), out.push_back (r[i]);
         }
         return out;
     };
@@ -273,15 +273,16 @@ TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees (reflec
     for (size_t i = 0; i < a.size(); ++i)
         REQUIRE_THAT (a[i], WithinAbs (b[i], 1e-5));
 
-    SECTION ("a pan-only placer folds a wrapped angle to the correct side")
+    SECTION ("the stereo pan folds a wrapped angle to the correct side")
     {
         auto gains = [] (float azimuth)
         {
             Placer placer;
-            placer.prepare (48000.0, Placer::Binaural::panOnly);
+            placer.prepare (48000.0);
             placer.setDirection (azimuth, true);
+            const float in = 1.0f;
             float l = 0.0f, r = 0.0f;
-            placer.process (1.0f, l, r);
+            placer.process (&in, &l, &r, 1);
             return std::pair { l, r };
         };
 
@@ -301,7 +302,6 @@ TEST_CASE ("head tracking: live only in binaural, never in exports", "[integrati
 
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
-    set (p, "hall", 0.0f);    // the direct sound alone
     set (p, "playerY", 5.0f); // straight ahead
     set (p, "outputMode", 1.0f);
 
