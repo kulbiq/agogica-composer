@@ -249,12 +249,15 @@ TEST_CASE ("CPU: 32 players, whole chain", "[.perf]")
                            << ", " << sampleRate << " Hz: " << juce::String (load * 100.0, 1) << " % of one core");
 
     // Regression guards per platform (multi-core hosts spread tracks over cores). A turning head
-    // costs ~1.5x in binaural (M4 Pro: 22 -> 33 % at 48 kHz, 63 -> 104 % at 96 kHz).
+    // costs ~1.5x in binaural (M4 Pro: 22 -> 33 % at 48 kHz, 63 -> 104 % at 96 kHz), ~1.7x on
+    // the Windows laptop.
     const auto rate48k = sampleRate < 50000.0;
    #if JUCE_WINDOWS
-    // ponytail: from the i5-10210U figures in CLAUDE.md (38/73 % at 48 kHz, 73/197 % at 96 kHz) with
-    // margin, x1.6 for a turning head; re-measure there.
-    CHECK (load < (rate48k ? 1.0 : 2.6) * (headTurning ? 1.6 : 1.0));
+    // i5-10210U laptop on mains power (2026-11-14, median of 3 runs): stereo / binaural / binaural
+    // with a turning head 40 / 75 / 128 % at 48 kHz, 81 / 212 / 375 % at 96 kHz; ~30 % margin.
+    const auto stereo = mode < 0.5f;
+    CHECK (load < (rate48k ? (stereo ? 0.52 : headTurning ? 1.67 : 0.97)
+                           : (stereo ? 1.05 : headTurning ? 4.9 : 2.76)));
    #else
     CHECK (load < (rate48k ? 0.30 : 0.90) * (headTurning ? 1.4 : 1.0));
    #endif
