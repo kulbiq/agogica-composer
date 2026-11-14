@@ -28,8 +28,9 @@ private:
 
     void timerCallback() override;
 
-    // Opens an app by bundle id (`open -b`) without waiting on the host's message thread:
-    // the timer completes the call when `open` has finished (or after 5 s), true if it worked.
+    // Opens an app by bundle id without waiting on the host's message thread. macOS: `open -b`,
+    // and the timer completes the call when `open` has finished (or after 5 s), true if it worked.
+    // Windows: the installed app's exe (bridge/Apps.h), started at once; only the Hub for now.
     // `ifFailed` runs before completing with false.
     void openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion,
                   std::function<void()> ifFailed = {});

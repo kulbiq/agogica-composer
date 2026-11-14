@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "bridge/Stage.h"
 #include "bridge/Mime.h"
+#include "bridge/Apps.h"
 #include <BinaryData.h>
 
 namespace
@@ -151,23 +152,28 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 void ComposerEditor::openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion complete,
                               std::function<void()> ifFailed)
 {
-    auto process = std::make_unique<juce::ChildProcess>();
    #if JUCE_MAC
-    const auto started = process->start (juce::StringArray { "/usr/bin/open", "-b", bundleId });
-   #else
-    juce::ignoreUnused (bundleId);
-    const auto started = false; // ponytail: no launcher on Windows yet (Hub plan 7b)
-   #endif
-
-    if (! started)
+    if (auto process = std::make_unique<juce::ChildProcess>(); process->start (juce::StringArray { "/usr/bin/open", "-b", bundleId }))
     {
-        if (ifFailed)
-            ifFailed();
-        complete (false);
+        opening.push_back ({ std::move (process), std::move (complete), std::move (ifFailed), juce::Time::getMillisecondCounter() });
         return;
     }
+   #elif JUCE_WINDOWS
+    // ShellExecute returns once the app's process exists (as the browser fallback does): nothing
+    // to wait for. A ChildProcess would pass the host's inheritable handles on to the app, and
+    // the app keeps running, so the timer would count it as failed.
+    if (const auto exe = apps::windowsExecutable (bundleId); exe.existsAsFile() && exe.startAsProcess())
+    {
+        complete (true);
+        return;
+    }
+   #else
+    juce::ignoreUnused (bundleId);
+   #endif
 
-    opening.push_back ({ std::move (process), std::move (complete), std::move (ifFailed), juce::Time::getMillisecondCounter() });
+    if (ifFailed)
+        ifFailed();
+    complete (false);
 }
 
 void ComposerEditor::finishOpening()
