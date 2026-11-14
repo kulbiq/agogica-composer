@@ -64,10 +64,11 @@ void EngineHost::post (juce::DynamicObject::Ptr payload)
 {
     payload->setProperty ("engine", engineName);
 
-    // Development: AGOGICA_TRACKER_LOG=/path logs every estimate.
+    // Development: AGOGICA_TRACKER_LOG=/path logs every estimate, after the time in ms (to 0.1 ms:
+    // with 0 decimal places JUCE writes 1.81068e+08, a resolution of a second).
     static const juce::File log (juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_LOG", {}));
     if (log != juce::File())
-        log.appendText (juce::String (juce::Time::getMillisecondCounterHiRes(), 0) + " " + juce::JSON::toString (juce::var (payload.get()), true) + "\n");
+        log.appendText (juce::String (juce::Time::getMillisecondCounterHiRes(), 1) + " " + juce::JSON::toString (juce::var (payload.get()), true) + "\n");
     {
         const juce::ScopedLock sl (postLock);
         pending = std::move (payload);
