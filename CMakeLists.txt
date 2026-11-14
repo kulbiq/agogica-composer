@@ -276,20 +276,29 @@ if(APPLE OR WIN32)
     set(TRACKER_MODELS_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-models.stamp)
     set(TRACKER_MODEL_FILES ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx
         ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx)
-    # ponytail: Windows has no python3 by default - the two .onnx files are put in tracker/models
-    # by hand; CI needs a fetch step of its own. Either way their hashes are checked.
+    set(TRACKER_CHECK_MODELS ${CMAKE_COMMAND} -P ${TRACKER_MODELS_DIR}/check_models.cmake)
+    # Fetched only while a file is missing. ponytail: Windows has no python3 by default - the two
+    # .onnx files are put in tracker/models by hand (the check names a missing one); CI needs a
+    # fetch step of its own.
     if(WIN32)
-        set(TRACKER_FETCH_MODELS ${CMAKE_COMMAND} -E true)
+        set(TRACKER_FETCH_MODELS ${TRACKER_CHECK_MODELS})
     else()
         set(TRACKER_FETCH_MODELS python3 ${TRACKER_MODELS_DIR}/fetch_models.py)
     endif()
     add_custom_command(
-        OUTPUT ${TRACKER_MODELS_STAMP}
+        OUTPUT ${TRACKER_MODEL_FILES}
         COMMAND ${TRACKER_FETCH_MODELS}
-        COMMAND ${CMAKE_COMMAND} -P ${TRACKER_MODELS_DIR}/check_models.cmake
-        COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_MODELS_STAMP}
-        DEPENDS ${TRACKER_MODELS_DIR}/fetch_models.py ${TRACKER_MODELS_DIR}/check_models.cmake
         COMMENT "Fetching tracker models"
+        VERBATIM)
+    # Checked again whenever a file is replaced (hashing both takes ~0.7 s, too long for every
+    # build). A file copied in with an older date isn't seen as replaced: the POST_BUILD copy
+    # below checks them too, so no model reaches the app unchecked.
+    add_custom_command(
+        OUTPUT ${TRACKER_MODELS_STAMP}
+        COMMAND ${TRACKER_CHECK_MODELS}
+        COMMAND ${CMAKE_COMMAND} -E touch ${TRACKER_MODELS_STAMP}
+        DEPENDS ${TRACKER_MODEL_FILES} ${TRACKER_MODELS_DIR}/check_models.cmake
+        COMMENT "Checking tracker models"
         VERBATIM)
     add_custom_target(ComposerTrackerModels DEPENDS ${TRACKER_MODELS_STAMP})
     add_dependencies(ComposerTracker ComposerTrackerModels)
@@ -307,6 +316,7 @@ if(APPLE OR WIN32)
     add_custom_command(TARGET ComposerTracker POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${TRACKER_RESOURCES}/ui"
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${TRACKER_UI_DIR}/dist "${TRACKER_RESOURCES}/ui"
+        COMMAND ${TRACKER_CHECK_MODELS}
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${TRACKER_RESOURCES}/models"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${TRACKER_RESOURCES}/models"
         COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_MODEL_FILES} ${TRACKER_MODELS_DIR}/MODELS.md "${TRACKER_RESOURCES}/models"
