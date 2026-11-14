@@ -198,6 +198,45 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
         REQUIRE_THAT (turned[i], WithinAbs (ahead[i], 1e-3));
 }
 
+TEST_CASE ("head yaw: tracker jitter around a half degree doesn't switch HRIRs back and forth")
+{
+    // The HRIRs are 1 degree apart; without hysteresis a yaw wobbling around 14.5 degrees would
+    // start a 20 ms fade between 14 and 15 on every poll. A real move still switches.
+    auto render = [] (const std::vector<float>& azimuths) // one azimuth per 480-sample block
+    {
+        Placer placer;
+        placer.prepare (48000.0);
+        placer.setMode (OutputMode::binaural);
+        placer.setDirection (azimuths.front(), true);
+
+        juce::Random rng (4);
+        std::vector<float> out;
+        for (const auto azimuth : azimuths)
+        {
+            placer.setDirection (azimuth, false);
+            for (int start = 0; start < 480; start += History::maxBlock)
+            {
+                float in[History::maxBlock], l[History::maxBlock] {}, r[History::maxBlock] {};
+                for (auto& x : in)
+                    x = rng.nextFloat() - 0.5f;
+                placer.process (in, l, r, History::maxBlock);
+                out.insert (out.end(), l, l + History::maxBlock);
+                out.insert (out.end(), r, r + History::maxBlock);
+            }
+        }
+        return out;
+    };
+
+    std::vector<float> still (60, 14.2f), jitter, moved (60, 14.2f);
+    for (int b = 0; b < 60; ++b) // after the first 40 ms (the fade in from stereo, where the pan is heard)
+        jitter.push_back (b < 4 || b % 2 == 0 ? 14.2f : (b % 4 == 1 ? 14.51f : 14.84f));
+    for (int b = 30; b < 60; ++b)
+        moved[(size_t) b] = 14.9f; // 0.9 degree past 14: the next HRIR
+
+    CHECK (render (jitter) == render (still));
+    CHECK (render (moved) != render (still));
+}
+
 TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees (reflections included)")
 {
     // Stages place sources at azimuth - yaw, which can leave -180..180: a player behind and a

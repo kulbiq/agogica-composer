@@ -24,6 +24,10 @@ public:
     static constexpr double fadeSeconds = 0.02;
     static constexpr int blendDegrees = 5;
 
+    // The HRIR changes only once the angle is this far past the half-way point to the next
+    // one: a head tracker's jitter around x.5 degrees would otherwise fade back and forth.
+    static constexpr float hysteresisDegrees = 0.35f;
+
     // How binaural mode places the signal: the full HRIR, the ~2 ms HRIR (reflections),
     // or just the stereo pan (weak late reflections, where direction detail isn't heard).
     enum class Binaural { full, shortHrir, panOnly };

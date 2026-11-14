@@ -42,7 +42,11 @@ void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
     // Callers subtract the head's yaw, so any angle can arrive; the stereo fold needs -180..180.
     azimuthDegrees = std::remainder (azimuthDegrees, 360.0f);
     const auto newPan = juce::jlimit (-1.0f, 1.0f, geometry::foldedAzimuth (azimuthDegrees) / 90.0f);
-    targetDirection = Hrtf::nearestIndex (azimuthDegrees);
+
+    // Hysteresis: keep the current HRIR until the angle is clearly nearer another one.
+    if (const auto off = std::abs (std::remainder (azimuthDegrees - (float) targetDirection, 360.0f));
+        snap || off > 0.5f + hysteresisDegrees)
+        targetDirection = Hrtf::nearestIndex (azimuthDegrees);
 
     if (snap)
     {
