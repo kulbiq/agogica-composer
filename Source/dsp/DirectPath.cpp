@@ -44,8 +44,17 @@ void DirectPath::setTarget (float azimuthDegrees, float delaySeconds, float newG
     airCoefficient.setTargetValue (coefficient);
 }
 
-void DirectPath::processSample (const History& history, float& left, float& right) noexcept
+void DirectPath::process (const History& history, float* left, float* right, int n) noexcept
 {
-    airState += airCoefficient.getNextValue() * (delay.read (history) - airState);
-    placer.process (airState * gain.getNextValue(), left, right);
+    alignas (32) float signal[History::maxBlock];
+    delay.read (history, signal, n);
+
+    // The air filter's state carries from sample to sample; cheap next to the placing.
+    for (int i = 0; i < n; ++i)
+    {
+        airState += airCoefficient.getNextValue() * (signal[i] - airState);
+        signal[i] = airState * gain.getNextValue();
+    }
+
+    placer.process (signal, left, right, n);
 }

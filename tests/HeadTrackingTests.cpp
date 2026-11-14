@@ -183,7 +183,7 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
         {
             float l = 0.0f, r = 0.0f;
             history.write (rng.nextFloat() - 0.5f);
-            path.processSample (history, l, r);
+            path.process (history, &l, &r, 1);
             out.push_back (l), out.push_back (r);
         }
         return out;

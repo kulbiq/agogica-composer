@@ -4,24 +4,29 @@
 #include <cmath>
 #include <algorithm>
 
-// The player's recent mono input, written once per sample by the processor. Every stage
-// reads it at any (fractional) delay - there is no read pointer, so stages don't depend
-// on each other or on their order.
+// The player's mono input, written by the processor up to `maxBlock` samples at a time before
+// the stages process those samples as one block. Every stage reads it at any (fractional)
+// delay - there is no read pointer, so stages don't depend on each other or on their order.
 class History
 {
 public:
+    // The most samples written at once (a block fits the L1 cache, and one HRIR coefficient
+    // serves every output of it).
+    static constexpr int maxBlock = 32;
+
     // Allocates. Not on the audio thread.
     void prepare (int maxDelaySamples)
     {
         size = 1;
-        while (size < maxDelaySamples + 8)
+        while (size < maxDelaySamples + 8 + maxBlock)
             size <<= 1;
 
         buffer.assign ((size_t) size, 0.0f);
         pos = 0;
     }
 
-    int maxDelay() const noexcept { return size - 8; }
+    // Reads within a block reach up to maxBlock - 1 samples further back than their delay.
+    int maxDelay() const noexcept { return size - 8 - maxBlock; }
     bool isPrepared() const noexcept { return size > 0; }
 
     void write (float sample) noexcept
@@ -52,10 +57,13 @@ public:
         return tap;
     }
 
-    float read (const Tap& tap) const noexcept
+    // `age`: how many samples before the newest one this reading is for (in a block of n
+    // samples just written, sample i is n - 1 - i samples old).
+    float read (const Tap& tap, int age = 0) const noexcept
     {
-        return tap.weights[0] * at (tap.base) + tap.weights[1] * at (tap.base + 1)
-             + tap.weights[2] * at (tap.base + 2) + tap.weights[3] * at (tap.base + 3);
+        const auto base = tap.base + age;
+        return tap.weights[0] * at (base) + tap.weights[1] * at (base + 1)
+             + tap.weights[2] * at (base + 2) + tap.weights[3] * at (base + 3);
     }
 
     // The sample written `delay` samples before the newest one (0 = newest), interpolated.

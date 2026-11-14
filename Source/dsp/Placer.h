@@ -2,16 +2,27 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "Acoustics.h"
+#include "Fir.h"
+#include "History.h"
 #include "Hrtf.h"
 
 // Places one mono signal at an azimuth: a constant-power stereo pan (speakers) or an
 // HRTF (binaural, headphones). Direction and mode changes crossfade over 20 ms;
 // neighbouring HRIRs (1 degree apart) are nearly identical, so chained direction fades
 // during a drag don't flutter.
+//
+// Works on blocks of up to History::maxBlock samples. A direction fade over a few degrees (a
+// turning head, a dragged player: nearly every fade) convolves once per ear with a blend of the
+// two HRIRs, the blend stepping once per block: fading the two convolutions' outputs (as larger
+// jumps still do) at half the cost, since convolution is linear. The steps put it within 1-2 %
+// RMS of the per-sample fade for white noise, whatever the step up to 5 degrees (neighbouring
+// SADIE II responses differ mostly in the highs). On larger jumps they would be heard as a
+// zipper: +36 % sample-to-sample change on a 90-degree jump of a 440 Hz tone.
 class Placer
 {
 public:
     static constexpr double fadeSeconds = 0.02;
+    static constexpr int blendDegrees = 5;
 
     // How binaural mode places the signal: the full HRIR, the ~2 ms HRIR (reflections),
     // or just the stereo pan (weak late reflections, where direction detail isn't heard).
@@ -26,26 +37,39 @@ public:
     void setMode (OutputMode) noexcept;
 
     // Forgets the recent input (the HRIR window): nothing from before is heard again.
-    void clear() noexcept { std::fill (recent.begin(), recent.end(), 0.0f); }
+    void clear() noexcept;
 
-    // Adds the placed sample to `left` / `right`.
-    void process (float in, float& left, float& right) noexcept;
+    // Adds the placed block (n <= History::maxBlock) to `left` / `right`.
+    void process (const float* in, float* left, float* right, int n) noexcept;
+
+    // One sample (stages that still run one sample at a time).
+    void process (float in, float& left, float& right) noexcept { process (&in, &left, &right, 1); }
 
 private:
-    void binaural (int index, float& left, float& right) const noexcept;
+    void pushWindow (const float* in, int n) noexcept;
+    void binaural (int n, float* left, float* right) noexcept; // sets, doesn't add
+    const float* ir (int direction, int ear) const noexcept;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> pan;
     float panLeft = 0.0f, panRight = 0.0f, lastPan = 2.0f; // gains for `lastPan` (2 = none yet)
 
-    // The input, stored twice so the last `taps` samples are always contiguous.
     const Hrtf* hrtf = nullptr;
     Binaural quality = Binaural::full;
     int taps = 0;
-    std::vector<float> recent;
-    int recentPos = 0;
+    dsp::ConvolveTwo convolve = nullptr;
+
+    // The HRIR input, oldest first: window[end - taps .. end) are the latest `taps` samples.
+    // Written only while binaural is heard; spare room after `end` lets runs of outputs be
+    // computed 8 at a time, and lets the latest samples move to the front only now and then.
+    std::vector<float> window;
+    int end = 0;
+    int filled = 0;    // samples written since the window was last emptied (up to `taps`)
+    bool live = true;  // the window holds the input up to now (false after a stretch in stereo)
+
     int direction = 0, nextDirection = 0, targetDirection = 0;
-    float directionFade = 1.0f, fadeStep = 0.0f;
+    int fadeLength = 1, fadePosition = 1; // direction fade, in samples; done when position >= length
+    std::vector<float> blended;           // the two HRIRs mixed for the current block (left, right)
 
     OutputMode mode = OutputMode::stereo, fadingFrom = OutputMode::stereo;
-    float modeFade = 1.0f; // 1 = not switching
+    float modeFade = 1.0f, fadeStep = 0.0f; // 1 = not switching
 };

@@ -30,13 +30,16 @@ struct Rig
 
     void process (const float* input, float* left, float* right, int numSamples)
     {
-        for (int i = 0; i < numSamples; ++i)
+        for (int start = 0; start < numSamples; start += History::maxBlock)
         {
-            history.write (input[i]);
-            float l = 0.0f, r = 0.0f;
-            path.processSample (history, l, r);
-            left[i] = l;
-            right[i] = r;
+            const auto n = std::min (History::maxBlock, numSamples - start);
+
+            for (int i = start; i < start + n; ++i)
+                history.write (input[i]);
+
+            std::fill (left + start, left + start + n, 0.0f);
+            std::fill (right + start, right + start + n, 0.0f);
+            path.process (history, left + start, right + start, n);
         }
     }
 };

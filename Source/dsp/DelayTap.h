@@ -39,7 +39,43 @@ public:
     }
 
     // Call once per sample, after the History has been written.
-    float read (const History& history) noexcept
+    float read (const History& history) noexcept { return readOne (history, 0); }
+
+    // The last n samples written to the History (n <= History::maxBlock), oldest first: the
+    // same as n calls of read() interleaved with the writes.
+    void read (const History& history, float* out, int n) noexcept
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            // Holding one delay with nothing pending (nearly always): what read() would do for
+            // each remaining sample, without its checks.
+            if (fade >= 1.0f && std::abs (target - lastTarget) <= 1.0e-3f && std::abs (target - from) <= 1.0e-3f)
+            {
+                stillFor = std::min (stillFor + (n - i), settleSamples);
+                waitingFor = 0;
+
+                if (! juce::exactlyEqual (from, fromTapDelay))
+                    fromTap = history.tapAt (fromTapDelay = from);
+
+                for (; i < n; ++i)
+                    out[i] = history.read (fromTap, n - 1 - i);
+
+                return;
+            }
+
+            out[i] = readOne (history, n - 1 - i);
+        }
+    }
+
+    // The next target is taken as-is (after silence, when there's nothing to fade).
+    void jumpToTarget() noexcept { snap = true; }
+
+    // The delay currently heard (the one being faded from, during a fade).
+    float current() const noexcept { return from; }
+
+private:
+    // One sample, `age` samples before the newest one written.
+    float readOne (const History& history, int age) noexcept
     {
         // Is the source still moving?
         if (std::abs (target - lastTarget) > 1.0e-3f)
@@ -73,14 +109,14 @@ public:
             fromTap = history.tapAt (fromTapDelay = from);
 
         if (fade >= 1.0f)
-            return history.read (fromTap);
+            return history.read (fromTap, age);
 
         if (! juce::exactlyEqual (to, toTapDelay))
             toTap = history.tapAt (toTapDelay = to);
 
         fade = std::min (1.0f, fade + fadeStep);
-        const auto a = history.read (fromTap);
-        const auto b = history.read (toTap);
+        const auto a = history.read (fromTap, age);
+        const auto b = history.read (toTap, age);
 
         if (fade >= 1.0f)
             from = to;
@@ -88,13 +124,6 @@ public:
         return a + dsp::fadeGain (fade) * (b - a);
     }
 
-    // The next target is taken as-is (after silence, when there's nothing to fade).
-    void jumpToTarget() noexcept { snap = true; }
-
-    // The delay currently heard (the one being faded from, during a fade).
-    float current() const noexcept { return from; }
-
-private:
     float from = 0.0f, to = 0.0f, target = 0.0f, lastTarget = 0.0f;
     History::Tap fromTap, toTap; // History::tapAt (from / to), kept while they hold
     float fromTapDelay = -1.0f, toTapDelay = -1.0f;

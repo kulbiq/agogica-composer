@@ -282,16 +282,20 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     auto* outL = buffer.getWritePointer (0);
     auto* outR = buffer.getWritePointer (1);
 
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    // A few dozen samples at a time: the input into the History, then each stage over all of them.
+    for (int start = 0; start < buffer.getNumSamples(); start += History::maxBlock)
     {
+        const auto n = std::min (History::maxBlock, buffer.getNumSamples() - start);
+
         // A stereo input is summed to mono (read before the outputs overwrite it).
-        history.write (numInputs > 1 ? 0.5f * (inL[i] + inR[i]) : inL[i]);
+        for (int i = start; i < start + n; ++i)
+            history.write (numInputs > 1 ? 0.5f * (inL[i] + inR[i]) : inL[i]);
 
-        float left = 0.0f, right = 0.0f;
-        std::apply ([&] (auto&... stage) { (stage.processSample (history, left, right), ...); }, stages);
+        alignas (32) float left[History::maxBlock] {}, right[History::maxBlock] {};
+        std::apply ([&] (auto&... stage) { (stage.process (history, left, right, n), ...); }, stages);
 
-        outL[i] = left;
-        outR[i] = right;
+        std::copy (left, left + n, outL + start);
+        std::copy (right, right + n, outR + start);
     }
 }
 

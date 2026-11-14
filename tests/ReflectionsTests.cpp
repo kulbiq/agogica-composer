@@ -4,7 +4,6 @@
 #include "../Source/PluginProcessor.h"
 #include "../Source/dsp/EarlyReflections.h"
 #include "../Source/dsp/ReverbTail.h"
-#include "TrackingFileOverride.h"
 
 using Catch::Matchers::WithinAbs;
 using namespace geometry;
@@ -149,7 +148,7 @@ TEST_CASE ("reflections don't comb-filter the sound (early colouration)")
         {
             history.write (i == 0 ? 1.0f : 0.0f);
             float l = 0.0f, r = 0.0f;
-            direct.processSample (history, l, r);
+            direct.process (history, &l, &r, 1);
             reflections.processSample (history, l, r);
             tail.processSample (history, l, r);
             ir[i] = l;
@@ -191,86 +190,6 @@ TEST_CASE ("the Dry hall has no reflections at all")
         REQUIRE_THAT (l[i], WithinAbs (0.0, 0.0));
         REQUIRE_THAT (r[i], WithinAbs (0.0, 0.0));
     }
-}
-
-// Release only: build/release/ComposerTests "[perf]" -s
-TEST_CASE ("CPU: 32 players, the processor's chain", "[.perf]")
-{
-   #if JUCE_DEBUG
-    SKIP ("CPU limits apply to Release builds"); // (the body below is Release only: no unreachable code)
-   #else
-    const auto sampleRate = GENERATE (48000.0, 96000.0);
-    // A turning head (binaural, live) re-places every source all the time: direction fades
-    // double the HRIR convolutions while they run.
-    const auto [mode, headTurning] = GENERATE (table<float, bool> ({ { 0.0f, false }, { 1.0f, false }, { 1.0f, true } }));
-    constexpr int players = 32, block = 512;
-    constexpr double seconds = 10.0;
-
-    const auto trackingFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("composer-perf-head-tracking");
-    trackingFile.deleteFile();
-    const TrackingFileOverride trackingOverride (trackingFile);
-    headtracking::Writer head (trackingFile);
-    juce::ScopedJuceInitialiser_GUI juce;
-
-    std::vector<std::unique_ptr<ComposerProcessor>> instances;
-    for (int i = 0; i < players; ++i)
-    {
-        auto& p = *instances.emplace_back (std::make_unique<ComposerProcessor>());
-        auto set = [&] (const char* id, float v)
-        {
-            auto* param = p.state.getParameter (id);
-            param->setValueNotifyingHost (param->convertTo0to1 (v));
-        };
-        set ("outputMode", mode);
-        set ("hall", 3.0f);
-        set ("playerX", (float) (i % 8) * 2.0f - 7.0f);
-        set ("playerY", (float) (i / 8) * 2.0f + 3.0f);
-        p.setPlayConfigDetails (2, 2, sampleRate, block);
-        p.prepareToPlay (sampleRate, block);
-    }
-
-    juce::AudioBuffer<float> buffer (2, block);
-    juce::MidiBuffer midi;
-    juce::Random rng (9);
-    const auto blocks = (int) (seconds * sampleRate / block);
-
-    const auto start = juce::Time::getMillisecondCounterHiRes();
-    for (int b = 0; b < blocks; ++b)
-    {
-        if (headTurning) // 90 degrees a second, back and forth, polled like the 100 Hz timer
-        {
-            const auto t = b * block / sampleRate;
-            head.write ({ (float) (90.0 * std::sin (t)), 0.0f, 0.0f, (std::uint64_t) juce::Time::currentTimeMillis(), true });
-            instances.front()->headTracking->pollNow();
-        }
-
-        for (auto& p : instances)
-        {
-            for (int i = 0; i < block; ++i)
-                buffer.setSample (0, i, rng.nextFloat() - 0.5f), buffer.setSample (1, i, 0.0f);
-            p->processBlock (buffer, midi);
-        }
-    }
-    const auto load = (juce::Time::getMillisecondCounterHiRes() - start) / 1000.0 / seconds;
-
-    UNSCOPED_INFO (players << " players, " << (mode > 0.5f ? "binaural" : "stereo") << (headTurning ? ", head turning" : "")
-                           << ", " << sampleRate << " Hz: " << juce::String (load * 100.0, 1) << " % of one core");
-
-    // Regression guards per platform (multi-core hosts spread tracks over cores). A turning head
-    // costs ~1.5x in binaural (M4 Pro: 22 -> 33 % at 48 kHz, 63 -> 104 % at 96 kHz), ~1.7x on
-    // the Windows laptop.
-    const auto rate48k = sampleRate < 50000.0;
-   #if JUCE_WINDOWS
-    // i5-10210U laptop on mains power (2026-11-14, median of 3 runs, the whole chain before stage 1):
-    // stereo / binaural / binaural with a turning head 40 / 75 / 128 % at 48 kHz, 81 / 212 / 375 %
-    // at 96 kHz; ~30 % margin. The direct sound alone takes far less (see CLAUDE.md).
-    const auto stereo = mode < 0.5f;
-    CHECK (load < (rate48k ? (stereo ? 0.52 : headTurning ? 1.67 : 0.97)
-                           : (stereo ? 1.05 : headTurning ? 4.9 : 2.76)));
-   #else
-    CHECK (load < (rate48k ? 0.30 : 0.90) * (headTurning ? 1.4 : 1.0));
-   #endif
-   #endif
 }
 
 TEST_CASE ("output stays finite for any parameter values (fuzz)", "[slow][integration]")

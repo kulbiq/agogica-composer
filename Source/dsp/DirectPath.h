@@ -11,7 +11,9 @@ class DirectPath
 public:
     void prepare (double sampleRate);
     void setAcoustics (const Acoustics&) noexcept;
-    void processSample (const History&, float& left, float& right) noexcept;
+
+    // Adds the last n samples written to the History (n <= History::maxBlock) to left / right.
+    void process (const History&, float* left, float* right, int n) noexcept;
     void jumpToTargets() noexcept { delay.jumpToTarget(); snap = true; }
 
     // The same, spelled out (tests set these directly). Gain and air cutoff glide over

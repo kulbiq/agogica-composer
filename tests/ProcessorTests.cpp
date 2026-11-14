@@ -6,6 +6,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "../Source/PluginProcessor.h"
 #include "../Source/bridge/Stage.h"
+#include "TrackingFileOverride.h"
 
 #if JUCE_MAC
  #include <malloc/malloc.h>
@@ -667,4 +668,83 @@ TEST_CASE ("parameters: IDs, ranges, defaults and choices never change silently"
     const auto expected = juce::File (juce::String (COMPOSER_TEST_DATA) + "/parameters.txt").loadFileAsString();
     INFO (actual);
     CHECK (actual == expected);
+}
+
+// Release only: build/release/ComposerTests "[perf]" -s
+TEST_CASE ("CPU: 32 players", "[.perf]")
+{
+   #if JUCE_DEBUG
+    SKIP ("CPU limits apply to Release builds"); // (the body below is Release only: no unreachable code)
+   #else
+    const auto sampleRate = GENERATE (48000.0, 96000.0);
+    // A turning head (binaural, live) re-places every source all the time: a direction fade
+    // runs on every player.
+    const auto [mode, headTurning] = GENERATE (table<float, bool> ({ { 0.0f, false }, { 1.0f, false }, { 1.0f, true } }));
+    constexpr int players = 32, block = 512;
+    constexpr double seconds = 10.0;
+
+    const auto trackingFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("composer-perf-head-tracking");
+    trackingFile.deleteFile();
+    const TrackingFileOverride trackingOverride (trackingFile);
+    headtracking::Writer head (trackingFile);
+    juce::ScopedJuceInitialiser_GUI juce;
+
+    std::vector<std::unique_ptr<ComposerProcessor>> instances;
+    for (int i = 0; i < players; ++i)
+    {
+        auto& p = *instances.emplace_back (std::make_unique<ComposerProcessor>());
+        auto set = [&] (const char* id, float v)
+        {
+            auto* param = p.state.getParameter (id);
+            param->setValueNotifyingHost (param->convertTo0to1 (v));
+        };
+        set ("outputMode", mode);
+        set ("playerX", (float) (i % 8) * 2.0f - 7.0f);
+        set ("playerY", (float) (i / 8) * 2.0f + 3.0f);
+        p.setPlayConfigDetails (2, 2, sampleRate, block);
+        p.prepareToPlay (sampleRate, block);
+    }
+
+    juce::AudioBuffer<float> buffer (2, block);
+    juce::MidiBuffer midi;
+    juce::Random rng (9);
+    const auto blocks = (int) (seconds * sampleRate / block);
+
+    const auto start = juce::Time::getMillisecondCounterHiRes();
+    for (int b = 0; b < blocks; ++b)
+    {
+        if (headTurning) // 90 degrees a second, back and forth, polled like the 100 Hz timer
+        {
+            const auto t = b * block / sampleRate;
+            head.write ({ (float) (90.0 * std::sin (t)), 0.0f, 0.0f, (std::uint64_t) juce::Time::currentTimeMillis(), true });
+            instances.front()->headTracking->pollNow();
+        }
+
+        for (auto& p : instances)
+        {
+            for (int i = 0; i < block; ++i)
+                buffer.setSample (0, i, rng.nextFloat() - 0.5f), buffer.setSample (1, i, 0.0f);
+            p->processBlock (buffer, midi);
+        }
+    }
+    const auto load = (juce::Time::getMillisecondCounterHiRes() - start) / 1000.0 / seconds;
+
+    UNSCOPED_INFO (players << " players, " << (mode > 0.5f ? "binaural" : "stereo") << (headTurning ? ", head turning" : "")
+                           << ", " << sampleRate << " Hz: " << juce::String (load * 100.0, 1) << " % of one core");
+
+    // Regression guards per platform (multi-core hosts spread tracks over cores).
+    const auto rate48k = sampleRate < 50000.0;
+    const auto stereo = mode < 0.5f;
+   #if JUCE_WINDOWS
+    // i5-10210U laptop on mains power (2026-11-15, median of 3 runs), the direct sound alone in
+    // blocks: stereo / binaural / binaural with a turning head 2.2 / 3.8 / 5.3 % at 48 kHz,
+    // 4.4 / 10.5 / 16.3 % at 96 kHz; ~40 % margin (small numbers vary more).
+    CHECK (load < (rate48k ? (stereo ? 0.031 : headTurning ? 0.075 : 0.054)
+                           : (stereo ? 0.062 : headTurning ? 0.23 : 0.15)));
+   #else
+    // ponytail: still the whole chain's limits (M4 Pro); measure the direct sound alone there.
+    juce::ignoreUnused (stereo);
+    CHECK (load < (rate48k ? 0.30 : 0.90) * (headTurning ? 1.4 : 1.0));
+   #endif
+   #endif
 }

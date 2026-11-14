@@ -68,6 +68,7 @@ target_sources(Composer PRIVATE
     Source/dsp/EarlyReflections.cpp
     Source/dsp/ReverbTail.cpp
     Source/dsp/Hrtf.cpp
+    Source/dsp/Fir.cpp
     Source/licensing/LicenseCheck.cpp)
 
 # Vendored as-is (third_party/monocypher/README): not held to our warning flags. A library of its
@@ -159,7 +160,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Tests link the plugin's shared code (which already contains the JUCE modules)
 # and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/LicenseTests.cpp tests/AppsTests.cpp)
+add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ReflectionsTests.cpp tests/ReverbTailTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/LicenseTests.cpp tests/AppsTests.cpp)
 target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
 target_compile_definitions(ComposerTests PRIVATE COMPOSER_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
