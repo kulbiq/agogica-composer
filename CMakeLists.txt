@@ -67,12 +67,12 @@ target_sources(Composer PRIVATE
     Source/dsp/EarlyReflections.cpp
     Source/dsp/ReverbTail.cpp
     Source/dsp/Hrtf.cpp
-    Source/licensing/LicenseCheck.cpp
-    third_party/monocypher/monocypher.c
-    third_party/monocypher/monocypher-ed25519.c)
-# Vendored as-is (third_party/monocypher/README): not held to our warning flags.
-set_source_files_properties(third_party/monocypher/monocypher.c third_party/monocypher/monocypher-ed25519.c
-    PROPERTIES COMPILE_OPTIONS "-w")
+    Source/licensing/LicenseCheck.cpp)
+
+# Vendored as-is (third_party/monocypher/README): not held to our warning flags. A library of its
+# own, since a per-file "-w" after JUCE's /W4 makes MSVC warn about the override (D9025).
+add_library(monocypher STATIC third_party/monocypher/monocypher.c third_party/monocypher/monocypher-ed25519.c)
+target_compile_options(monocypher PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/W0,-w>)
 
 target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1
@@ -138,6 +138,7 @@ juce_add_binary_data(ComposerData SOURCES ${UI_ZIP} ${HRIR_TABLES})
 target_link_libraries(Composer
     PRIVATE
         ComposerData
+        monocypher
         juce::juce_audio_utils
         juce::juce_cryptography
         juce::juce_dsp
