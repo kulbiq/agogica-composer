@@ -7,7 +7,7 @@
 
 using Catch::Matchers::WithinAbs;
 
-// Block processing (History::maxBlock samples at a time) against the per-sample stage it replaced.
+// Block processing (dsp::maxBlock samples at a time) against the per-sample stage it replaced.
 
 TEST_CASE ("convolution kernels: every one this CPU runs gives the true sums, however a run is split")
 {
@@ -65,22 +65,19 @@ struct Output
 // (tests/LegacyDirectPath.h), fed the same input and the same targets.
 struct BlockAndLegacy
 {
-    History history, legacyHistory;
     DirectPath path;
     legacy::DirectPath legacyPath;
 
     explicit BlockAndLegacy (double sampleRate)
     {
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
-        legacyHistory.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
         path.prepare (sampleRate);
         legacyPath.prepare (sampleRate);
     }
 
-    void setTarget (float azimuth, float delaySeconds, float gain, float airCutoffHz)
+    void setTarget (float azimuth, float gain, float airCutoffHz)
     {
-        path.setTarget (azimuth, delaySeconds, gain, airCutoffHz);
-        legacyPath.setTarget (azimuth, delaySeconds, gain, airCutoffHz);
+        path.setTarget (azimuth, gain, airCutoffHz);
+        legacyPath.setTarget (azimuth, gain, airCutoffHz);
     }
 
     void setMode (OutputMode mode)
@@ -92,24 +89,20 @@ struct BlockAndLegacy
     // Plays input[from, from + n) into both outputs at the same positions.
     void play (const std::vector<float>& input, Output& out, Output& legacyOut, size_t from, int n)
     {
-        for (int start = 0; start < n; start += History::maxBlock)
+        for (int start = 0; start < n; start += dsp::maxBlock)
         {
             const auto first = from + (size_t) start;
-            const auto count = std::min (History::maxBlock, n - start);
-
-            for (int i = 0; i < count; ++i)
-                history.write (input[first + (size_t) i]);
+            const auto count = std::min (dsp::maxBlock, n - start);
 
             std::fill_n (out.left.data() + first, count, 0.0f);
             std::fill_n (out.right.data() + first, count, 0.0f);
-            path.process (history, out.left.data() + first, out.right.data() + first, count);
+            path.process (input.data() + first, out.left.data() + first, out.right.data() + first, count);
         }
 
         for (auto i = from; i < from + (size_t) n; ++i)
         {
-            legacyHistory.write (input[i]);
             float l = 0.0f, r = 0.0f;
-            legacyPath.processSample (legacyHistory, l, r);
+            legacyPath.processSample (input[i], l, r);
             legacyOut.left[i] = l;
             legacyOut.right[i] = r;
         }
@@ -164,18 +157,18 @@ TEST_CASE ("block processing sounds like the per-sample direct path it replaced"
         const auto mode = GENERATE (OutputMode::stereo, OutputMode::binaural);
         const auto azimuth = GENERATE (-135.0f, -30.0f, 0.0f, 47.0f, 90.0f, 170.0f);
         s.setMode (mode);
-        render ([&] (size_t) { s.setTarget (azimuth, 0.0123f, 0.7f, 6000.0f); });
+        render ([&] (size_t) { s.setTarget (azimuth, 0.7f, 6000.0f); });
 
         CHECK (largestDifference (out, legacyOut) < 1e-5f);
     }
 
-    SECTION ("a moving source: level, air, delay and pan glide the same way")
+    SECTION ("a moving source: level, air and pan glide the same way")
     {
         // Stereo: everything but the HRIR, so every sample must match.
         render ([&] (size_t start)
         {
             const auto t = (float) ((double) start / sampleRate);
-            s.setTarget (-60.0f + 200.0f * t, t < 0.2f ? 0.01f : 0.03f, 1.0f - t, 3000.0f + 20000.0f * t);
+            s.setTarget (-60.0f + 200.0f * t, 1.0f - t, 3000.0f + 20000.0f * t);
         });
 
         CHECK (largestDifference (out, legacyOut) < 1e-5f);
@@ -191,7 +184,7 @@ TEST_CASE ("block processing sounds like the per-sample direct path it replaced"
         {
             if (start >= change && changedAt == 0)
                 changedAt = start;
-            s.setTarget (start >= change ? 30.0f + jump : 30.0f, 0.005f, 1.0f, 0.0f);
+            s.setTarget (start >= change ? 30.0f + jump : 30.0f, 1.0f, 0.0f);
         });
 
         CHECK (largestDifference (out, legacyOut, changedAt, changedAt + fadeLength + 1) < 1e-5f);
@@ -228,7 +221,7 @@ TEST_CASE ("block processing sounds like the per-sample direct path it replaced"
             if (binaural && switchedAt == 0)
                 switchedAt = start;
             s.setMode (binaural ? OutputMode::binaural : OutputMode::stereo);
-            s.setTarget (-70.0f, 0.002f, 1.0f, 0.0f);
+            s.setTarget (-70.0f, 1.0f, 0.0f);
         });
 
         CHECK (largestDifference (out, legacyOut, switchedAt, switchedAt + taps + fadeLength + 1) < 1e-5f);

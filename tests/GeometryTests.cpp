@@ -5,13 +5,11 @@
 using Catch::Matchers::WithinAbs;
 using namespace geometry;
 
-TEST_CASE ("distance and delay")
+TEST_CASE ("distance")
 {
     const Point listener { 1.0f, -2.0f };
 
     CHECK_THAT (distance ({ 4.0f, 2.0f }, listener), WithinAbs (5.0, 1e-5));
-    CHECK_THAT (delayMs ({ 4.0f, 2.0f }, listener), WithinAbs (5.0 / 343.0 * 1000.0, 1e-3));
-    CHECK_THAT (delayMs ({ 1.005f, -2.0f }, listener), WithinAbs (0.0, 1e-9));
 }
 
 TEST_CASE ("azimuth and pan: 0 ahead, +90 right, rear folds to front")

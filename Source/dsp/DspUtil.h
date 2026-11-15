@@ -4,6 +4,10 @@
 
 namespace dsp
 {
+// The processor hands the DSP at most this many samples at a time (a block fits the L1 cache,
+// and one HRIR coefficient serves every output of it).
+constexpr int maxBlock = 32;
+
 // Raised-cosine fade gain for position 0..1; the two gains of a crossfade sum to 1.
 inline float fadeGain (float position) noexcept
 {

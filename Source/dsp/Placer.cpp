@@ -6,7 +6,7 @@ namespace
 // Window room beyond the HRIR length: the latest samples move back to the front once per
 // this many samples (and runs of outputs may read up to 7 samples past the newest one).
 constexpr int spareWindow = 2048;
-static_assert (spareWindow >= History::maxBlock + 8);
+static_assert (spareWindow >= dsp::maxBlock + 8);
 } // namespace
 
 void Placer::prepare (double sampleRate)
@@ -124,7 +124,7 @@ void Placer::binaural (int n, float* left, float* right) noexcept
         else
         {
             // A jump: both convolutions, their outputs faded sample by sample.
-            alignas (32) float toL[History::maxBlock], toR[History::maxBlock];
+            alignas (32) float toL[dsp::maxBlock], toR[dsp::maxBlock];
             convolve (ir (direction, 0), ir (direction, 1), taps, x + done, left + done, right + done, m);
             convolve (ir (nextDirection, 0), ir (nextDirection, 1), taps, x + done, toL, toR, m);
 
@@ -146,12 +146,12 @@ void Placer::binaural (int n, float* left, float* right) noexcept
 
 void Placer::process (const float* in, float* left, float* right, int n) noexcept
 {
-    jassert (n <= History::maxBlock);
+    jassert (n <= dsp::maxBlock);
     constexpr auto quarterPi = juce::MathConstants<float>::pi * 0.25f;
 
     // Constant-power pan law: -1..+1 -> 0..pi/2. Recomputed only when the pan moves, and only
     // while the stereo pan is heard (a turning head moves it all the time).
-    float gainL[History::maxBlock] {}, gainR[History::maxBlock] {};
+    float gainL[dsp::maxBlock] {}, gainR[dsp::maxBlock] {};
     const auto needStereo = mode == OutputMode::stereo || (modeFade < 1.0f && fadingFrom == OutputMode::stereo);
 
     if (! needStereo)
@@ -173,7 +173,7 @@ void Placer::process (const float* in, float* left, float* right, int n) noexcep
     }
 
     const auto needBinaural = mode == OutputMode::binaural || (modeFade < 1.0f && fadingFrom == OutputMode::binaural);
-    alignas (32) float binauralL[History::maxBlock] {}, binauralR[History::maxBlock] {};
+    alignas (32) float binauralL[dsp::maxBlock] {}, binauralR[dsp::maxBlock] {};
     int waitFor = 0; // samples before a fade into binaural may start: the window must be full
 
     if (needBinaural)

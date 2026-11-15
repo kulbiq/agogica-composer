@@ -81,8 +81,8 @@ public:
     void writeParam (const juce::String& paramId, float value);
 
     // How long the output goes on after the input stops (reported to the host; also how long a
-    // silent track keeps processing): with the direct sound alone, the longest delay.
-    static constexpr double tailSeconds = Acoustics::maxDelaySeconds;
+    // silent track keeps processing): the HRIR (5 ms) and the air filter dying away, with margin.
+    static constexpr double tailSeconds = 0.1;
 
     // Development monitoring: processBlock's share of real time (realtime playback only).
     LoadMeter load;
@@ -110,13 +110,9 @@ private:
                                     state.getRawParameterValue ("proDistanceLaw"),
                                     state.getRawParameterValue ("proAir") };
 
-    // The player's mono input, read by every stage.
-    History history;
-
-    // The processing chain: every stage reads `history` and adds its stereo output.
-    // Plug a stage in or out here. For now the direct sound alone (reflections and a reverb
-    // tail come back once they are affordable).
-    std::tuple<DirectPath> stages;
+    // The whole DSP for now: the direct sound (reflections and a reverb tail come back once
+    // they are affordable).
+    DirectPath direct;
 
     // Samples of silent input so far; a track silent for longer than the tail skips all work.
     int silentFor = 0, skipAfter = 0;

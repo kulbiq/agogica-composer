@@ -8,7 +8,7 @@ export type Player = Point & {
   name: string;
   colour: string; // host track colour "#rrggbb", or ""
   self: boolean;
-  derived: { distance: number; azimuth: number; pan: number; delayMs: number; levelDb: number; airDb: number };
+  derived: { distance: number; azimuth: number; pan: number; levelDb: number; airDb: number };
 };
 
 // Mirrors stage::snapshot in Source/bridge/Stage.cpp.

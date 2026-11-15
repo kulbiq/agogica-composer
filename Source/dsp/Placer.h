@@ -3,7 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "Acoustics.h"
 #include "Fir.h"
-#include "History.h"
+#include "DspUtil.h"
 #include "Hrtf.h"
 
 // Places one mono signal at an azimuth: a constant-power stereo pan (speakers) or an
@@ -11,7 +11,7 @@
 // neighbouring HRIRs (1 degree apart) are nearly identical, so chained direction fades
 // during a drag don't flutter.
 //
-// Works on blocks of up to History::maxBlock samples. A direction fade over a few degrees (a
+// Works on blocks of up to dsp::maxBlock samples. A direction fade over a few degrees (a
 // turning head, a dragged player: nearly every fade) convolves once per ear with a blend of the
 // two HRIRs, the blend stepping once per block: fading the two convolutions' outputs (as larger
 // jumps still do) at half the cost, since convolution is linear. The steps put it within 1-2 %
@@ -36,7 +36,7 @@ public:
     void setDirection (float azimuthDegrees, bool snap) noexcept;
     void setMode (OutputMode) noexcept;
 
-    // Adds the placed block (n <= History::maxBlock) to `left` / `right`.
+    // Adds the placed block (n <= dsp::maxBlock) to `left` / `right`.
     void process (const float* in, float* left, float* right, int n) noexcept;
 
 private:

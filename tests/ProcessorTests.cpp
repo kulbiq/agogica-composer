@@ -133,14 +133,6 @@ void set (ComposerProcessor& p, const char* id, float value)
     param->setValueNotifyingHost (param->convertTo0to1 (value));
 }
 
-size_t peakIndex (const std::vector<float>& v)
-{
-    return (size_t) std::distance (v.begin(), std::max_element (v.begin(), v.end(), [] (float a, float b)
-    {
-        return std::abs (a) < std::abs (b);
-    }));
-}
-
 void fillNoise (juce::AudioBuffer<float>& buffer, juce::Random& rng)
 {
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
@@ -232,22 +224,22 @@ TEST_CASE ("processBlock: position from parameters, clamped to the room", "[inte
     p.setPlayConfigDetails (2, 2, sampleRate, 512);
     p.prepareToPlay (sampleRate, 512);
 
+    // A steady input (the air filter passes it untouched): the output is the pan times the level.
     juce::AudioBuffer<float> buffer (2, 512);
     juce::MidiBuffer midi;
-    std::vector<float> left;
 
     for (int block = 0; block < 4; ++block)
     {
-        buffer.clear();
-        if (block == 0)
-            buffer.setSample (0, 0, 1.0f);
-
+        for (int ch = 0; ch < 2; ++ch)
+            buffer.clear (ch, 0, 512), juce::FloatVectorOperations::fill (buffer.getWritePointer (ch), 1.0f, 512);
         p.processBlock (buffer, midi);
-        left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 512);
     }
 
-    const auto expected = std::hypot (5.0, 5.0) / 343.0 * sampleRate; // ~989.6 samples
-    CHECK (std::abs ((double) peakIndex (left) - expected) <= 1.0);
+    // At (5, 5): 45 degrees right (unclamped it would be 76), 7.07 m away.
+    const auto angle = (0.5 + 1.0) * juce::MathConstants<double>::pi * 0.25;
+    const auto level = geometry::distanceGain (std::hypot (5.0f, 5.0f));
+    CHECK_THAT (buffer.getSample (0, 511), WithinAbs (std::cos (angle) * level, 1e-4));
+    CHECK_THAT (buffer.getSample (1, 511), WithinAbs (std::sin (angle) * level, 1e-4));
 }
 
 TEST_CASE ("processBlock never allocates (both modes, Pro, moves and mode switches)", "[integration]")
@@ -309,40 +301,18 @@ TEST_CASE ("processBlock never allocates (both modes, Pro, moves and mode switch
     CHECK (total == 0);
 }
 
-TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current position", "[slow][integration]")
+TEST_CASE ("silence skip: never cuts the tail, resumes at the current position", "[slow][integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
     juce::MidiBuffer midi;
 
-    SECTION ("the longest delay (opposite corners of the largest room) is never cut")
+    SECTION ("the tail outlasts the longest HRIR")
     {
-        // The direct sound alone: the output ends with the longest delay (70.7 m, 0.21 s), well
-        // inside the 0.5 s the track keeps processing after its input stops.
-        constexpr double sampleRate = 48000.0;
-        set (p, "roomSize", 50.0f);
-        set (p, "playerX", 25.0f);
-        set (p, "playerY", 25.0f);
-        set (p, "listenerX", -25.0f);
-        set (p, "listenerY", -25.0f);
-        p.setPlayConfigDetails (2, 2, sampleRate, 480);
-        p.prepareToPlay (sampleRate, 480);
-
-        juce::AudioBuffer<float> buffer (2, 480);
-        std::vector<float> left;
-        for (int b = 0; b < 100; ++b) // an impulse, then 1 s of silence
-        {
-            buffer.clear();
-            if (b == 0)
-                buffer.setSample (0, 0, 1.0f), buffer.setSample (1, 0, 1.0f);
-            p.processBlock (buffer, midi);
-            left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
-        }
-
-        const auto arrival = std::hypot (50.0, 50.0) / 343.0 * sampleRate;
-        REQUIRE (arrival < ComposerProcessor::tailSeconds * sampleRate);
-        CHECK (std::abs ((double) peakIndex (left) - arrival) <= 1.0);
-        CHECK (std::abs (left[peakIndex (left)]) > 0.01f);
+        // What sounds after the input stops is an HRIR (5.3 ms at every rate) and the air
+        // filter dying away (well under 1 ms).
+        const auto& longest = Hrtf::forSampleRate (192000.0);
+        CHECK (longest.taps() / longest.sampleRate() < 0.1 * ComposerProcessor::tailSeconds);
     }
 
     SECTION ("a silent track skips its work and resumes at the current position, without allocating")
@@ -356,7 +326,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
         buffer.setSample (0, 0, 1.0f);
         p.processBlock (buffer, midi);
 
-        for (int block = 0; block < 100; ++block) // 1 s of silence (longer than the 0.5 s tail)
+        for (int block = 0; block < 100; ++block) // 1 s of silence (longer than the 0.1 s tail)
         {
             buffer.clear();
             p.processBlock (buffer, midi);
@@ -364,20 +334,16 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
 
         CHECK (buffer.getMagnitude (0, 480) <= 0.0f);
 
-        set (p, "playerY", 10.0f); // moved while silent: 10 m -> 1399.4 samples
-        std::vector<float> left;
-        int allocated = 0;
-        for (int block = 0; block < 4; ++block)
-        {
-            buffer.clear();
-            if (block == 0)
-                buffer.setSample (0, 0, 1.0f);
-            allocated += allocationsDuring ([&] { p.processBlock (buffer, midi); });
-            left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
-        }
+        // Moved hard right while silent: heard there at once, not panned across from the centre.
+        set (p, "playerX", 10.0f);
+        set (p, "playerY", 0.0f);
+        buffer.clear();
+        buffer.setSample (0, 0, 1.0f);
+        const auto allocated = allocationsDuring ([&] { p.processBlock (buffer, midi); });
 
         CHECK (allocated == 0);
-        CHECK (std::abs ((double) peakIndex (left) - 10.0 / 343.0 * sampleRate) <= 1.0);
+        CHECK (std::abs (buffer.getSample (0, 0)) < 1e-6f);
+        CHECK (buffer.getSample (1, 0) > 0.1f);
     }
 
     SECTION ("after a silence a track starts clean, never with old input")
@@ -410,9 +376,9 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
         buffer.setSample (1, 0, 1.0f);
         p.processBlock (buffer, midi);
 
-        // Nothing can arrive before the direct sound (5 m: ~700 samples later).
-        CHECK (buffer.getMagnitude (0, 0, 480) <= 0.0f);
-        CHECK (buffer.getMagnitude (1, 0, 480) <= 0.0f);
+        // Only the impulse is heard: nothing after its HRIR (256 taps), no noise from before.
+        CHECK (buffer.getMagnitude (0, 300, 180) < 1e-6f);
+        CHECK (buffer.getMagnitude (1, 300, 180) < 1e-6f);
     }
 }
 
@@ -507,7 +473,7 @@ TEST_CASE ("channels: stereo input is summed to mono, mono input is used as is",
     CHECK (stereo == summed);
     CHECK (mono == summed);
 
-    SECTION ("before prepareToPlay, or with no input bus, a block is silence - never a crash")
+    SECTION ("before prepareToPlay a block is silence; a layout without input is refused - never a crash")
     {
         juce::MidiBuffer midi;
         ComposerProcessor unprepared;
@@ -516,12 +482,14 @@ TEST_CASE ("channels: stereo input is summed to mono, mono input is used as is",
         unprepared.processBlock (buffer, midi);
         CHECK (buffer.getMagnitude (0, 64) <= 0.0f);
 
+        // isBusesLayoutSupported refuses it, so the input stays stereo and is played.
         ComposerProcessor noInput;
         noInput.setPlayConfigDetails (0, 2, 48000.0, 64);
+        CHECK (noInput.getTotalNumInputChannels() == 2);
         noInput.prepareToPlay (48000.0, 64);
         buffer.setSample (1, 5, 0.7f);
         noInput.processBlock (buffer, midi);
-        CHECK (buffer.getMagnitude (0, 64) <= 0.0f);
+        CHECK (buffer.getMagnitude (0, 64) > 0.0f);
     }
 }
 

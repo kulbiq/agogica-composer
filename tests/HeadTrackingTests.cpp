@@ -165,8 +165,6 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
     // player straight ahead with the head straight.
     auto render = [] (geometry::Point player, float headYaw)
     {
-        History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
         DirectPath path;
         path.prepare (48000.0);
 
@@ -181,8 +179,8 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
         for (int i = 0; i < 4800; ++i)
         {
             float l = 0.0f, r = 0.0f;
-            history.write (rng.nextFloat() - 0.5f);
-            path.process (history, &l, &r, 1);
+            const auto in = rng.nextFloat() - 0.5f;
+            path.process (&in, &l, &r, 1);
             out.push_back (l), out.push_back (r);
         }
         return out;
@@ -213,14 +211,14 @@ TEST_CASE ("head yaw: tracker jitter around a half degree doesn't switch HRIRs b
         for (const auto azimuth : azimuths)
         {
             placer.setDirection (azimuth, false);
-            for (int start = 0; start < 480; start += History::maxBlock)
+            for (int start = 0; start < 480; start += dsp::maxBlock)
             {
-                float in[History::maxBlock], l[History::maxBlock] {}, r[History::maxBlock] {};
+                float in[dsp::maxBlock], l[dsp::maxBlock] {}, r[dsp::maxBlock] {};
                 for (auto& x : in)
                     x = rng.nextFloat() - 0.5f;
-                placer.process (in, l, r, History::maxBlock);
-                out.insert (out.end(), l, l + History::maxBlock);
-                out.insert (out.end(), r, r + History::maxBlock);
+                placer.process (in, l, r, dsp::maxBlock);
+                out.insert (out.end(), l, l + dsp::maxBlock);
+                out.insert (out.end(), r, r + dsp::maxBlock);
             }
         }
         return out;
@@ -242,8 +240,6 @@ TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees")
     // behind and a head turned far must still land on the right side.
     auto render = [] (float headYaw)
     {
-        History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
         DirectPath path;
         path.prepare (48000.0);
 
@@ -255,13 +251,13 @@ TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees")
 
         juce::Random rng (8);
         std::vector<float> out;
-        for (int start = 0; start < 9600; start += History::maxBlock)
+        for (int start = 0; start < 9600; start += dsp::maxBlock)
         {
-            float l[History::maxBlock] {}, r[History::maxBlock] {};
-            for (int i = 0; i < History::maxBlock; ++i)
-                history.write (rng.nextFloat() - 0.5f);
-            path.process (history, l, r, History::maxBlock);
-            for (int i = 0; i < History::maxBlock; ++i)
+            float in[dsp::maxBlock], l[dsp::maxBlock] {}, r[dsp::maxBlock] {};
+            for (auto& x : in)
+                x = rng.nextFloat() - 0.5f;
+            path.process (in, l, r, dsp::maxBlock);
+            for (int i = 0; i < dsp::maxBlock; ++i)
                 out.push_back (l[i]), out.push_back (r[i]);
         }
         return out;
