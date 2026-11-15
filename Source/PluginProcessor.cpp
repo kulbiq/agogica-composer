@@ -190,9 +190,9 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         return;
     }
 
-    // A host calling before prepareToPlay, or with no input bus: silence, never a read of
-    // unprepared DSP or a channel that isn't there.
-    if (preparedRate <= 0 || getTotalNumInputChannels() == 0 || buffer.getNumChannels() < 2)
+    // A host calling before prepareToPlay, or with no input bus: silence, never a read past
+    // an empty history or a channel that isn't there.
+    if (! history.isPrepared() || getTotalNumInputChannels() == 0 || buffer.getNumChannels() < 2)
     {
         buffer.clear();
         return;
@@ -215,7 +215,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     adjust.air = audioParams.proAir->load();
 
     // A track silent for longer than the tail produces silence: skip all the work. When
-    // sound returns, everything inside is silent too, so the DSP jumps straight to the
+    // sound returns, everything inside is silent too, so stages jump straight to the
     // current position instead of fading from where they were.
     if (peak <= 0.0f)
     {
@@ -230,12 +230,12 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     else
     {
         if (silentFor >= skipAfter)
-            direct.jumpToTargets();
+            std::apply ([] (auto&... stage) { (stage.jumpToTargets(), ...); }, stages);
 
         silentFor = 0;
     }
 
-    direct.setAcoustics (acoustics);
+    std::apply ([&] (auto&... stage) { (stage.setAcoustics (acoustics), ...); }, stages);
 
     const auto numInputs = getTotalNumInputChannels();
     const auto* inL = buffer.getReadPointer (0);
@@ -243,18 +243,17 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     auto* outL = buffer.getWritePointer (0);
     auto* outR = buffer.getWritePointer (1);
 
-    // A few dozen samples at a time (in place: each block's input is read before its output is written).
-    for (int start = 0; start < buffer.getNumSamples(); start += dsp::maxBlock)
+    // A few dozen samples at a time: the input into the History, then each stage over all of them.
+    for (int start = 0; start < buffer.getNumSamples(); start += History::maxBlock)
     {
-        const auto n = std::min (dsp::maxBlock, buffer.getNumSamples() - start);
+        const auto n = std::min (History::maxBlock, buffer.getNumSamples() - start);
 
-        // A stereo input is summed to mono.
-        alignas (32) float mono[dsp::maxBlock];
-        for (int i = 0; i < n; ++i)
-            mono[i] = numInputs > 1 ? 0.5f * (inL[start + i] + inR[start + i]) : inL[start + i];
+        // A stereo input is summed to mono (read before the outputs overwrite it).
+        for (int i = start; i < start + n; ++i)
+            history.write (numInputs > 1 ? 0.5f * (inL[i] + inR[i]) : inL[i]);
 
-        alignas (32) float left[dsp::maxBlock] {}, right[dsp::maxBlock] {};
-        direct.process (mono, left, right, n);
+        alignas (32) float left[History::maxBlock] {}, right[History::maxBlock] {};
+        std::apply ([&] (auto&... stage) { (stage.process (history, left, right, n), ...); }, stages);
 
         std::copy (left, left + n, outL + start);
         std::copy (right, right + n, outR + start);
@@ -264,7 +263,8 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 void ComposerProcessor::prepareToPlay (double sampleRate, int)
 {
     preparedRate = sampleRate;
-    direct.prepare (sampleRate);
+    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+    std::apply ([&] (auto&... stage) { (stage.prepare (sampleRate), ...); }, stages);
     skipAfter = (int) (tailSeconds * sampleRate);
     silentFor = 0;
 }

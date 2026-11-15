@@ -22,4 +22,8 @@ struct Acoustics
     // Listener's head rotation, degrees clockwise (head turned right). Binaural only and
     // realtime only - the processor sets 0 otherwise.
     float headYaw = 0.0f;
+
+    // Longest delay any stage asks the History for: the longest direct path (opposite corners
+    // of the largest room, 70.7 m: 0.21 s), with margin.
+    static constexpr double maxDelaySeconds = 0.5;
 };

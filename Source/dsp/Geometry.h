@@ -7,7 +7,8 @@
 // Pure functions shared by the UI bridge (derived values) and the DSP.
 namespace geometry
 {
-constexpr float atListener = 0.01f; // m; closer than this counts as "at the listener"
+constexpr float speedOfSound = 343.0f;   // m/s
+constexpr float atListener   = 0.01f;    // m; closer than this counts as "at the listener"
 
 struct Point { float x = 0.0f, y = 0.0f; };
 
@@ -45,6 +46,12 @@ inline float foldedAzimuth (float azimuth)
 inline float pan (Point player, Point listener)
 {
     return foldedAzimuth (azimuthDegrees (player, listener)) / 90.0f;
+}
+
+inline float delayMs (Point player, Point listener)
+{
+    const auto d = distance (player, listener);
+    return d < atListener ? 0.0f : d / speedOfSound * 1000.0f;
 }
 
 // Loudness, unity at 1 m and closer. The free-field law is -6 dB per doubling, but in

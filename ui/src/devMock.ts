@@ -47,6 +47,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
           distance,
           azimuth,
           pan: folded / 90,
+          delayMs: (distance / 343) * 1000,
           levelDb: distance <= 1 ? 0 : (-20 / 3) * Math.log10(distance),
           airDb: -0.0766 * distance,
         };

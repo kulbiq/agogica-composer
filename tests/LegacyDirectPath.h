@@ -3,11 +3,10 @@
 // The direct-sound stage as it was before block processing (commit 0c15d19), frozen as the
 // reference the block version is checked against: one sample at a time, two HRIR convolutions
 // per ear while a direction fades, the HRIR window written in stereo too. Test code only.
-// Its distance delay is gone, as it is from the plugin.
 // One difference: `dot` is the plain sum (the x64 build summed in SSE lanes; same to rounding).
 
 #include "../Source/dsp/Acoustics.h"
-#include "../Source/dsp/DspUtil.h"
+#include "../Source/dsp/DelayTap.h"
 #include "../Source/dsp/Hrtf.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -162,6 +161,7 @@ public:
     void prepare (double newSampleRate)
     {
         sampleRate = newSampleRate;
+        delay.prepare (sampleRate);
         placer.prepare (sampleRate);
         gain.reset (sampleRate, 0.05);
         airCoefficient.reset (sampleRate, 0.05);
@@ -174,13 +174,15 @@ public:
         const auto distance = geometry::distance (a.player, a.listener);
         setMode (a.mode);
         setTarget (geometry::azimuthDegrees (a.player, a.listener) - a.headYaw,
+                   geometry::delayMs (a.player, a.listener) / 1000.0f,
                    geometry::distanceGain (distance, a.adjust.distanceExponent),
                    geometry::airCutoffHz (distance, a.adjust.air));
     }
 
-    void setTarget (float azimuthDegrees, float newGain = 1.0f, float airCutoffHz = 0.0f) noexcept
+    void setTarget (float azimuthDegrees, float delaySeconds, float newGain = 1.0f, float airCutoffHz = 0.0f) noexcept
     {
         const auto coefficient = dsp::onePoleCoefficient (airCutoffHz, sampleRate);
+        delay.setTarget (delaySeconds * (float) sampleRate);
         placer.setDirection (azimuthDegrees, snap);
 
         if (snap)
@@ -197,14 +199,17 @@ public:
 
     void setMode (OutputMode mode) noexcept { placer.setMode (mode); }
 
-    void processSample (float in, float& left, float& right) noexcept
+    void processSample (const History& history, float& left, float& right) noexcept
     {
-        airState += airCoefficient.getNextValue() * (in - airState);
+        float delayed;
+        delay.read (history, &delayed, 1); // one sample at a time, as it was
+        airState += airCoefficient.getNextValue() * (delayed - airState);
         placer.process (airState * gain.getNextValue(), left, right);
     }
 
 private:
     double sampleRate = 44100.0;
+    DelayTap delay;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> gain, airCoefficient;
     float airState = 0.0f;
     Placer placer;
