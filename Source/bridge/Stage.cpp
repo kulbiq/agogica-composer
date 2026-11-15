@@ -7,7 +7,7 @@ namespace
 {
 // Shared by every instance (each keeps its own copy). outputMode and the Pro values are
 // project-wide, not part of scenes (ComposerProcessor::sceneParams); room and listener are.
-const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "proDistanceLaw", "proAir" };
+const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "proDistanceLaw" };
 const juce::StringArray playerParams { "playerX", "playerY" };
 
 // Positions are stored on a 1 cm grid; the float range conversion leaves residue like -5.6e-7.
@@ -36,7 +36,7 @@ juce::var point (geometry::Point p)
 }
 
 juce::var player (const ComposerProcessor& p, int index, bool self, float roomSize, geometry::Point listener,
-                  float lawExponent, float airAmount)
+                  float lawExponent)
 {
     const auto pos = playerOf (p, roomSize);
 
@@ -46,7 +46,6 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
     derived->setProperty ("pan", geometry::pan (pos, listener));
     derived->setProperty ("delayMs", geometry::delayMs (pos, listener));
     derived->setProperty ("levelDb", 20.0f * std::log10 (geometry::distanceGain (geometry::distance (pos, listener), lawExponent)));
-    derived->setProperty ("airDb", -geometry::airLossDbAt8k (geometry::distance (pos, listener), airAmount));
 
     const auto name = p.getDisplayName();
 
@@ -135,7 +134,6 @@ juce::var snapshot (ComposerProcessor& self)
     const auto roomSize = self.getParam ("roomSize");
     const auto listener = listenerOf (self);
     const auto lawExponent = self.getParam ("proDistanceLaw") / (20.0f * std::log10 (2.0f));
-    const auto airAmount = self.getParam ("proAir");
 
     // ponytail: the viewing instance's room/listener stand for the stage. The copies can
     // drift if someone edits one track's automation lane by hand; add an "out of sync" hint
@@ -147,7 +145,7 @@ juce::var snapshot (ComposerProcessor& self)
 
         for (int i = 0; i < members.size(); ++i)
         {
-            players.add (player (*members[i], i, members[i] == &self, roomSize, listener, lawExponent, airAmount));
+            players.add (player (*members[i], i, members[i] == &self, roomSize, listener, lawExponent));
             stored.addArray (members[i]->getStoredScenes());
 
             // Hosts give a plugin no way to close its window, so a second editor offers

@@ -126,10 +126,6 @@ export default function SidePanel({ stage, selfId, selected, onSelect }: Props) 
               <dd>{player.derived.delayMs.toFixed(1)} ms</dd>
               <dt className={styles.label}>Level</dt>
               <dd>{formatDb(player.derived.levelDb)}</dd>
-              <dt className={styles.label} title="High-frequency loss in air, at 8 kHz">
-                Air · 8 kHz
-              </dt>
-              <dd>{formatDb(player.derived.airDb)}</dd>
             </dl>
           )}
         </section>

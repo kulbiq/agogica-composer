@@ -56,15 +56,3 @@ TEST_CASE ("loudness: -2 dB per doubling from 1 m")
     CHECK_THAT (db (distanceGain (20.0f)), WithinAbs (-8.67, 0.01));
 }
 
-TEST_CASE ("air absorption: one-pole cutoff reproduces the 8 kHz loss")
-{
-    for (const auto metres : { 5.0f, 20.0f, 70.0f })
-    {
-        const auto fc = airCutoffHz (metres);
-        const auto lossAt8k = 10.0 * std::log10 (1.0 + std::pow (8000.0 / fc, 2.0));
-        CHECK_THAT (lossAt8k, WithinAbs (0.0766 * metres, 1e-3));
-    }
-
-    CHECK_THAT (airCutoffHz (0.001f), WithinAbs (0.0, 0.0));      // negligible: no filter
-    CHECK_THAT (airCutoffHz (50.0f, 0.0f), WithinAbs (0.0, 0.0)); // Pro air at 0: no filter at all
-}

@@ -9,13 +9,4 @@ inline float fadeGain (float position) noexcept
 {
     return 0.5f - 0.5f * std::cos (position * juce::MathConstants<float>::pi);
 }
-
-// Coefficient for the one-pole low-pass y += a (x - y); 1 = pass through untouched.
-inline float onePoleCoefficient (float cutoffHz, double sampleRate) noexcept
-{
-    if (cutoffHz <= 0.0f || cutoffHz >= 0.45f * (float) sampleRate)
-        return 1.0f;
-
-    return 1.0f - std::exp (-juce::MathConstants<float>::twoPi * cutoffHz / (float) sampleRate);
-}
 } // namespace dsp

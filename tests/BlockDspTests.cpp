@@ -77,10 +77,10 @@ struct BlockAndLegacy
         legacyPath.prepare (sampleRate);
     }
 
-    void setTarget (float azimuth, float delaySeconds, float gain, float airCutoffHz)
+    void setTarget (float azimuth, float delaySeconds, float gain)
     {
-        path.setTarget (azimuth, delaySeconds, gain, airCutoffHz);
-        legacyPath.setTarget (azimuth, delaySeconds, gain, airCutoffHz);
+        path.setTarget (azimuth, delaySeconds, gain);
+        legacyPath.setTarget (azimuth, delaySeconds, gain);
     }
 
     void setMode (OutputMode mode)
@@ -164,18 +164,18 @@ TEST_CASE ("block processing sounds like the per-sample direct path it replaced"
         const auto mode = GENERATE (OutputMode::stereo, OutputMode::binaural);
         const auto azimuth = GENERATE (-135.0f, -30.0f, 0.0f, 47.0f, 90.0f, 170.0f);
         s.setMode (mode);
-        render ([&] (size_t) { s.setTarget (azimuth, 0.0123f, 0.7f, 6000.0f); });
+        render ([&] (size_t) { s.setTarget (azimuth, 0.0123f, 0.7f); });
 
         CHECK (largestDifference (out, legacyOut) < 1e-5f);
     }
 
-    SECTION ("a moving source: level, air, delay and pan glide the same way")
+    SECTION ("a moving source: level, delay and pan glide the same way")
     {
         // Stereo: everything but the HRIR, so every sample must match.
         render ([&] (size_t start)
         {
             const auto t = (float) ((double) start / sampleRate);
-            s.setTarget (-60.0f + 200.0f * t, t < 0.2f ? 0.01f : 0.03f, 1.0f - t, 3000.0f + 20000.0f * t);
+            s.setTarget (-60.0f + 200.0f * t, t < 0.2f ? 0.01f : 0.03f, 1.0f - t);
         });
 
         CHECK (largestDifference (out, legacyOut) < 1e-5f);
@@ -191,7 +191,7 @@ TEST_CASE ("block processing sounds like the per-sample direct path it replaced"
         {
             if (start >= change && changedAt == 0)
                 changedAt = start;
-            s.setTarget (start >= change ? 30.0f + jump : 30.0f, 0.005f, 1.0f, 0.0f);
+            s.setTarget (start >= change ? 30.0f + jump : 30.0f, 0.005f, 1.0f);
         });
 
         CHECK (largestDifference (out, legacyOut, changedAt, changedAt + fadeLength + 1) < 1e-5f);
@@ -228,7 +228,7 @@ TEST_CASE ("block processing sounds like the per-sample direct path it replaced"
             if (binaural && switchedAt == 0)
                 switchedAt = start;
             s.setMode (binaural ? OutputMode::binaural : OutputMode::stereo);
-            s.setTarget (-70.0f, 0.002f, 1.0f, 0.0f);
+            s.setTarget (-70.0f, 0.002f, 1.0f);
         });
 
         CHECK (largestDifference (out, legacyOut, switchedAt, switchedAt + taps + fadeLength + 1) < 1e-5f);

@@ -98,7 +98,6 @@ private:
         std::atomic<float>* playerY;
         std::atomic<float>* outputMode;
         std::atomic<float>* proDistanceLaw;
-        std::atomic<float>* proAir;
     };
 
     const AudioParams audioParams { state.getRawParameterValue ("roomSize"),
@@ -107,8 +106,7 @@ private:
                                     state.getRawParameterValue ("playerX"),
                                     state.getRawParameterValue ("playerY"),
                                     state.getRawParameterValue ("outputMode"),
-                                    state.getRawParameterValue ("proDistanceLaw"),
-                                    state.getRawParameterValue ("proAir") };
+                                    state.getRawParameterValue ("proDistanceLaw") };
 
     // The player's mono input, read by every stage.
     History history;

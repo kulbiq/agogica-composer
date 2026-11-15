@@ -14,7 +14,6 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true },
     pro: {
       proDistanceLaw: 6.0206 / 3,
-      proAir: 1,
     } as Record<string, number>,
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
@@ -49,7 +48,6 @@ if (import.meta.env.DEV && !window.__JUCE__) {
           pan: folded / 90,
           delayMs: (distance / 343) * 1000,
           levelDb: distance <= 1 ? 0 : (-20 / 3) * Math.log10(distance),
-          airDb: -0.0766 * distance,
         };
         return { ...p, x, y, derived };
       }),

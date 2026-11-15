@@ -64,21 +64,4 @@ inline float distanceGain (float metres, float exponent = distanceLawExponent)
 {
     return metres <= referenceDistance ? 1.0f : std::pow (referenceDistance / metres, exponent);
 }
-
-// Air absorption, ISO 9613-1 at 20 °C / 50 % RH: 0.0766 dB per metre at 8 kHz, far
-// less below. Modelled as a one-pole low-pass whose loss at 8 kHz matches.
-constexpr float airLossDbPerMetreAt8k = 0.0766f;
-
-// `amount` scales the absorption (the Pro panel's Air control; 1 = ISO).
-inline float airLossDbAt8k (float metres, float amount = 1.0f)
-{
-    return airLossDbPerMetreAt8k * metres * amount;
-}
-
-// Cutoff of that low-pass, or 0 when the loss is negligible (no filtering).
-inline float airCutoffHz (float metres, float amount = 1.0f)
-{
-    const auto excess = std::pow (10.0f, airLossDbAt8k (metres, amount) / 10.0f) - 1.0f;
-    return excess < 1.0e-4f ? 0.0f : 8000.0f / std::sqrt (excess);
-}
 } // namespace geometry

@@ -220,7 +220,7 @@ TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room
     const auto [id, first, second, perScene, shown] = GENERATE (table<const char*, float, float, bool, juce::var> ({
         { "outputMode", 1.0f, 0.0f, false, juce::var ("binaural") },
         { "roomSize", 35.0f, 10.0f, true, juce::var() },
-        { "proAir", 0.5f, 1.5f, false, juce::var() },
+        { "proDistanceLaw", 3.0f, 1.0f, false, juce::var() },
     }));
     CAPTURE (id);
 

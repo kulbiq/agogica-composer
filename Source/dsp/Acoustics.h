@@ -8,7 +8,6 @@ enum class OutputMode { stereo, binaural };
 struct Adjustments
 {
     float distanceExponent = geometry::distanceLawExponent; // 1 = free field (-6 dB per doubling)
-    float air = 1.0f;              // air absorption multiplier, 0..2
 };
 
 // Everything a processing stage needs to know about the scene, set once per block.

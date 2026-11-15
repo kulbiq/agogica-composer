@@ -164,8 +164,6 @@ public:
         delay.prepare (sampleRate);
         placer.prepare (sampleRate);
         gain.reset (sampleRate, 0.05);
-        airCoefficient.reset (sampleRate, 0.05);
-        airState = 0.0f;
         snap = true;
     }
 
@@ -175,26 +173,22 @@ public:
         setMode (a.mode);
         setTarget (geometry::azimuthDegrees (a.player, a.listener) - a.headYaw,
                    geometry::delayMs (a.player, a.listener) / 1000.0f,
-                   geometry::distanceGain (distance, a.adjust.distanceExponent),
-                   geometry::airCutoffHz (distance, a.adjust.air));
+                   geometry::distanceGain (distance, a.adjust.distanceExponent));
     }
 
-    void setTarget (float azimuthDegrees, float delaySeconds, float newGain = 1.0f, float airCutoffHz = 0.0f) noexcept
+    void setTarget (float azimuthDegrees, float delaySeconds, float newGain = 1.0f) noexcept
     {
-        const auto coefficient = dsp::onePoleCoefficient (airCutoffHz, sampleRate);
         delay.setTarget (delaySeconds * (float) sampleRate);
         placer.setDirection (azimuthDegrees, snap);
 
         if (snap)
         {
             gain.setCurrentAndTargetValue (newGain);
-            airCoefficient.setCurrentAndTargetValue (coefficient);
             snap = false;
             return;
         }
 
         gain.setTargetValue (newGain);
-        airCoefficient.setTargetValue (coefficient);
     }
 
     void setMode (OutputMode mode) noexcept { placer.setMode (mode); }
@@ -203,15 +197,13 @@ public:
     {
         float delayed;
         delay.read (history, &delayed, 1); // one sample at a time, as it was
-        airState += airCoefficient.getNextValue() * (delayed - airState);
-        placer.process (airState * gain.getNextValue(), left, right);
+        placer.process (delayed * gain.getNextValue(), left, right);
     }
 
 private:
     double sampleRate = 44100.0;
     DelayTap delay;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> gain, airCoefficient;
-    float airState = 0.0f;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> gain;
     Placer placer;
     bool snap = true;
 };

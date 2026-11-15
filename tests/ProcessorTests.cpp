@@ -299,7 +299,6 @@ TEST_CASE ("processBlock never allocates (both modes, Pro, moves and mode switch
         }
     }
 
-    set (p, "proAir", 2.0f);
     set (p, "proDistanceLaw", 6.0f);
     play (2);
 
@@ -581,7 +580,6 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK_THAT (p.getParam ("playerX"), WithinAbs (6.0, 1e-4));
         CHECK_THAT (p.getParam ("playerY"), WithinAbs (4.0, 1e-4));
         CHECK_THAT (p.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
-        CHECK_THAT (p.getParam ("proAir"), WithinAbs (0.5, 1e-4));
         CHECK (p.getDisplayName() == "Viola");
         CHECK (p.getScene() == "D");
         CHECK (p.isPlaced());
@@ -595,15 +593,15 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         const auto data = savedProject();
         auto xml = juce::AudioProcessor::getXmlFromBinary (data.getData(), (int) data.getSize());
         REQUIRE (xml != nullptr);
-        auto* air = xml->getChildByAttribute ("id", "proAir");
-        REQUIRE (air != nullptr);
-        xml->removeChildElement (air, true);
+        auto* mode = xml->getChildByAttribute ("id", "outputMode");
+        REQUIRE (mode != nullptr);
+        xml->removeChildElement (mode, true);
 
         juce::MemoryBlock older;
         juce::AudioProcessor::copyXmlToBinary (*xml, older);
         load (p, older);
 
-        CHECK_THAT (p.getParam ("proAir"), WithinAbs (1.0, 1e-4));
+        CHECK_THAT (p.getParam ("outputMode"), WithinAbs (0.0, 1e-4));
         CHECK_THAT (p.getParam ("roomSize"), WithinAbs (35.0, 1e-4));
     }
 
@@ -672,7 +670,7 @@ TEST_CASE ("output stays finite for any parameter values (fuzz)", "[slow][integr
     juce::StringArray ids;
     for (auto* param : p.getParameters()) // every parameter, Pro included
         ids.add (dynamic_cast<juce::AudioProcessorParameterWithID&> (*param).paramID);
-    REQUIRE (ids.size() >= 8);
+    REQUIRE (ids.size() >= 7);
 
     for (int block = 0; block < 500; ++block)
     {

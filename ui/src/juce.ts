@@ -8,7 +8,7 @@ export type Player = Point & {
   name: string;
   colour: string; // host track colour "#rrggbb", or ""
   self: boolean;
-  derived: { distance: number; azimuth: number; pan: number; delayMs: number; levelDb: number; airDb: number };
+  derived: { distance: number; azimuth: number; pan: number; delayMs: number; levelDb: number };
 };
 
 // Mirrors stage::snapshot in Source/bridge/Stage.cpp.
@@ -27,8 +27,7 @@ export type Stage = {
 };
 
 export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode"
-  | "proDistanceLaw"
-  | "proAir";
+  | "proDistanceLaw";
 
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const editNative = getNativeFunction("edit");

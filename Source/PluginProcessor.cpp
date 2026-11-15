@@ -9,15 +9,6 @@ std::atomic<int> nextId { 0 };
 
 const float dbPerDoublingFreeField = 20.0f * std::log10 (2.0f); // 6.02 dB
 
-// Pro panel parameter helper (see Adjustments in dsp/Acoustics.h).
-auto amount (const juce::String& id, const juce::String& name, float max, float defaultValue)
-{
-    return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name,
-                                                        juce::NormalisableRange<float> { 0.0f, max, 0.01f }, defaultValue,
-                                                        juce::AudioParameterFloatAttributes{}.withLabel ("%")
-                                                            .withStringFromValueFunction ([] (float v, int) { return juce::String (juce::roundToInt (v * 100.0f)); }));
-}
-
 auto metres (const juce::String& id, const juce::String& name, float defaultValue)
 {
     return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 },
@@ -78,7 +69,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createPar
                                                      juce::NormalisableRange<float> { 0.0f, dbPerDoublingFreeField },
                                                      dbPerDoublingFreeField * geometry::distanceLawExponent,
                                                      juce::AudioParameterFloatAttributes{}.withLabel ("dB/doubling")),
-        amount ("proAir", "Air absorption", 2.0f, 1.0f),
     };
 }
 
@@ -212,7 +202,6 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     auto& adjust = acoustics.adjust;
     adjust.distanceExponent = audioParams.proDistanceLaw->load() / dbPerDoublingFreeField;
-    adjust.air = audioParams.proAir->load();
 
     // A track silent for longer than the tail produces silence: skip all the work. When
     // sound returns, everything inside is silent too, so stages jump straight to the

@@ -21,9 +21,9 @@ struct Rig
         path.prepare (sampleRate);
     }
 
-    void setTarget (float azimuth, float delaySeconds, float gain = 1.0f, float airCutoffHz = 0.0f)
+    void setTarget (float azimuth, float delaySeconds, float gain = 1.0f)
     {
-        path.setTarget (azimuth, delaySeconds, gain, airCutoffHz);
+        path.setTarget (azimuth, delaySeconds, gain);
     }
 
     void setMode (OutputMode mode) { path.setMode (mode); }
@@ -267,25 +267,6 @@ TEST_CASE ("delay changes: hold while moving, settle, crossfade, no click, no Do
 
         CHECK (difference > 0.1f);
     }
-}
-
-TEST_CASE ("air absorption: ISO loss at 8 kHz, low frequencies untouched")
-{
-    constexpr double sampleRate = 48000.0;
-    constexpr float metres = 50.0f;
-
-    auto lossDb = [&] (double frequency)
-    {
-        Rig s;
-        s.prepare (sampleRate);
-        s.setTarget (-90.0f, 0.0f, 1.0f, geometry::airCutoffHz (metres));
-        const auto input = tone (frequency, sampleRate, 48000);
-        const auto out = run (s, input);
-        return db (rms (out.left.data() + 4800, 43200) / rms (input.data() + 4800, 43200));
-    };
-
-    CHECK_THAT (lossDb (8000.0), WithinAbs (-geometry::airLossDbAt8k (metres), 0.5)); // ~ -3.8 dB
-    CHECK (lossDb (500.0) > -0.1);
 }
 
 // ---- Binaural ----------------------------------------------------------------------------

@@ -80,7 +80,7 @@ TEST_CASE ("Pro panel at its defaults: the direct sound exactly as before", "[in
     }
 }
 
-TEST_CASE ("Pro: distance law and air in the derived values", "[integration]")
+TEST_CASE ("Pro: the distance law in the derived values", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor p;
@@ -90,6 +90,4 @@ TEST_CASE ("Pro: distance law and air in the derived values", "[integration]")
     set (p, "proDistanceLaw", 20.0f * std::log10 (2.0f));
     CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["levelDb"], WithinAbs (-6.02, 0.01));
 
-    set (p, "proAir", 0.0f);
-    CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["airDb"], WithinAbs (0.0, 1e-6));
 }
