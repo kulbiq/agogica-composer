@@ -71,8 +71,8 @@ struct BlockAndLegacy
 
     explicit BlockAndLegacy (double sampleRate)
     {
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
-        legacyHistory.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
+        legacyHistory.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
         path.prepare (sampleRate);
         legacyPath.prepare (sampleRate);
     }

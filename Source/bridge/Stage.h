@@ -42,9 +42,9 @@ void setName (ComposerProcessor& self, int id, const juce::String& name);
 // copy of its current values. Written as gestures, like a drag.
 void setScene (ComposerProcessor& self, const juce::String& scene);
 
-// Copies the stage's active scene and room/listener into self and, if `takeSeat`, moves
+// Copies the stage's active scene and room/listener into self and moves
 // self's player to a free seat (see freeSeat). Marks self placed.
-void join (ComposerProcessor& self, bool takeSeat);
+void join (ComposerProcessor& self);
 
 // Where a new player sits, given the (clamped) positions already taken: rows of 7 in front of
 // the listener, centre-out, spaced to fit the room (2 m in a 20 m room, down to 0.75 m), at

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <juce_audio_basics/juce_audio_basics.h>
-#include "Acoustics.h"
+#include "OutputMode.h"
 #include "Fir.h"
 #include "History.h"
 #include "Hrtf.h"

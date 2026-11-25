@@ -24,7 +24,7 @@ ComposerProcessor::ComposerProcessor()
                                          reg->withMember (instance, [] (ComposerProcessor& p)
                                          {
                                              if (! p.isPlaced())
-                                                 stage::join (p, true);
+                                                 stage::join (p);
                                          });
                                      });
 }
@@ -183,16 +183,16 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (std::exchange (bypassedSinceLastBlock, false))
     {
         history.clear();
-        std::apply ([] (auto&... stage) { (stage.clear(), ...); }, stages);
+        directPath.clear();
         silentFor = 0;
     }
 
     // Audio depends only on this instance's own parameters (never on UI pushes or other
     // instances), so offline bounces and ahead-of-time rendering stay correct.
     Acoustics acoustics;
-    acoustics.roomSize = audioParams.roomSize->load();
-    acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, acoustics.roomSize);
-    acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, acoustics.roomSize);
+    const auto roomSize = audioParams.roomSize->load();
+    acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, roomSize);
+    acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, roomSize);
     acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
 
     // Head tracking is a live monitoring aid: never in exports, never in stereo.
@@ -203,7 +203,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     adjust.distanceExponent = audioParams.proDistanceLaw->load() / params::dbPerDoublingFreeField;
 
     // A track silent for longer than the tail produces silence: skip all the work. When
-    // sound returns, everything inside is silent too, so stages jump straight to the
+    // sound returns, everything inside is silent too, so the path jumps straight to the
     // current position instead of fading from where they were.
     if (peak <= 0.0f)
     {
@@ -218,12 +218,12 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     else
     {
         if (silentFor >= skipAfter)
-            std::apply ([] (auto&... stage) { (stage.jumpToTargets(), ...); }, stages);
+            directPath.jumpToTargets();
 
         silentFor = 0;
     }
 
-    std::apply ([&] (auto&... stage) { (stage.setAcoustics (acoustics), ...); }, stages);
+    directPath.setAcoustics (acoustics);
 
     const auto numInputs = getTotalNumInputChannels();
     const auto* inL = buffer.getReadPointer (0);
@@ -241,7 +241,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             history.write (numInputs > 1 ? 0.5f * (inL[i] + inR[i]) : inL[i]);
 
         alignas (32) float left[History::maxBlock] {}, right[History::maxBlock] {};
-        std::apply ([&] (auto&... stage) { (stage.process (history, left, right, n), ...); }, stages);
+        directPath.process (history, left, right, n);
 
         std::copy (left, left + n, outL + start);
         std::copy (right, right + n, outR + start);
@@ -251,8 +251,8 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 void ComposerProcessor::prepareToPlay (double sampleRate, int)
 {
     preparedRate = sampleRate;
-    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
-    std::apply ([&] (auto&... stage) { (stage.prepare (sampleRate), ...); }, stages);
+    history.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
+    directPath.prepare (sampleRate);
     skipAfter = (int) (tailSeconds * sampleRate);
     silentFor = 0;
 }

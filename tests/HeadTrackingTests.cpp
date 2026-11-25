@@ -184,7 +184,7 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
     auto render = [] (geometry::Point player, float headYaw)
     {
         History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * 48000.0));
         DirectPath path;
         path.prepare (48000.0);
 
@@ -261,7 +261,7 @@ TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees")
     auto render = [] (float headYaw)
     {
         History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * 48000.0));
         DirectPath path;
         path.prepare (48000.0);
 

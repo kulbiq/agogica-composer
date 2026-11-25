@@ -284,7 +284,7 @@ void setScene (ComposerProcessor& self, const juce::String& scene)
     });
 }
 
-void join (ComposerProcessor& self, bool takeSeat)
+void join (ComposerProcessor& self)
 {
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
@@ -302,7 +302,7 @@ void join (ComposerProcessor& self, bool takeSeat)
                 self.writeParam (paramId, source->getParam (paramId));
         }
 
-        if (takeSeat && source != nullptr)
+        if (source != nullptr)
         {
             // Where everyone is drawn (clamped to the room), not their stored values.
             const auto roomSize = self.getParam (params::roomSize);

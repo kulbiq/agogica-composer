@@ -84,7 +84,7 @@ public:
 
     // How long the output goes on after the input stops (reported to the host; also how long a
     // silent track keeps processing): with the direct sound alone, the longest delay.
-    static constexpr double tailSeconds = Acoustics::maxDelaySeconds;
+    static constexpr double tailSeconds = History::maxDelaySeconds;
 
     // Development monitoring: processBlock's share of real time (realtime playback only).
     LoadMeter load;
@@ -121,13 +121,9 @@ private:
                                     state.getRawParameterValue (params::outputMode),
                                     state.getRawParameterValue (params::proDistanceLaw) };
 
-    // The player's mono input, read by every stage.
+    // The player's mono input, and the sound's way from it to the listener's two ears.
     History history;
-
-    // The processing chain: every stage reads `history` and adds its stereo output.
-    // Plug a stage in or out here. For now the direct sound alone (reflections and a reverb
-    // tail come back once they are affordable).
-    std::tuple<DirectPath> stages;
+    DirectPath directPath;
 
     // Samples of silent input so far; a track silent for longer than the tail skips all work.
     int silentFor = 0, skipAfter = 0;

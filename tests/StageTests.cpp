@@ -82,7 +82,7 @@ TEST_CASE ("gestures reach the host balanced, whatever the page and the stage do
         stage::applyEdit (a, edit ("begin", a.id, "roomSize"));
         ComposerProcessor late;
         HostGestureLog hostOfLate (late);
-        stage::join (late, true);
+        stage::join (late);
         stage::applyEdit (a, edit ("change", a.id, "roomSize", 30.0f));
         stage::applyEdit (a, edit ("end", a.id, "roomSize"));
         CHECK (hostOfLate.balanced());
@@ -233,14 +233,14 @@ TEST_CASE ("a new insert adopts the stage's scene, room/listener and takes a fre
 {
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor a;
-    stage::join (a, true); // alone: stays where it is
+    stage::join (a); // alone: stays where it is
     stage::setScene (a, "C");
     drag (a, a.id, "roomSize", 30.0f);
     drag (a, a.id, "listenerY", -3.0f);
     drag (a, a.id, "playerY", 3.0f); // seat 0 (0, 3) is taken by a
 
     ComposerProcessor b;
-    stage::join (b, true);
+    stage::join (b);
 
     CHECK (b.getScene() == "C");
     CHECK_THAT (b.getParam ("roomSize"), WithinAbs (30.0, 1e-4));
@@ -333,7 +333,7 @@ TEST_CASE ("a track added in a later scene shares the room and listener of every
     drag (a, a.id, "listenerX", -3.0f);
 
     ComposerProcessor late; // inserted while B is active: it has never been in A
-    stage::join (late, true);
+    stage::join (late);
     const auto seatInB = late.getParam ("playerX");
 
     stage::setScene (a, "A");
@@ -376,7 +376,7 @@ TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room
         CHECK_THAT (b.getParam (id), WithinAbs (second, 1e-4));
 
         ComposerProcessor c;
-        stage::join (c, true);
+        stage::join (c);
         CHECK_THAT (c.getParam (id), WithinAbs (second, 1e-4)); // adopted
 
         b.getStateInformation (saved);

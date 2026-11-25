@@ -17,7 +17,7 @@ struct Rig
 
     void prepare (double sampleRate)
     {
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
         path.prepare (sampleRate);
     }
 
