@@ -20,7 +20,6 @@ export type Stage = {
   headTracking: { live: boolean; canStart: boolean }; // the yaw comes as its own "headYaw" event (degrees clockwise)
   alone: boolean;
   openElsewhere?: string; // name of another track whose Composer window is open
-  licence?: { ok: boolean; message: string }; // offline licence (Source/licensing); not ok = audio passes through
   room: number;
   listener: Point;
   players: Player[];
@@ -34,8 +33,6 @@ const editNative = getNativeFunction("edit");
 export const setName = getNativeFunction("setName") as (id: number, name: string) => Promise<void>;
 export const startTracker = getNativeFunction("startTracker") as () => Promise<boolean>;
 export const setScene = getNativeFunction("setScene") as (scene: string) => Promise<void>;
-export const openHub = getNativeFunction("openHub") as () => Promise<boolean>;
-export const checkLicence = getNativeFunction("checkLicence") as () => Promise<boolean>;
 
 // Listens to an event C++ sends with emitEventIfBrowserIsVisible.
 export function useJuceEvent<T>(id: string, fn: (payload: T) => void) {

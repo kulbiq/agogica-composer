@@ -169,17 +169,6 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
          prev < peak && ! inputPeak.compare_exchange_weak (prev, peak, std::memory_order_relaxed);)
         ;
 
-    // Not activated on this computer (or the licence ran out): pass the input through untouched.
-    if (! licence->isValid())
-    {
-        for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
-            if (getTotalNumInputChannels() > 0)
-                buffer.copyFrom (ch, 0, buffer, 0, 0, buffer.getNumSamples());
-            else
-                buffer.clear (ch, 0, buffer.getNumSamples());
-        return;
-    }
-
     // A host calling before prepareToPlay, or with no input bus: silence, never a read past
     // an empty history or a channel that isn't there.
     if (! history.isPrepared() || getTotalNumInputChannels() == 0 || buffer.getNumChannels() < 2)

@@ -170,13 +170,6 @@ juce::var snapshot (ComposerProcessor& self)
     o->setProperty ("scene", self.getScene());
     o->setProperty ("outputMode", self.getParam ("outputMode") > 0.5f ? "binaural" : "stereo");
 
-    // Without a valid licence the plugin passes audio through; the UI says why.
-    const auto licence = self.licence->current();
-    auto lic = std::make_unique<juce::DynamicObject>();
-    lic->setProperty ("ok", licence.status == licensing::Status::valid);
-    lic->setProperty ("message", licensing::describe (licence.status));
-    o->setProperty ("licence", lic.release());
-
     // The yaw itself changes every tick while tracking: it goes out as its own "headYaw"
     // event (ComposerEditor), so the stage stays quiet.
     auto tracking = std::make_unique<juce::DynamicObject>();
@@ -184,7 +177,7 @@ juce::var snapshot (ComposerProcessor& self)
    #if JUCE_MAC
     tracking->setProperty ("canStart", true); // the editor can start Agogica Tracker
    #else
-    tracking->setProperty ("canStart", false); // ponytail: not installed on Windows yet (Hub plan 7b)
+    tracking->setProperty ("canStart", false); // ponytail: not installed on Windows yet
    #endif
     o->setProperty ("headTracking", tracking.release());
 

@@ -30,17 +30,14 @@ private:
 
     // Opens an app by bundle id without waiting on the host's message thread. macOS: `open -b`,
     // and the timer completes the call when `open` has finished (or after 5 s), true if it worked.
-    // Windows: the installed app's exe (bridge/Apps.h), started at once; only the Hub for now.
-    // `ifFailed` runs before completing with false.
-    void openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion,
-                  std::function<void()> ifFailed = {});
+    // Elsewhere it completes with false at once.
+    void openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion);
     void finishOpening();
 
     struct Opening
     {
         std::unique_ptr<juce::ChildProcess> process;
         juce::WebBrowserComponent::NativeFunctionCompletion complete;
-        std::function<void()> ifFailed;
         juce::uint32 startedAt;
     };
     std::vector<Opening> opening;

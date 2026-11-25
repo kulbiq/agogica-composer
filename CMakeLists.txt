@@ -59,29 +59,19 @@ target_sources(Composer PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/bridge/Stage.cpp
-    Source/bridge/Apps.cpp
     Source/stage/StageRegistry.cpp
     Source/stage/HeadTracking.cpp
     Source/stage/HeadTrackingFile.cpp
     Source/dsp/DirectPath.cpp
     Source/dsp/Placer.cpp
     Source/dsp/Hrtf.cpp
-    Source/dsp/Fir.cpp
-    Source/licensing/LicenseCheck.cpp)
-
-# Vendored as-is (third_party/monocypher/README): not held to our warning flags. A library of its
-# own, since a per-file "-w" after JUCE's /W4 makes MSVC warn about the override (D9025).
-add_library(monocypher STATIC third_party/monocypher/monocypher.c third_party/monocypher/monocypher-ed25519.c)
-target_compile_options(monocypher PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/W0,-w>)
+    Source/dsp/Fir.cpp)
 
 target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
-    # Licences signed by the local dev site are accepted by Debug builds only. Explicit, so a
-    # configure without a build type can never ship a plugin that trusts the dev key.
-    $<$<CONFIG:Debug>:COMPOSER_ACCEPT_DEV_KEY=1>)
+    JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1)
 
 # Debug only: load the UI from `npm run dev` instead of the embedded zip.
 option(COMPOSER_UI_DEV_SERVER "Debug builds load the web UI from the Vite dev server" OFF)
@@ -138,9 +128,7 @@ juce_add_binary_data(ComposerData SOURCES ${UI_ZIP} ${HRIR_TABLES})
 target_link_libraries(Composer
     PRIVATE
         ComposerData
-        monocypher
         juce::juce_audio_utils
-        juce::juce_cryptography
         juce::juce_dsp
         juce::juce_gui_extra
     PUBLIC
@@ -158,7 +146,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Tests link the plugin's shared code (which already contains the JUCE modules)
 # and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp tests/LicenseTests.cpp tests/AppsTests.cpp
+add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp
     tracker/vision/ImageTensor.cpp) # the tracker's pure code, tested here (the app itself needs ONNX Runtime)
 target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)

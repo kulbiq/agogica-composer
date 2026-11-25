@@ -47,6 +47,6 @@ bool HeadTracking::startInstalledTracker()
                                .getChildFile ("Applications/Agogica Tracker.app");
     return installed.exists() && installed.startAsProcess();
    #else
-    return false; // ponytail: the tracker isn't installed on Windows yet (Hub plan 7b)
+    return false; // ponytail: the tracker isn't installed on Windows yet
    #endif
 }

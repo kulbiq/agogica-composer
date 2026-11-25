@@ -1,7 +1,6 @@
 #include "PluginEditor.h"
 #include "bridge/Stage.h"
 #include "bridge/Mime.h"
-#include "bridge/Apps.h"
 #include <BinaryData.h>
 
 namespace
@@ -112,18 +111,6 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                                              else
                                                  openApp ("com.agogica.tracker", std::move (complete));
                                          })
-                    // "Not activated" screen: Agogica Hub signs in and writes the licence.
-                    .withNativeFunction ("openHub", [this] (const auto&, auto complete)
-                                         {
-                                             // Not installed: get it from the website.
-                                             openApp ("com.agogica.hub", std::move (complete),
-                                                      [] { juce::URL ("https://agogica.app/dashboard").launchInDefaultBrowser(); });
-                                         })
-                    .withNativeFunction ("checkLicence", [this] (const auto&, auto complete)
-                                         {
-                                             composer.licence->refresh();
-                                             complete (composer.licence->isValid());
-                                         })
                     .withNativeFunction ("getBuildInfo", [this] (const auto&, auto complete)
                                          {
                                              complete (getBuildInfo (composer));
@@ -149,30 +136,18 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
     browser.goToURL (uiUrl);
 }
 
-void ComposerEditor::openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion complete,
-                              std::function<void()> ifFailed)
+void ComposerEditor::openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion complete)
 {
    #if JUCE_MAC
     if (auto process = std::make_unique<juce::ChildProcess>(); process->start (juce::StringArray { "/usr/bin/open", "-b", bundleId }))
     {
-        opening.push_back ({ std::move (process), std::move (complete), std::move (ifFailed), juce::Time::getMillisecondCounter() });
-        return;
-    }
-   #elif JUCE_WINDOWS
-    // ShellExecute returns once the app's process exists (as the browser fallback does): nothing
-    // to wait for. A ChildProcess would pass the host's inheritable handles on to the app, and
-    // the app keeps running, so the timer would count it as failed.
-    if (const auto exe = apps::windowsExecutable (bundleId); exe.existsAsFile() && exe.startAsProcess())
-    {
-        complete (true);
+        opening.push_back ({ std::move (process), std::move (complete), juce::Time::getMillisecondCounter() });
         return;
     }
    #else
     juce::ignoreUnused (bundleId);
    #endif
 
-    if (ifFailed)
-        ifFailed();
     complete (false);
 }
 
@@ -189,10 +164,7 @@ void ComposerEditor::finishOpening()
             continue;
         }
 
-        const auto ok = ! running && it->process->getExitCode() == 0;
-        if (! ok && it->ifFailed)
-            it->ifFailed();
-        it->complete (ok);
+        it->complete (! running && it->process->getExitCode() == 0);
         it = opening.erase (it);
     }
 }

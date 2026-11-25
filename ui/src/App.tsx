@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import styles from "./App.module.css";
 import Footer from "./Footer";
-import { checkLicence, openHub, useStage } from "./juce";
+import { useStage } from "./juce";
 import ResizeGrip from "./ResizeGrip";
 import SidePanel from "./SidePanel";
 import StageMap, { type NodeKey } from "./StageMap";
@@ -26,25 +26,7 @@ export default function App() {
 
   return (
     <div className={styles.root}>
-      {stage?.licence && !stage.licence.ok ? (
-        // Not activated: audio passes through untouched until Agogica Hub writes a licence.
-        <div className={`${styles.body} ${styles.elsewhere}`}>
-          <span className={styles.label}>Composer is not active</span>
-          <h1 className={styles.elsewhereTitle}>Open Agogica Hub</h1>
-          <p className={styles.elsewhereText}>
-            {stage.licence.message} Sign in to Agogica Hub once while online to activate it; after that it works
-            offline. Until then, audio passes through unchanged.
-          </p>
-          <div className={styles.licenceActions}>
-            <button className={styles.ghost} onClick={() => void openHub()}>
-              Open Agogica Hub
-            </button>
-            <button className={styles.ghost} onClick={() => void checkLicence()}>
-              Check again
-            </button>
-          </div>
-        </div>
-      ) : stage && blocked && stage.openElsewhere !== undefined ? (
+      {stage && blocked && stage.openElsewhere !== undefined ? (
         <div className={`${styles.body} ${styles.elsewhere}`}>
           <span className={styles.label}>Composer is already open</span>
           <h1 className={styles.elsewhereTitle}>{stage.openElsewhere}</h1>
