@@ -1,0 +1,178 @@
+import type { Point, Stage } from "./bridge";
+import { levelOf, type Levels } from "./level";
+
+export type NodeKey = "listener" | number;
+
+// Where the room sits on the canvas: its centre in CSS pixels, and pixels per metre.
+export type View = { cx: number; cy: number; scale: number };
+
+export type MapFrame = {
+  width: number; // CSS pixels
+  height: number;
+  seconds: number; // since the map appeared; drives the breathing ring
+  stage: Stage;
+  selected: NodeKey | null;
+  overrides: ReadonlyMap<NodeKey, Point>; // nodes the user is moving, in metres
+  levels: Levels;
+  headYaw: number; // degrees clockwise
+  ink: string; // "r,g,b"
+  paper: string; // a CSS colour
+};
+
+const margin = 32; // px around the room square
+
+// (1 - cos) / 2: eases at the extremes, so motion breathes rather than ticks.
+const breath = (t: number, period: number) => (1 - Math.cos(((t % period) / period) * Math.PI * 2)) / 2;
+
+export function nodesOf(stage: Stage): Map<NodeKey, Point> {
+  const nodes = new Map<NodeKey, Point>([["listener", stage.listener]]);
+  for (const p of stage.players) nodes.set(p.id, p);
+  return nodes;
+}
+
+// Draws the stage map, one frame at a time. It remembers only what eases between frames:
+// where each node is drawn and how high each level is shown.
+export class StagePainter {
+  private drawn = new Map<NodeKey, Point>(); // eased positions in metres
+  private shown = new Map<number, number>(); // eased input levels, 0..1
+
+  paint(ctx: CanvasRenderingContext2D, frame: MapFrame): View {
+    const { width: W, height: H, stage, selected, overrides, ink, paper } = frame;
+    const { drawn, shown } = this;
+    const half = stage.room / 2;
+    const side = Math.max(0, Math.min(W, H) - margin * 2);
+    const scale = side / stage.room;
+    const cx = W / 2;
+    const cy = H / 2;
+
+    // Snap hairlines to the pixel grid so they stay crisp at 1x.
+    const px = (v: number) => Math.round(v) + 0.5;
+    const sx = (x: number) => cx + x * scale;
+    const sy = (y: number) => cy - y * scale;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineWidth = 1;
+
+    // Grid: 1 m minor (skipped when too dense), 5 m major, counted from the centre.
+    for (let m = -Math.floor(half); m <= half; m++) {
+      if (Math.abs(m) >= half) continue; // the outline covers the edges
+      const major = m % 5 === 0;
+      if (!major && scale < 6) continue;
+      ctx.strokeStyle = `rgba(${ink},${major ? 0.1 : 0.05})`;
+      ctx.beginPath();
+      ctx.moveTo(px(sx(m)), sy(half));
+      ctx.lineTo(px(sx(m)), sy(-half));
+      ctx.moveTo(sx(-half), px(sy(m)));
+      ctx.lineTo(sx(half), px(sy(m)));
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = `rgba(${ink},0.2)`;
+    ctx.strokeRect(px(sx(-half)), px(sy(half)), px(sx(half)) - px(sx(-half)), px(sy(-half)) - px(sy(half)));
+
+    // Scale bar: 5 m, under the bottom-left corner.
+    const barY = px(sy(-half) + 16);
+    ctx.strokeStyle = `rgba(${ink},0.45)`;
+    ctx.beginPath();
+    ctx.moveTo(sx(-half), barY);
+    ctx.lineTo(sx(-half) + 5 * scale, barY);
+    ctx.moveTo(px(sx(-half)), barY - 3);
+    ctx.lineTo(px(sx(-half)), barY + 3);
+    ctx.moveTo(px(sx(-half) + 5 * scale), barY - 3);
+    ctx.lineTo(px(sx(-half) + 5 * scale), barY + 3);
+    ctx.stroke();
+    ctx.font = '500 10px "JetBrains Mono", monospace';
+    ctx.letterSpacing = "0.14em";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = `rgba(${ink},0.55)`;
+    ctx.fillText(`5 M · ROOM ${stage.room} × ${stage.room} M`, sx(-half) + 5 * scale + 10, barY);
+
+    // Nodes ease toward where C++ says they are; overridden ones sit under the pointer.
+    const targets = nodesOf(stage);
+    for (const [key, target] of targets) {
+      const goal = overrides.get(key) ?? target;
+      const prev = drawn.get(key);
+      const snap = !prev || overrides.has(key);
+      drawn.set(key, snap ? { ...goal } : { x: prev.x + (goal.x - prev.x) * 0.25, y: prev.y + (goal.y - prev.y) * 0.25 });
+    }
+    for (const key of drawn.keys())
+      if (!targets.has(key)) {
+        drawn.delete(key);
+        if (typeof key === "number") shown.delete(key);
+      }
+
+    // Selected node: a breathing ring.
+    const sel = selected !== null ? drawn.get(selected) : undefined;
+    if (sel) {
+      const b = breath(frame.seconds, 2.6);
+      ctx.beginPath();
+      ctx.arc(sx(sel.x), sy(sel.y), 11 + b * 5, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${ink},${0.12 + 0.3 * (1 - b)})`;
+      ctx.stroke();
+    }
+
+    // Input level: a soft disc behind each player (30 Hz from C++, eased per frame).
+    for (const player of stage.players) {
+      const p = drawn.get(player.id)!;
+      const level = (shown.get(player.id) ?? 0) * 0.65 + levelOf(frame.levels, player.id) * 0.35;
+      shown.set(player.id, level);
+      if (level < 0.01) continue;
+      ctx.beginPath();
+      ctx.arc(sx(p.x), sy(p.y), 6 + level * 14, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${ink},${0.04 + level * 0.12})`;
+      ctx.fill();
+    }
+
+    // Names first, with a paper halo so they stay legible where players crowd (selected last);
+    // nodes are drawn over them so a node is never hidden.
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = paper;
+    const byPriority = [...stage.players].sort((a, b) => Number(a.id === selected) - Number(b.id === selected));
+    for (const player of byPriority) {
+      const p = drawn.get(player.id)!;
+      const label = player.name.toUpperCase();
+      ctx.strokeText(label, sx(p.x) + 12, sy(p.y));
+      ctx.fillStyle = `rgba(${ink},${player.id === selected ? 0.85 : 0.55})`;
+      ctx.fillText(label, sx(p.x) + 12, sy(p.y));
+    }
+    ctx.lineWidth = 1;
+
+    // Listener: an arrowhead facing +y (front), turned with the head when tracking. Slim and
+    // notched so its direction reads at any angle (an equilateral triangle turned 25°
+    // looks like it points left).
+    const l = drawn.get("listener")!;
+    ctx.save();
+    ctx.translate(sx(l.x), sy(l.y));
+    ctx.rotate((frame.headYaw * Math.PI) / 180);
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(5.5, 6);
+    ctx.lineTo(0, 3);
+    ctx.lineTo(-5.5, 6);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${ink},0.9)`;
+    ctx.fill();
+    ctx.restore();
+
+    for (const player of stage.players) {
+      const p = drawn.get(player.id)!;
+      ctx.beginPath();
+      ctx.arc(sx(p.x), sy(p.y), 6, 0, Math.PI * 2);
+      // The selected player (the one the side panel shows) is filled.
+      if (player.id === selected) {
+        ctx.fillStyle = `rgba(${ink},0.9)`;
+        ctx.fill();
+      } else {
+        ctx.fillStyle = paper;
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = `rgba(${ink},0.75)`;
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+    }
+
+    return { cx, cy, scale };
+  }
+}
