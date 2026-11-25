@@ -62,10 +62,10 @@ public:
     // False for a brand-new insert until it has joined the stage (copied the shared
     // room/listener and scene, taken a seat). Saved, so a reloaded project never re-joins.
     bool isPlaced() const                               { return state.state.getProperty ("placed", false); }
-    void markPlaced()                                   { state.state.setProperty ("placed", true, nullptr); }
-    void setActiveScene (const juce::String& scene)     { state.state.setProperty ("scene", scene, nullptr); }
+    void markPlaced()                                   { setStateProperty ("placed", true); }
+    void setActiveScene (const juce::String& scene)     { setStateProperty ("scene", scene); }
     juce::String getDisplayName() const;                // name override, else host track name, else empty
-    void setNameOverride (const juce::String& name)     { state.state.setProperty ("name", name.trim(), nullptr); }
+    void setNameOverride (const juce::String& name)     { setStateProperty ("name", name.trim()); }
 
     // Host track colour as "#rrggbb", or empty when the host doesn't send one.
     juce::String getTrackColour() const                 { return trackColour; }
@@ -93,6 +93,15 @@ public:
 
 private:
     juce::StringArray gesturesOpen; // parameter ids, message thread only
+
+    // The state tree is written on the message thread, but a host may save (copy it) from
+    // any thread: every write and the copy hold this. Never taken on the audio thread.
+    juce::CriticalSection stateTreeLock;
+    void setStateProperty (const juce::Identifier& name, const juce::var& value)
+    {
+        const juce::ScopedLock lock (stateTreeLock);
+        state.state.setProperty (name, value, nullptr);
+    }
 
     // Cached for the audio thread (looking up by name would allocate a String).
     struct AudioParams

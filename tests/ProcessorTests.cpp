@@ -706,6 +706,36 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
     }
 }
 
+TEST_CASE ("state: a host may save from another thread while the stage is being edited", "[integration]")
+{
+    // Under the tsan preset this fails on a data race; elsewhere it at least must not crash.
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor p;
+    std::atomic<bool> done { false };
+
+    std::thread host ([&]
+    {
+        juce::MemoryBlock saved;
+        while (! done)
+        {
+            saved.reset();
+            p.getStateInformation (saved);
+        }
+    });
+
+    for (int i = 0; i < 2000; ++i)
+    {
+        p.setNameOverride ("Viola " + juce::String (i));
+        p.setActiveScene (i % 2 == 0 ? "A" : "B");
+        p.storeScene();
+        p.markPlaced();
+    }
+
+    done = true;
+    host.join();
+    SUCCEED();
+}
+
 TEST_CASE ("parameters: IDs, ranges, defaults and choices never change silently", "[integration]")
 {
     // Hosts save automation and projects by parameter ID, version and normalised value,

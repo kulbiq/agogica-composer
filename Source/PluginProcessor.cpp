@@ -118,6 +118,7 @@ void ComposerProcessor::writeParam (const juce::String& paramId, float value)
 
 void ComposerProcessor::storeScene()
 {
+    const juce::ScopedLock lock (stateTreeLock);
     auto scenes = state.state.getOrCreateChildWithName ("scenes", nullptr);
     auto slot = scenes.getOrCreateChildWithName (getScene(), nullptr);
 
@@ -300,14 +301,23 @@ juce::AudioProcessorEditor* ComposerProcessor::createEditor()
 
 void ComposerProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = state.copyState().createXml())
+    const auto copy = [this]
+    {
+        const juce::ScopedLock lock (stateTreeLock);
+        return state.copyState();
+    }();
+
+    if (auto xml = copy.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
 void ComposerProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (state.state.getType()))
+    {
+        const juce::ScopedLock lock (stateTreeLock);
         state.replaceState (juce::ValueTree::fromXml (*xml));
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
