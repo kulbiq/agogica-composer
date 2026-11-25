@@ -191,12 +191,16 @@ TEST_CASE ("DSP load: average, worst block and overruns per period; offline rend
         LoadMeter meter;
         meter.add (0.001, 0.010); // 10 % of its block
         meter.add (0.020, 0.010); // twice its block: an overrun
-        const auto r = meter.read();
+        const auto r = meter.read (1000);
         CHECK_THAT (r.average, WithinAbs (1.05, 1e-6)); // 21 ms of work in 20 ms of audio
         CHECK_THAT (r.peak, WithinAbs (2.0, 1e-6));
         CHECK (r.overruns == 1);
 
-        const auto next = meter.read(); // each read starts a new period
+        const auto secondWindow = meter.read (1100); // another editor, a moment later: the same period
+        CHECK_THAT (secondWindow.average, WithinAbs (1.05, 1e-6));
+        CHECK (secondWindow.overruns == 1);
+
+        const auto next = meter.read (1000 + LoadMeter::periodMs); // a new period
         CHECK_THAT (next.average, WithinAbs (0.0, 0.0)); // exactly: nothing was measured
         CHECK_THAT (next.peak, WithinAbs (0.0, 0.0));
         CHECK (next.overruns == 0);
@@ -212,11 +216,11 @@ TEST_CASE ("DSP load: average, worst block and overruns per period; offline rend
 
         buffer.clear();
         p.processBlock (buffer, midi);
-        CHECK (p.load.read().average > 0.0f);
+        CHECK (p.load.read (1000).average > 0.0f);
 
         p.setNonRealtime (true);
         p.processBlock (buffer, midi);
-        CHECK_THAT (p.load.read().average, WithinAbs (0.0, 0.0)); // exactly: exports aren't measured
+        CHECK_THAT (p.load.read (2000).average, WithinAbs (0.0, 0.0)); // exactly: exports aren't measured
     }
 }
 

@@ -214,7 +214,7 @@ void ComposerEditor::timerCallback()
         {
             for (auto* p : members)
             {
-                const auto r = p->load.read();
+                const auto r = p->load.read (juce::Time::getMillisecondCounter());
                 if (p == &composer)
                     self = r;
                 all.average += r.average;

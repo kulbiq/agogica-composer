@@ -13,7 +13,7 @@ public:
     {
         float average = 0; // busy time / real time over the period (0.25 = a quarter of one core)
         float peak = 0;    // the worst single block
-        int overruns = 0;  // blocks that alone took longer than they last: a certain dropout
+        int overruns = 0;  // blocks that alone took longer than they last
     };
 
     // Audio thread: `busySeconds` spent on a block lasting `blockSeconds` of audio.
@@ -33,17 +33,32 @@ public:
             overruns.fetch_add (1, std::memory_order_relaxed);
     }
 
-    // Message thread: since the last read. A block landing mid-read can be split between two
+    // Message thread: the period that ended at the last read at least `periodMs` ago. Every
+    // open editor reads every track's meter, so a read soon after another gets the same period
+    // instead of the scraps left since. A block landing mid-read can be split between two
     // periods; fine for a meter.
-    Reading read() noexcept
+    static constexpr std::uint32_t periodMs = 200;
+
+    Reading read (std::uint32_t nowMs) noexcept
     {
-        const auto b = busy.exchange (0, std::memory_order_relaxed);
-        const auto a = audio.exchange (0, std::memory_order_relaxed);
-        return { a > 0 ? (float) (b / a) : 0.0f, peak.exchange (0, std::memory_order_relaxed),
-                 overruns.exchange (0, std::memory_order_relaxed) };
+        if (! periodRead || nowMs - periodReadAt >= periodMs)
+        {
+            const auto b = busy.exchange (0, std::memory_order_relaxed);
+            const auto a = audio.exchange (0, std::memory_order_relaxed);
+            period = { a > 0 ? (float) (b / a) : 0.0f, peak.exchange (0, std::memory_order_relaxed),
+                       overruns.exchange (0, std::memory_order_relaxed) };
+            periodReadAt = nowMs;
+            periodRead = true;
+        }
+
+        return period;
     }
 
 private:
+    Reading period;
+    std::uint32_t periodReadAt = 0;
+    bool periodRead = false;
+
     std::atomic<double> busy { 0 }, audio { 0 };
     std::atomic<float> peak { 0 };
     std::atomic<int> overruns { 0 };
