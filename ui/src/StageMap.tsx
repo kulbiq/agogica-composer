@@ -69,7 +69,9 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     theme.addEventListener("change", onTheme);
 
     let dpr = 0; // the pixel ratio the canvas was last sized for
+    let lastPaint = -Infinity;
     const resize = () => {
+      lastPaint = -Infinity; // sizing a canvas clears it: draw the next frame whatever the pace
       const r = canvas.getBoundingClientRect();
       dpr = window.devicePixelRatio || 1;
       W = r.width;
@@ -83,7 +85,14 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     ro.observe(canvas);
 
     const painter = new StagePainter(textCopyRef.current!);
+    // Levels arrive 30 times a second and the ring breathes slowly, so a resting map is drawn
+    // 30 times a second; anything being moved, by the user or by easing, gets every frame.
+    const restingFrameMs = 1000 / 30;
     const draw = (now: number) => {
+      frame = requestAnimationFrame(draw);
+      const moving = !painter.settled || drag.current !== null || keyGesture.current !== null;
+      if (!moving && now - lastPaint < restingFrameMs - 4) return; // 4 ms: frames don't arrive exactly on time
+      lastPaint = now;
       // The window moved to a screen with another pixel ratio: no resize event tells us.
       if ((window.devicePixelRatio || 1) !== dpr) resize();
       view.current = painter.paint(ctx, {
@@ -97,7 +106,6 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
         ink,
         paper,
       });
-      frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
 

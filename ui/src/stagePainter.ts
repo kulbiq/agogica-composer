@@ -1,4 +1,5 @@
 import type { Point, Stage } from "./bridge";
+import { easeToward } from "./ease";
 import { levelOf, type Levels } from "./level";
 
 export type NodeKey = "listener" | number;
@@ -43,6 +44,10 @@ export class StagePainter {
   private shown = new Map<number, number>(); // eased input levels, 0..1
 
   private copyKey = "";
+  private lastSeconds: number | undefined;
+
+  // Every node is where C++ says it is: nothing is easing, so the map may be drawn less often.
+  settled = false;
 
   // `copy` holds the map's text as last drawn. Text is most of a frame's cost and changes
   // only when a player moves, is renamed or selected, so it is drawn once and copied afterwards.
@@ -53,6 +58,9 @@ export class StagePainter {
   paint(ctx: CanvasRenderingContext2D, frame: MapFrame): View {
     const { width: W, height: H, stage, selected, overrides, ink, paper } = frame;
     const { drawn, shown } = this;
+    const dt = Math.min(0.1, Math.max(0, frame.seconds - (this.lastSeconds ?? frame.seconds - 1 / 60)));
+    this.lastSeconds = frame.seconds;
+    this.settled = true;
     const half = stage.room / 2;
     const side = Math.max(0, Math.min(W, H) - margin * 2);
     const scale = side / stage.room;
@@ -110,7 +118,11 @@ export class StagePainter {
       const goal = overrides.get(key) ?? target;
       const prev = drawn.get(key);
       const snap = !prev || overrides.has(key);
-      drawn.set(key, snap ? { ...goal } : { x: prev.x + (goal.x - prev.x) * 0.25, y: prev.y + (goal.y - prev.y) * 0.25 });
+      const next = snap ? { ...goal } : { x: easeToward(prev.x, goal.x, 0.25, dt), y: easeToward(prev.y, goal.y, 0.25, dt) };
+      // Close enough that the eye can't tell (1 mm): arrive, so the map can rest.
+      if (Math.abs(next.x - goal.x) < 0.001 && Math.abs(next.y - goal.y) < 0.001) Object.assign(next, goal);
+      else this.settled = false;
+      drawn.set(key, next);
     }
     for (const key of drawn.keys())
       if (!targets.has(key)) {
@@ -131,7 +143,7 @@ export class StagePainter {
     // Input level: a soft disc behind each player (30 Hz from C++, eased per frame).
     for (const player of stage.players) {
       const p = drawn.get(player.id)!;
-      const level = (shown.get(player.id) ?? 0) * 0.65 + levelOf(frame.levels, player.id) * 0.35;
+      const level = easeToward(shown.get(player.id) ?? 0, levelOf(frame.levels, player.id), 0.35, dt);
       shown.set(player.id, level);
       if (level < 0.01) continue;
       ctx.beginPath();
