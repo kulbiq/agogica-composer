@@ -28,8 +28,16 @@ std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::Stri
     if (in == nullptr)
         return std::nullopt;
 
-    std::vector<std::byte> data ((size_t) in->getTotalLength());
-    in->read (data.data(), data.size());
+    const auto length = in->getTotalLength();
+
+    if (length < 0)
+        return std::nullopt;
+
+    std::vector<std::byte> data ((size_t) length);
+
+    if (in->read (data.data(), data.size()) != (juce::int64) data.size())
+        return std::nullopt;
+
     return juce::WebBrowserComponent::Resource { std::move (data), web::mimeType (path) };
 }
 juce::var getBuildInfo (const juce::AudioProcessor& processor)
