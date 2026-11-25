@@ -58,10 +58,17 @@ void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
     pan.setTargetValue (newPan);
 }
 
-void Placer::setMode (OutputMode newMode) noexcept
+void Placer::setMode (OutputMode newMode, bool snap) noexcept
 {
     if (newMode == mode)
         return;
+
+    if (snap)
+    {
+        mode = newMode;
+        modeFade = 1.0f;
+        return;
+    }
 
     // Switching back mid-fade starts from where the fade has got to.
     fadingFrom = mode;

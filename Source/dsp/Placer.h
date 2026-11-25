@@ -34,7 +34,7 @@ public:
     // Azimuth in degrees (0 = ahead, +90 = right, ±180 = behind). Stereo folds rear
     // angles to the front; binaural doesn't. `snap` jumps without a fade.
     void setDirection (float azimuthDegrees, bool snap) noexcept;
-    void setMode (OutputMode) noexcept;
+    void setMode (OutputMode, bool snap = false) noexcept;
 
     // Forgets the sound heard so far (the HRIR's input). Doesn't allocate.
     void clear() noexcept;

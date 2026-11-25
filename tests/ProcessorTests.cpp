@@ -524,6 +524,45 @@ TEST_CASE ("channels: stereo input is summed to mono, mono input is used as is",
     }
 }
 
+TEST_CASE ("a project saved in Binaural starts in Binaural: no fade from the stereo pan", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+
+    // An impulse after `silentBlocks` of silence (a mode fade would be over after 20 ms of them).
+    auto impulseResponse = [] (int silentBlocks)
+    {
+        ComposerProcessor p;
+        set (p, "outputMode", 1.0f);
+        set (p, "playerX", 0.0f);
+        set (p, "playerY", 0.5f); // 0.5 m: the sound arrives within the first block
+        p.prepareToPlay (48000.0, 256);
+
+        juce::MidiBuffer midi;
+        juce::AudioBuffer<float> buffer (2, 256);
+        for (int block = 0; block < silentBlocks; ++block)
+        {
+            buffer.clear();
+            p.processBlock (buffer, midi);
+        }
+
+        std::vector<float> out;
+        for (int block = 0; block < 8; ++block)
+        {
+            buffer.clear();
+            if (block == 0)
+                buffer.setSample (0, 0, 1.0f), buffer.setSample (1, 0, 1.0f);
+            p.processBlock (buffer, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                out.insert (out.end(), buffer.getReadPointer (ch), buffer.getReadPointer (ch) + 256);
+        }
+        return out;
+    };
+
+    const auto atOnce = impulseResponse (0), later = impulseResponse (20);
+    for (size_t i = 0; i < atOnce.size(); ++i)
+        REQUIRE_THAT (atOnce[i], WithinAbs (later[i], 1e-6));
+}
+
 TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;

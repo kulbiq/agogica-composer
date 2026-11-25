@@ -15,7 +15,9 @@ void DirectPath::setAcoustics (const Acoustics& a) noexcept
 {
     const auto distance = geometry::distance (a.player, a.listener);
 
-    setMode (a.mode);
+    // With nothing sounding yet (the first block, or after a long silence) the mode is simply
+    // the mode: a project saved in Binaural doesn't begin with a fade from the stereo pan.
+    placer.setMode (a.mode, snap);
     // Relative to where the head points: turning right moves everything to the left.
     setTarget (geometry::azimuthDegrees (a.player, a.listener) - a.headYaw,
                geometry::delayMs (a.player, a.listener) / 1000.0f,
