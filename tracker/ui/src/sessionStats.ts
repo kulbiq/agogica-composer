@@ -39,7 +39,8 @@ export class SessionStats {
 
   // RMS of the yaw's change between the model's readings over the last 2 s (hold still to read its noise).
   jitterDegrees() {
-    const readings = this.recentCameraYaw;
+    const now = performance.now(); // a still head adds no readings, so the old ones are dropped here too
+    const readings = this.recentCameraYaw.filter((reading) => now - reading.timeMs < JITTER_WINDOW_MS);
     const changes = readings.slice(1).map((reading, i) => wrapDegrees(reading.yawDegrees - readings[i].yawDegrees));
     return changes.length ? Math.sqrt(changes.reduce((sum, change) => sum + change * change, 0) / changes.length) : 0;
   }
