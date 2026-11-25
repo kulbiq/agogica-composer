@@ -49,4 +49,17 @@ struct PerformanceReport
     double reusedPerSecond = 0;           // frames a still head reused
     double droppedPerSecond = 0;          // camera frames the tracking thread never got to
 };
+// Whoever shows the reports (the page). Called on the tracking thread.
+class TrackingListener
+{
+public:
+    virtual ~TrackingListener() = default;
+    virtual void report (const TrackerStatus&) = 0;
+    virtual void report (const FrameReport&) = 0;
+    virtual void report (const PerformanceReport&) = 0;
+
+    // While true: a small JPEG of the camera's picture, about ten times a second.
+    virtual bool wantsCameraPreview() const = 0;
+    virtual void reportCameraPreview (const juce::MemoryBlock& jpeg) = 0;
+};
 } // namespace tracker

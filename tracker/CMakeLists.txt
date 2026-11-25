@@ -69,7 +69,7 @@ target_link_libraries(ComposerTracker
     PRIVATE juce::juce_gui_extra juce::juce_video
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
-# Where the page and the models go (app/AppFiles.h).
+# Where the page and the models go (appResourcesFolder in app/TrackerWindow.cpp).
 if(APPLE)
     set(TRACKER_RESOURCES "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources")
 else()

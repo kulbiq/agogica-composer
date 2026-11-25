@@ -30,7 +30,6 @@ camera ──frame──> TrackingLoop ──head, as the camera sees it──> 
 | | `TrackerWindow` | The one window and where the parts meet; the compact and debugging views; menus. |
 | | `TrackerPage` | The web view and everything said between app and page: the only C++ with the page's function and event names and their JSON. |
 | | `TrackerSettings.h` | What is remembered between runs; the only place with the settings file's keys. |
-| | `AppFiles.h` | Where the build puts the page and the models. |
 | `tracking/` | `CameraFeed` | The camera (the Camera menu's choice, else the first that gives a picture) and its latest frame; a silent camera is tried a few times, then left alone. |
 | | `CameraSource` | One open camera delivering video frames: AVFoundation's video output on macOS (`_mac.mm`), `juce::CameraDevice` elsewhere (`_juce.cpp`). |
 | | `TrackingLoop` | The tracking thread: a short loop over named steps. |
@@ -59,7 +58,7 @@ The app itself needs ONNX Runtime and the models and has no automated test; see 
 |---|---|---|
 | Message thread | Window, page, buttons, opening the camera | - |
 | Camera (the OS's) | Delivers frames to `CameraFeed` | a lock around the latest frame, an event |
-| Tracking (`TrackingLoop`) | Models, pose, reports | `ListenerPoseOutput`'s lock; `TrackerPage`'s one slot per kind of report |
+| Tracking (`TrackingLoop`) | Models, pose, reports | `ListenerPoseOutput`'s lock; `TrackingListener` (`TrackerPage`: one slot per kind of report) |
 
 There are no timers on the path to Composer.
 A pose is written when a frame has been processed or a button was pressed.
@@ -126,7 +125,7 @@ AGOGICA_TRACKER_STILL_FRAME=face.png AGOGICA_TRACKER_LOG=/tmp/tracker.log AGOGIC
 ```
 
 Then: the chip says Tracking, the dial points where the face does, the box sits on the head in the Camera section, Recenter turns the dial to 0, Invert mirrors it, Pause says Paused and Composer goes straight ahead.
-With a real camera: cover it (No head); choose a camera that can't answer in the Camera menu (Starting camera, then No picture after three tries of 10 s).
+With a real camera: cover it (No head); choose a camera that can't answer in the Camera menu (Starting camera, then No picture after 10 s).
 
 ## Known limits
 

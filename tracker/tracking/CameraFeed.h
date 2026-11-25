@@ -10,9 +10,9 @@ namespace tracker
 //
 // Which camera: the one the user chose (Camera menu), or - with no choice - each camera once, in
 // the system's order, until one gives a picture.
-// A camera that gives no picture is tried a few times and then left alone (`hasGivenUp`): the
-// app doesn't keep waking a camera that won't answer (a phone offered as one and out of reach,
-// a laptop's own camera under a closed lid).
+// A camera that gives no picture for `noPictureTimeoutMs` is let go (`hasGivenUp`): the app
+// doesn't keep waking a camera that won't answer (a phone offered as one and out of reach, a
+// laptop's own camera under a closed lid).
 class CameraFeed final : private juce::Timer
 {
 public:
@@ -40,7 +40,7 @@ public:
 private:
     void frameArrivedFromCamera (const juce::Image&);
     void timerCallback() override;
-    void retryIfNoPicture();
+    void moveOnIfNoPicture();
     void startTrying (int cameraIndex, bool isUsersChoice);
     void open (int cameraIndex);
     void close();
@@ -53,9 +53,7 @@ private:
     std::unique_ptr<CameraSource> camera;
     int cameraIndex = 0;
     bool isUsersChoice = false;
-    bool hasCurrentCameraDelivered = false;
-    int attemptsWithoutPicture = 0; // on the current camera
-    int camerasTriedWithoutPicture = 0;
+    int camerasTried = 0; // since the last picture or choice
     int receivedAtLastLook = 0;
     std::atomic<int> received { 0 };
     std::atomic<bool> gaveUp { false };

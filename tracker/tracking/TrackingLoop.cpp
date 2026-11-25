@@ -60,9 +60,9 @@ private:
 };
 } // namespace
 
-TrackingLoop::TrackingLoop (juce::File models, CameraFeed& feed, HeadOutput output, Reports r)
+TrackingLoop::TrackingLoop (juce::File models, CameraFeed& feed, ListenerPoseOutput& output, TrackingListener& reportsTo)
     : juce::Thread ("head tracking"), modelsFolder (std::move (models)), camera (feed),
-      headOutput (std::move (output)), reports (std::move (r))
+      poseOutput (output), listener (reportsTo)
 {
     startThread();
 }
@@ -77,6 +77,10 @@ TrackingLoop::~TrackingLoop()
 
 void TrackingLoop::run()
 {
+    // Whatever the tracking does, Composer hears nothing of it without the file.
+    if (! poseOutput.isWritingToFile())
+        return setStatus ({ TrackerPhase::failed, "Can't write the head-tracking file" });
+
     if (! loadEstimator())
         return;
 
@@ -103,12 +107,12 @@ void TrackingLoop::run()
 
         isFirstFrame = false;
         setStatus ({ TrackerPhase::tracking, estimator->provider() });
-        reports.frame (report);
+        listener.report (report);
 
         if (report.warning.isEmpty())
             performance.countFrame (report.reusedStillHead);
         if (const auto measured = performance.measureIfDue (frame, camera.framesReceived()))
-            reports.performance (*measured);
+            listener.report (*measured);
     }
 }
 
@@ -121,8 +125,8 @@ void TrackingLoop::reportCameraSilent()
         lastHead.reset();
         stillHead.clear();
         FrameReport noFrame;
-        noFrame.heard = headOutput (std::nullopt);
-        reports.frame (noFrame);
+        noFrame.heard = poseOutput.observe (std::nullopt);
+        listener.report (noFrame);
     }
     setStatus (waiting);
 }
@@ -133,7 +137,7 @@ void TrackingLoop::setStatus (TrackerStatus newStatus)
     if (status == newStatus)
         return;
     status = newStatus;
-    reports.status (newStatus);
+    listener.report (newStatus);
 }
 
 bool TrackingLoop::loadEstimator()
@@ -181,7 +185,7 @@ FrameReport TrackingLoop::trackHead (const juce::Image& frame)
         report.warning = e.what();
     }
 
-    report.heard = headOutput (report.head ? std::optional (report.head->orientation) : std::nullopt);
+    report.heard = poseOutput.observe (report.head ? std::optional (report.head->orientation) : std::nullopt);
     return report;
 }
 
@@ -189,7 +193,7 @@ FrameReport TrackingLoop::trackHead (const juce::Image& frame)
 void TrackingLoop::publishCameraPreviewIfDue (const juce::Image& frame)
 {
     const auto now = secondsNow();
-    if (! cameraPreviewEnabled || now - lastPreviewSeconds < previewIntervalSeconds || frame.getWidth() <= 0)
+    if (! listener.wantsCameraPreview() || now - lastPreviewSeconds < previewIntervalSeconds || frame.getWidth() <= 0)
         return;
     lastPreviewSeconds = now;
 
@@ -200,6 +204,6 @@ void TrackingLoop::publishCameraPreviewIfDue (const juce::Image& frame)
     juce::JPEGImageFormat format;
     format.setQuality (previewJpegQuality);
     if (format.writeImageToStream (small, jpeg))
-        reports.cameraPreview (jpeg.getMemoryBlock());
+        listener.reportCameraPreview (jpeg.getMemoryBlock());
 }
 } // namespace tracker

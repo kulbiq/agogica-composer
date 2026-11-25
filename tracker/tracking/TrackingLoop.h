@@ -3,6 +3,7 @@
 #include <juce_core/juce_core.h>
 #include "../vision/StillHeadGate.h"
 #include "CameraFeed.h"
+#include "ListenerPoseOutput.h"
 #include "TrackingReports.h"
 
 namespace tracker
@@ -10,29 +11,13 @@ namespace tracker
 class HeadPoseEstimator;
 
 // Head tracking, on its own thread: takes the camera's latest frame, finds the head in it
-// (HeadPoseEstimator, or the last observation again while the head is still) and passes its
-// orientation on; reports what it did. Starts when constructed, stops when destroyed.
+// (HeadPoseEstimator, or the last observation again while the head is still), passes its
+// orientation on to Composer (ListenerPoseOutput) and reports what it did. Starts when constructed, stops when destroyed.
 class TrackingLoop final : private juce::Thread
 {
 public:
-    // Takes each frame's head (nothing = no head) for Composer and answers what Composer hears.
-    // Called on the tracking thread.
-    using HeadOutput = std::function<ListenerPose::Reading (std::optional<HeadOrientation>)>;
-
-    // Called on the tracking thread.
-    struct Reports
-    {
-        std::function<void (const TrackerStatus&)> status;
-        std::function<void (const FrameReport&)> frame;
-        std::function<void (const PerformanceReport&)> performance;
-        std::function<void (const juce::MemoryBlock& jpeg)> cameraPreview;
-    };
-
-    TrackingLoop (juce::File modelsFolder, CameraFeed&, HeadOutput, Reports);
+    TrackingLoop (juce::File modelsFolder, CameraFeed&, ListenerPoseOutput&, TrackingListener&);
     ~TrackingLoop() override;
-
-    // While on: a small picture of the camera about ten times a second (Reports::cameraPreview).
-    void setCameraPreviewEnabled (bool on) { cameraPreviewEnabled = on; }
 
 private:
     void run() override;
@@ -44,9 +29,8 @@ private:
 
     const juce::File modelsFolder;
     CameraFeed& camera;
-    const HeadOutput headOutput;
-    const Reports reports;
-    std::atomic<bool> cameraPreviewEnabled { false };
+    ListenerPoseOutput& poseOutput;
+    TrackingListener& listener;
 
     // Tracking thread only.
     std::unique_ptr<HeadPoseEstimator> estimator;

@@ -5,7 +5,6 @@
 #include "../tracking/ListenerPoseOutput.h"
 #include "../tracking/TrackingLoop.h"
 #include "TrackerPage.h"
-#include "TrackerSettings.h"
 
 namespace tracker
 {
@@ -23,9 +22,6 @@ public:
     void closeButtonPressed() override;
 
 private:
-    TrackerPage::Actions pageActions();
-    TrackingLoop::Reports trackingReports();
-
     void setDebugView (bool on);
     void showDebugViewWindow();
     void fitCompactViewToPage (int pageHeightPixels);

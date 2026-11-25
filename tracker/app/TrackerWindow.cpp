@@ -1,5 +1,4 @@
 #include "TrackerWindow.h"
-#include "AppFiles.h"
 
 namespace tracker
 {
@@ -15,17 +14,31 @@ constexpr int anySize = 1 << 15;
 enum MenuItem { debuggingItem = 1, aboutItem, firstCameraItem = 100 }; // cameras: firstCameraItem + index
 const char* const viewMenuName = "View";
 const char* const cameraMenuName = "Camera";
+
+// What the build puts next to the app: the page (ui/) and the models (models/).
+juce::File appResourcesFolder()
+{
+    const auto app = juce::File::getSpecialLocation (juce::File::currentApplicationFile);
+   #if JUCE_MAC
+    return app.getChildFile ("Contents/Resources");
+   #else
+    return app.getParentDirectory();
+   #endif
+}
 const char* const aboutItemText = "About Agogica Tracker";
 } // namespace
 
 TrackerWindow::TrackerWindow()
     : DocumentWindow ("Agogica Tracker", juce::Colours::black, closeButton | minimiseButton),
       listenerPoseOutput (headtracking::defaultFile()),
-      page (appResourcesFolder().getChildFile ("ui"), pageActions()),
+      page (appResourcesFolder().getChildFile ("ui"), settings, listenerPoseOutput,
+            [this] (int pageHeightPixels)
+            {
+                if (! isDebugView)
+                    fitCompactViewToPage (pageHeightPixels);
+            }),
       camera (settings.cameraName()),
-      trackingLoop (appResourcesFolder().getChildFile ("models"), camera,
-                    [this] (std::optional<HeadOrientation> head) { return listenerPoseOutput.observe (head); },
-                    trackingReports())
+      trackingLoop (appResourcesFolder().getChildFile ("models"), camera, listenerPoseOutput, page)
 {
     listenerPoseOutput.setInverted (settings.inverted());
 
@@ -61,45 +74,6 @@ TrackerWindow::~TrackerWindow()
 }
 
 void TrackerWindow::closeButtonPressed() { juce::JUCEApplication::quit(); }
-
-TrackerPage::Actions TrackerWindow::pageActions()
-{
-    TrackerPage::Actions actions;
-    actions.initialState = [this]
-    {
-        return TrackerPage::InitialState { settings.inverted(), isDebugView,
-                                           juce::JUCEApplication::getInstance()->getApplicationVersion() };
-    };
-    actions.setInverted = [this] (bool on)
-    {
-        settings.setInverted (on);
-        listenerPoseOutput.setInverted (on);
-    };
-    actions.setPaused = [this] (bool on) { listenerPoseOutput.setPaused (on); };
-    actions.recenter = [this] { listenerPoseOutput.recenter(); };
-    actions.setCameraPreviewEnabled = [this] (bool on) { trackingLoop.setCameraPreviewEnabled (on); };
-    actions.fitHeight = [this] (int pageHeightPixels)
-    {
-        if (! isDebugView)
-            fitCompactViewToPage (pageHeightPixels);
-    };
-    return actions;
-}
-
-TrackingLoop::Reports TrackerWindow::trackingReports()
-{
-    TrackingLoop::Reports reports;
-    reports.status = [this] (const TrackerStatus& status)
-    {
-        // Whatever the tracking does, Composer hears nothing of it without the file.
-        page.report (listenerPoseOutput.isWritingToFile() ? status
-                                                          : TrackerStatus { TrackerPhase::failed, "Can't write the head-tracking file" });
-    };
-    reports.frame = [this] (const FrameReport& frame) { page.report (frame); };
-    reports.performance = [this] (const PerformanceReport& performance) { page.report (performance); };
-    reports.cameraPreview = [this] (const juce::MemoryBlock& jpeg) { page.reportCameraPreview (jpeg); };
-    return reports;
-}
 
 void TrackerWindow::setDebugView (bool on)
 {

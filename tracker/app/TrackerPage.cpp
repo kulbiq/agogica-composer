@@ -136,8 +136,8 @@ juce::WebBrowserComponent::Options platformOptions()
 }
 } // namespace
 
-TrackerPage::TrackerPage (juce::File folder, Actions actions)
-    : pageFolder (std::move (folder)), browser (options (std::move (actions)))
+TrackerPage::TrackerPage (juce::File folder, TrackerSettings& s, ListenerPoseOutput& output, std::function<void (int)> fitHeight)
+    : pageFolder (std::move (folder)), settings (s), poseOutput (output), browser (options (std::move (fitHeight)))
 {
     browser.goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
 }
@@ -147,7 +147,7 @@ TrackerPage::~TrackerPage()
     cancelPendingUpdate();
 }
 
-juce::WebBrowserComponent::Options TrackerPage::options (Actions actions)
+juce::WebBrowserComponent::Options TrackerPage::options (std::function<void (int)> fitHeight)
 {
     using Arguments = juce::Array<juce::var>;
     using Complete = juce::WebBrowserComponent::NativeFunctionCompletion;
@@ -165,10 +165,10 @@ juce::WebBrowserComponent::Options TrackerPage::options (Actions actions)
 
     return platformOptions()
         .withNativeIntegrationEnabled()
-        .withNativeFunction (function::pageReady, [this, initialState = actions.initialState] (const Arguments&, Complete complete)
+        .withNativeFunction (function::pageReady, [this] (const Arguments&, Complete complete)
         {
-            const auto state = initialState();
-            complete (object ({ { "inverted", state.inverted }, { "debugView", state.debugView }, { "version", state.version } }));
+            complete (object ({ { "inverted", settings.inverted() }, { "debugView", isDebugView },
+                                { "version", juce::JUCEApplication::getInstance()->getApplicationVersion() } }));
 
             isPageReady = true;
             {
@@ -177,18 +177,22 @@ juce::WebBrowserComponent::Options TrackerPage::options (Actions actions)
             }
             triggerAsyncUpdate();
         })
-        .withNativeFunction (function::setInverted, boolFunction (actions.setInverted))
-        .withNativeFunction (function::setPaused, boolFunction (actions.setPaused))
-        .withNativeFunction (function::setCameraPreviewEnabled, boolFunction (actions.setCameraPreviewEnabled))
-        .withNativeFunction (function::recenter, [recenter = actions.recenter] (const Arguments&, Complete complete)
+        .withNativeFunction (function::setInverted, boolFunction ([this] (bool on)
         {
-            recenter();
+            settings.setInverted (on);
+            poseOutput.setInverted (on);
+        }))
+        .withNativeFunction (function::setPaused, boolFunction ([this] (bool on) { poseOutput.setPaused (on); }))
+        .withNativeFunction (function::setCameraPreviewEnabled, boolFunction ([this] (bool on) { isCameraPreviewWanted = on; }))
+        .withNativeFunction (function::recenter, [this] (const Arguments&, Complete complete)
+        {
+            poseOutput.recenter();
             complete ({});
         })
-        .withNativeFunction (function::fitHeight, [fitHeight = actions.fitHeight] (const Arguments& arguments, Complete complete)
+        .withNativeFunction (function::fitHeight, [fit = std::move (fitHeight)] (const Arguments& arguments, Complete complete)
         {
             if (const auto heightPixels = numberArgument (arguments))
-                fitHeight (*heightPixels);
+                fit (*heightPixels);
             complete ({});
         })
         .withResourceProvider ([this] (const juce::String& url) { return serve (pageFolder, url); });
@@ -262,7 +266,12 @@ void TrackerPage::handleAsyncUpdate()
         emit (event::cameraPreview, "data:image/jpeg;base64," + juce::Base64::toBase64 (previewJpeg.getData(), previewJpeg.getSize()));
 }
 
-void TrackerPage::showDebugView (bool on) { emit (event::debugView, on); }
+void TrackerPage::showDebugView (bool on)
+{
+    isDebugView = on;
+    emit (event::debugView, on);
+}
+
 void TrackerPage::showAbout()             { emit (event::about, {}); }
 
 void TrackerPage::emit (const juce::Identifier& eventName, const juce::var& payload)

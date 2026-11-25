@@ -7,7 +7,6 @@ namespace
 // Long enough for a camera to start: a phone offered as a camera has to wake and connect first,
 // and at 4 s it was closed and opened again before it could answer.
 constexpr int noPictureTimeoutMs = 10000;
-constexpr int attemptsPerCamera = 3; // for a camera the user chose, or one that did work
 constexpr int developmentFramesPerSecond = 30;
 } // namespace
 
@@ -43,7 +42,7 @@ void CameraFeed::choose (const juce::String& cameraName)
 void CameraFeed::startTrying (int index, bool usersChoice)
 {
     isUsersChoice = usersChoice;
-    camerasTriedWithoutPicture = 0;
+    camerasTried = 1;
     gaveUp = false;
     open (index);
     startTimer (noPictureTimeoutMs);
@@ -52,8 +51,6 @@ void CameraFeed::startTrying (int index, bool usersChoice)
 void CameraFeed::open (int index)
 {
     close();
-    hasCurrentCameraDelivered = false;
-    attemptsWithoutPicture = 0;
     receivedAtLastLook = framesReceived();
 
     const auto cameras = availableCameras();
@@ -86,41 +83,25 @@ void CameraFeed::timerCallback()
     if (developmentFrame.isValid())
         frameArrivedFromCamera (developmentFrame);
     else
-        retryIfNoPicture();
+        moveOnIfNoPicture();
 }
 
-// Every `noPictureTimeoutMs`: did frames come since the last look?
-void CameraFeed::retryIfNoPicture()
+// Every `noPictureTimeoutMs`: no frame since the last look? With no choice made, the next
+// camera gets its turn, each once; the user's own choice, or the last camera, is let go.
+void CameraFeed::moveOnIfNoPicture()
 {
     const auto receivedNow = framesReceived();
     if (receivedNow != std::exchange (receivedAtLastLook, receivedNow))
     {
-        hasCurrentCameraDelivered = true;
-        attemptsWithoutPicture = 0;
+        camerasTried = 1;
         return;
     }
 
-    // The user's camera, or one that worked until now: the same one again, a few times.
-    if (isUsersChoice || hasCurrentCameraDelivered)
-    {
-        const auto attempts = attemptsWithoutPicture + 1;
-        const bool delivered = hasCurrentCameraDelivered;
-        if (attempts >= attemptsPerCamera)
-            return giveUp();
-
-        camera.reset(); // open() starts the counts again: keep them across it
-        open (cameraIndex);
-        attemptsWithoutPicture = attempts;
-        hasCurrentCameraDelivered = delivered;
-        return;
-    }
-
-    // No choice made, and this camera never gave a picture: the next one, each camera once.
-    if (++camerasTriedWithoutPicture >= availableCameras().size())
+    if (isUsersChoice || camerasTried >= availableCameras().size())
         return giveUp();
-    const auto tried = camerasTriedWithoutPicture;
+
+    ++camerasTried;
     open (cameraIndex + 1);
-    camerasTriedWithoutPicture = tried;
 }
 
 juce::String CameraFeed::cameraName() const
