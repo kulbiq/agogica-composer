@@ -97,8 +97,8 @@ async function main() {
     recenterButton.disabled = !frame.live; // there is nothing to centre on
     refreshStatus();
 
+    turnDialTo(frame.listenerYawDegrees); // 0 while not live: what Composer hears
     if (frame.live) {
-      turnDialTo(frame.listenerYawDegrees);
       plot.add(frame.listenerYawDegrees, frame.confidence ?? 1);
     }
 
