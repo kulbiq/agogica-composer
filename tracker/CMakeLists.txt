@@ -134,7 +134,8 @@ if(NOT COMPOSER_TRACKER_SKIP_MODELS)
         VERBATIM)
     add_custom_target(ComposerTrackerModels DEPENDS ${TRACKER_MODEL_FILES})
     add_dependencies(ComposerTracker ComposerTrackerModels)
-    list(APPEND TRACKER_RELINK_ON ${TRACKER_MODEL_FILES})
+    # The pins too: a changed hash re-links, which runs the check below.
+    list(APPEND TRACKER_RELINK_ON ${TRACKER_MODEL_FILES} ${TRACKER_MODELS_DIR}/models.json ${TRACKER_MODELS_DIR}/check_models.cmake)
 
     # Checked against their pinned hashes as they are copied: no model reaches the app unchecked.
     add_custom_command(TARGET ComposerTracker POST_BUILD
