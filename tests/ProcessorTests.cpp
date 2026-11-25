@@ -197,8 +197,8 @@ TEST_CASE ("DSP load: average, worst block and overruns per period; offline rend
         CHECK (r.overruns == 1);
 
         const auto next = meter.read(); // each read starts a new period
-        CHECK (next.average == 0.0f);
-        CHECK (next.peak == 0.0f);
+        CHECK_THAT (next.average, WithinAbs (0.0, 0.0)); // exactly: nothing was measured
+        CHECK_THAT (next.peak, WithinAbs (0.0, 0.0));
         CHECK (next.overruns == 0);
     }
 
