@@ -112,7 +112,8 @@ public:
         // queue finish what it is doing (starting the session, or a frame in hand).
         [output setSampleBufferDelegate: nil queue: nullptr];
         AVCaptureSession* stopping = session;
-        dispatch_sync (captureQueue, ^{ [stopping stopRunning]; });
+        auto released = isReleased;
+        dispatch_sync (captureQueue, ^{ *released = true; [stopping stopRunning]; });
 
         [output release];
         [session release];
@@ -129,12 +130,13 @@ private:
         AVCaptureSession* starting = [session retain];
         dispatch_queue_t queue = captureQueue;
         dispatch_retain (queue);
+        auto released = isReleased;
 
         auto start = ^(BOOL granted)
         {
             dispatch_async (queue, ^
             {
-                if (granted)
+                if (granted && ! *released)
                     [starting startRunning];
                 [starting release];
                 dispatch_release (queue);
@@ -151,6 +153,7 @@ private:
     AVCaptureSession* session = nil;
     AVCaptureVideoDataOutput* output = nil;
     dispatch_queue_t captureQueue = nullptr;
+    const std::shared_ptr<bool> isReleased = std::make_shared<bool> (false); // read and set on captureQueue only
 };
 } // namespace
 
