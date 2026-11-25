@@ -6,20 +6,23 @@
 
     uv run tools/perf_monitor.py --host mscore --label "binaural, editor open"
 
-It shows a table that updates in place once a second: the CPU of four groups, in % of one
-core, now and as mean / median / 95th percentile / max since it started.
+It shows a table that updates in place once a second, one row per group:
 
     host     the DAW process (for Dorico use --host VSTAudioEngine: its audio and plugin
              windows live there). This is the host's own work plus Composer's audio.
-    page     the web processes drawing Composer's editor. 0 when no editor is open.
-    gpu      the processes compositing that page.
+    editor   the web processes that draw Composer's editor: the system runs a web page
+             outside the host, in one process for its content and one for putting it on
+             screen. Nothing here when no editor is open.
     tracker  Agogica Tracker with its own window's web processes, if it runs.
+
+CPU is in % of one core: now, and mean / median / 95th percentile / max since the start.
+Memory is resident memory in MB: now and the most it has been.
 
 Ctrl+C (or --seconds N) stops it and appends one line with those figures to --csv
 (default build/perf.csv), so runs can be compared later. Piped into a file it prints
 one line per reading instead.
 
-It cannot split the host's number into "the host" and "Composer's audio": for that, the
+It cannot split the host's numbers into "the host" and "Composer's audio": for that, the
 plugin's own load readout (Alt+click the version in the editor footer) and
 `build/release/ComposerTests "[perf]" -s` are the tools. Compare runs of the same project
 with and without the thing you changed, each for a minute or more: single 30 s readings
@@ -40,7 +43,7 @@ from pathlib import Path
 
 import psutil
 
-GROUPS = ["host", "page", "gpu", "tracker"]
+GROUPS = ["host", "editor", "tracker"]
 TRACKER_NAMES = ("agogica tracker", "composertracker")
 
 
@@ -62,7 +65,7 @@ def is_tracker(process):
 
 def group_of(process, host_pids, tracker_pids, responsible):
     """Which group a process belongs to, or None. A web view's processes count for the app
-    they work for: the host's are its editor page, the Tracker's are part of the Tracker."""
+    they work for: the host's are Composer's editor, the Tracker's are part of the Tracker."""
     try:
         if process.pid in host_pids:
             return "host"
@@ -73,17 +76,14 @@ def group_of(process, host_pids, tracker_pids, responsible):
             if not name.startswith("com.apple.webkit."):
                 return None
             owner = responsible(process.pid)
-            kind = "page" if "webcontent" in name else "gpu" if "gpu" in name else None
         elif name == "msedgewebview2.exe":
             ancestors = {parent.pid for parent in process.parents()}
             owner = next(iter(ancestors & (host_pids | tracker_pids)), None)
-            command = " ".join(process.cmdline())
-            kind = "page" if "--type=renderer" in command else "gpu" if "--type=gpu-process" in command else None
         else:
             return None
         if owner in tracker_pids:
             return "tracker"
-        return kind if owner in host_pids else None
+        return "editor" if owner in host_pids else None
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
 
@@ -101,22 +101,32 @@ def summary(samples):
     }
 
 
-COLUMNS = ("now", "mean", "median", "p95", "max")
+CPU_COLUMNS = ("now", "mean", "median", "p95", "max")
+RULE = "-" * 74
 
 
-def table(title, reading, samples, running):
-    """The whole display as lines: a title, a header and one row per group."""
-    lines = [title, "", f"{'':<9}" + "".join(f"{c:>9}" for c in COLUMNS) + "    % of one core", "-" * 54]
-    rows = [(g, reading.get(g, 0.0), samples[g], g in running) for g in GROUPS]
-    rows.append(("sum", sum(reading.values()), [sum(r) for r in zip(*(samples[g] for g in GROUPS))], True))
-    for name, now, history, alive in rows:
+def table(title, cpu, memory, running):
+    """The whole display as lines: a title, two header lines and one row per group.
+    `cpu` and `memory` hold every reading so far per group, the newest last."""
+    lines = [
+        title,
+        "",
+        f"{'':<9}{'CPU, % of one core':<47}{'memory, MB':>18}",
+        f"{'':<9}" + "".join(f"{c:>9}" for c in CPU_COLUMNS) + f"{'now':>11}{'max':>9}",
+        RULE,
+    ]
+    rows = [(g, cpu[g], memory[g], g in running) for g in GROUPS]
+    rows.append(("sum", [sum(r) for r in zip(*cpu.values())], [sum(r) for r in zip(*memory.values())], True))
+    for name, cpu_history, memory_history, alive in rows:
         if name == "sum":
-            lines.append("-" * 54)
-        if not alive and not any(history):
-            lines.append(f"{name:<9}" + f"{'-':>9}" * len(COLUMNS) + "    not running")
+            lines.append(RULE)
+        if not alive and not any(cpu_history):
+            lines.append(f"{name:<9}" + f"{'-':>9}" * len(CPU_COLUMNS) + f"{'-':>11}{'-':>9}    not running")
             continue
-        stats = summary(history)
-        lines.append(f"{name:<9}{now:9.1f}" + "".join(f"{stats[k]:9.1f}" for k in COLUMNS[1:]))
+        stats = summary(cpu_history)
+        lines.append(
+            f"{name:<9}{cpu_history[-1]:9.1f}" + "".join(f"{stats[k]:9.1f}" for k in CPU_COLUMNS[1:]) + f"{memory_history[-1]:11.0f}{max(memory_history):9.0f}"
+        )
     return lines
 
 
@@ -125,14 +135,15 @@ def self_test():
     assert s["mean"] == 22.0 and s["median"] == 3.0 and s["max"] == 100.0 and s["p95"] == 100.0
     assert summary([])["mean"] == 0.0
     assert summary([5.0]) == {"mean": 5.0, "median": 5.0, "p95": 5.0, "max": 5.0}
-    lines = table("t", {"host": 2.0, "page": 1.0, "gpu": 0.0, "tracker": 0.0}, {"host": [4.0, 2.0], "page": [1.0, 1.0], "gpu": [0.0, 0.0], "tracker": [0.0, 0.0]}, {"host", "page", "gpu"})
-    assert lines[4].split() == ["host", "2.0", "3.0", "3.0", "4.0", "4.0"]
-    assert lines[7].endswith("not running") and lines[9].split()[:3] == ["sum", "3.0", "4.0"]
+    lines = table("t", {"host": [4.0, 2.0], "editor": [1.0, 1.0], "tracker": [0.0, 0.0]}, {"host": [900.0, 800.0], "editor": [100.0, 150.0], "tracker": [0.0, 0.0]}, {"host", "editor"})
+    assert lines[5].split() == ["host", "2.0", "3.0", "3.0", "4.0", "4.0", "800", "900"]
+    assert lines[7].endswith("not running")
+    assert lines[9].split() == ["sum", "3.0", "4.0", "4.0", "5.0", "5.0", "950", "1000"]
     print("ok")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Live CPU of a host running Composer, its editor page and the Tracker.")
+    parser = argparse.ArgumentParser(description="Live CPU and memory of a host running Composer, of Composer's editor and of the Tracker.")
     parser.add_argument("--host", action="append", help="part of the host's process name, e.g. mscore, VSTAudioEngine, Live, Composer (repeatable)")
     parser.add_argument("--label", default="", help="what this run is, for the CSV")
     parser.add_argument("--seconds", type=float, help="stop after this long (default: until Ctrl+C)")
@@ -153,8 +164,9 @@ def main():
 
     responsible = responsible_pid_macos() if sys.platform == "darwin" else None
     watched = {}  # pid -> (Process, group); psutil measures CPU between two calls on the same object
-    samples = {g: [] for g in GROUPS}
-    reading, running = {}, set()
+    cpu = {g: [] for g in GROUPS}
+    memory = {g: [] for g in GROUPS}  # MB
+    running = set()
 
     # On a terminal the table is redrawn in place, so the header stays where it is;
     # into a file or a pipe each reading is one line.
@@ -169,8 +181,8 @@ def main():
         nonlocal drawn_lines
         elapsed = int(time.monotonic() - started)
         title = f"Composer in {' + '.join(args.host)}" + (f" - {args.label}" if args.label else "")
-        title += f"   {elapsed // 60:02d}:{elapsed % 60:02d}, {len(samples['host'])} readings" + ("" if final else "   (Ctrl+C to stop)")
-        lines = table(title, reading, samples, running)
+        title += f"   {elapsed // 60:02d}:{elapsed % 60:02d}, {len(cpu['host'])} readings" + ("" if final else "   (Ctrl+C to stop)")
+        lines = table(title, cpu, memory, running)
         if live:
             sys.stdout.write(f"\x1b[{drawn_lines}A" if drawn_lines else "")
             sys.stdout.write("".join(f"\x1b[2K{line}\n" for line in lines))
@@ -179,9 +191,9 @@ def main():
             sys.stdout.write("\n" + "\n".join(lines) + "\n")
         else:
             clock = datetime.datetime.now().strftime("%H:%M:%S")
-            if len(samples["host"]) == 1:
-                print(f"{'time':>8}  " + "  ".join(f"{g:>8}" for g in GROUPS) + f"  {'sum':>8}   (% of one core)")
-            print(f"{clock:>8}  " + "  ".join(f"{reading[g]:8.1f}" for g in GROUPS) + f"  {sum(reading.values()):8.1f}")
+            if len(cpu["host"]) == 1:
+                print(f"{'time':>8}  " + "  ".join(f"{g + ' %':>9}  {g + ' MB':>10}" for g in GROUPS))
+            print(f"{clock:>8}  " + "  ".join(f"{cpu[g][-1]:9.1f}  {memory[g][-1]:10.0f}" for g in GROUPS))
         sys.stdout.flush()
 
     started = time.monotonic()
@@ -197,10 +209,12 @@ def main():
 
             time.sleep(args.interval)
 
-            reading = {g: 0.0 for g in GROUPS}
+            cpu_now = {g: 0.0 for g in GROUPS}
+            memory_now = {g: 0.0 for g in GROUPS}
             for pid, (process, group) in list(watched.items()):
                 try:
-                    reading[group] += process.cpu_percent(None)
+                    cpu_now[group] += process.cpu_percent(None)
+                    memory_now[group] += process.memory_info().rss / 1e6
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     del watched[pid]
             running = {group for _, group in watched.values()}
@@ -209,28 +223,35 @@ def main():
                 break
 
             for g in GROUPS:
-                samples[g].append(reading[g])
+                cpu[g].append(cpu_now[g])
+                memory[g].append(memory_now[g])
             show()
     except KeyboardInterrupt:
         pass
 
-    if not samples["host"]:
+    if not cpu["host"]:
         return
     show(final=True)
-    stats = {g: summary(samples[g]) for g in GROUPS}
 
     if args.csv:
+        stats = {g: summary(cpu[g]) for g in GROUPS}
+        header = ["when", "label", "host", "readings", "interval_s"]
+        header += [f"{g}_cpu_{k}" for g in GROUPS for k in CPU_COLUMNS[1:]] + [f"{g}_mb_{k}" for g in GROUPS for k in ("mean", "max")]
+        row = [datetime.datetime.now().isoformat(timespec="seconds"), args.label, "+".join(args.host), len(cpu["host"]), args.interval]
+        row += [f"{stats[g][k]:.1f}" for g in GROUPS for k in CPU_COLUMNS[1:]]
+        row += [f"{v:.0f}" for g in GROUPS for v in (statistics.fmean(memory[g]), max(memory[g]))]
+
         path = Path(args.csv)
         path.parent.mkdir(parents=True, exist_ok=True)
+        # A record written with other columns is kept aside, not mixed with these.
+        if path.exists() and path.read_text().splitlines()[:1] != [",".join(header)]:
+            path.replace(path.with_name(path.name + ".old"))
         is_new = not path.exists()
         with path.open("a", newline="") as f:
             writer = csv.writer(f)
             if is_new:
-                writer.writerow(["when", "label", "host", "readings", "interval_s"] + [f"{g}_{k}" for g in GROUPS for k in ("mean", "median", "p95", "max")])
-            writer.writerow(
-                [datetime.datetime.now().isoformat(timespec="seconds"), args.label, "+".join(args.host), len(samples["host"]), args.interval]
-                + [f"{stats[g][k]:.1f}" for g in GROUPS for k in ("mean", "median", "p95", "max")]
-            )
+                writer.writerow(header)
+            writer.writerow(row)
         print(f"\nappended to {path}")
 
 
