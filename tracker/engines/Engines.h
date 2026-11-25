@@ -2,21 +2,11 @@
 
 #include <juce_graphics/juce_graphics.h>
 #include <optional>
+#include "../HeadObservation.h"
 #include "Onnx.h"
 
 namespace engines
 {
-// One head-pose estimate from a camera frame, degrees, in the camera's frame. yaw: 0 = facing
-// the camera, + = turned to the person's right (PoseOutput's Invert flips it for Composer if a
-// camera mirrors); pitch and roll as the model gives them.
-struct Estimate
-{
-    float yaw = 0, pitch = 0, roll = 0;
-    float confidence = 0;         // 0..1, the model's own (kappaConfidence)
-    juce::Rectangle<float> box;   // the head used, normalised 0..1 (the preview's overlay)
-    float detectMs = 0, poseMs = 0;
-};
-
 // PINTO's YOLOX Body-Head-Hand (Apache-2.0): heads from any direction, incl. from behind.
 // Input 1x3x192x320 BGR 0-255 (the whole frame, stretched); output [N,7] =
 // batch, class (0 body, 1 head, 2 hand), score, x1, y1, x2, y2 in input pixels.
@@ -48,7 +38,7 @@ public:
     explicit HeadPoseEstimator (const juce::File& modelsDir);
 
     // Nothing when the frame shows no head. Throws when a model fails on the frame.
-    std::optional<Estimate> estimate (const juce::Image& frame);
+    std::optional<tracker::HeadObservation> estimate (const juce::Image& frame);
 
     juce::String provider() const { return model.provider(); } // "CoreML" / "CPU"
 

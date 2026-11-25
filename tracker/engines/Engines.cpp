@@ -54,10 +54,10 @@ HeadPoseEstimator::HeadPoseEstimator (const juce::File& dir)
 {
 }
 
-std::optional<Estimate> HeadPoseEstimator::estimate (const juce::Image& frame)
+std::optional<tracker::HeadObservation> HeadPoseEstimator::estimate (const juce::Image& frame)
 {
-    Estimate e;
-    const auto head = heads.find (frame, e.detectMs);
+    tracker::HeadObservation observation;
+    const auto head = heads.find (frame, observation.detectMs);
     if (! head || ! (head->x2 - head->x1 >= 1.0f && head->y2 - head->y1 >= 1.0f)) // NaN included
         return std::nullopt;
 
@@ -71,12 +71,10 @@ std::optional<Estimate> HeadPoseEstimator::estimate (const juce::Image& frame)
         if (! std::isfinite (cosSin[i]))
             return std::nullopt;
 
-    e.yaw = angleOf (cosSin[0], cosSin[1]);
-    e.pitch = angleOf (cosSin[2], cosSin[3]);
-    e.roll = angleOf (cosSin[4], cosSin[5]);
-    e.confidence = kappaConfidence (kappa[0]);
-    e.box = normalised (*head, frame);
-    e.poseMs = msSince (start);
-    return e;
+    observation.orientation = { angleOf (cosSin[0], cosSin[1]), angleOf (cosSin[2], cosSin[3]), angleOf (cosSin[4], cosSin[5]) };
+    observation.confidence = kappaConfidence (kappa[0]);
+    observation.headBoxNormalised = normalised (*head, frame);
+    observation.poseMs = msSince (start);
+    return observation;
 }
 } // namespace engines

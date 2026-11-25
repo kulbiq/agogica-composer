@@ -224,11 +224,14 @@ if(APPLE OR WIN32)
         CAMERA_PERMISSION_TEXT "Agogica Tracker follows your head with the camera so Composer can keep the ensemble fixed in the room. Video never leaves this Mac.")
 
     target_sources(ComposerTracker PRIVATE
-        tracker/Main.cpp
-        tracker/EngineHost.cpp
+        tracker/app/Main.cpp
+        tracker/app/TrackerPage.cpp
+        tracker/app/TrackerWindow.cpp
+        tracker/tracking/CameraFeed.cpp
+        tracker/tracking/ProcessCpu.cpp
+        tracker/tracking/TrackingLoop.cpp
         tracker/engines/Engines.cpp
         tracker/engines/Onnx.cpp
-        tracker/ProcessCpu.cpp
         Source/stage/HeadTrackingFile.cpp)
     target_include_directories(ComposerTracker SYSTEM PRIVATE ${ONNXRUNTIME_INCLUDE}) # third-party warnings off
     if(APPLE)
@@ -306,7 +309,7 @@ if(APPLE OR WIN32)
     # page or new models re-link it (otherwise a page-only change never reaches the bundle).
     set_target_properties(ComposerTracker PROPERTIES LINK_DEPENDS "${TRACKER_UI_STAMP};${TRACKER_MODELS_STAMP}")
 
-    # Where the page and models go (tracker/Main.cpp `resources()`).
+    # Where the page and models go (tracker/app/AppFiles.h).
     if(APPLE)
         set(TRACKER_RESOURCES "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Resources")
     else()

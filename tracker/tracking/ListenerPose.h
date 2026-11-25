@@ -2,15 +2,10 @@
 
 #include <cmath>
 #include <optional>
+#include "../HeadOrientation.h"
 
 namespace tracker
 {
-// Where a head points, in degrees. Yaw: 0 = straight ahead, + = turned to the person's right.
-struct HeadOrientation
-{
-    float yawDegrees = 0, pitchDegrees = 0, rollDegrees = 0;
-};
-
 inline float wrapDegrees (float degrees) { return std::remainder (degrees, 360.0f); } // [-180, 180]
 
 // Turns the head the camera sees into the head Composer hears: the one place where Invert,

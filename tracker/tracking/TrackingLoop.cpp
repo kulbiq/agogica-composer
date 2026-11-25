@@ -1,0 +1,172 @@
+#include "TrackingLoop.h"
+#include "../engines/Engines.h"
+#include "ProcessCpu.h"
+
+namespace tracker
+{
+namespace
+{
+constexpr int frameWaitMs = 200;            // how often the loop looks whether it should stop
+constexpr int stopTimeoutMs = 5000;         // the estimator finishes its current frame first
+constexpr double previewIntervalSeconds = 0.1;
+constexpr int previewWidthPixels = 480;     // sharp at 2x in the compact window's ~320 px
+constexpr float previewJpegQuality = 0.7f;
+constexpr double performanceIntervalSeconds = 1.0;
+
+double secondsNow() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
+
+// Development monitoring: the camera's frame size and rate, the whole process's CPU, and where
+// the camera's frames went (estimated, reused for a still head, or never looked at).
+class PerformanceMeter
+{
+public:
+    explicit PerformanceMeter (int cameraFramesSoFar) { restart (cameraFramesSoFar); }
+
+    void countFrame (bool reusedStillHead) { ++(reusedStillHead ? reused : estimated); }
+
+    // A report once `performanceIntervalSeconds` have passed since the last one.
+    std::optional<PerformanceReport> measureIfDue (const juce::Image& frame, int cameraFramesSoFar)
+    {
+        const auto seconds = secondsNow() - startedSeconds;
+        if (seconds < performanceIntervalSeconds)
+            return std::nullopt;
+
+        const auto cameraFrames = cameraFramesSoFar - cameraFramesAtStart;
+        PerformanceReport report;
+        report.cameraWidth = frame.getWidth();
+        report.cameraHeight = frame.getHeight();
+        report.cameraFramesPerSecond = cameraFrames / seconds;
+        report.cpuCores = (processCpuSeconds() - cpuSecondsAtStart) / seconds;
+        report.estimatedPerSecond = estimated / seconds;
+        report.reusedPerSecond = reused / seconds;
+        report.droppedPerSecond = juce::jmax (0, cameraFrames - estimated - reused) / seconds;
+
+        restart (cameraFramesSoFar);
+        return report;
+    }
+
+private:
+    void restart (int cameraFramesSoFar)
+    {
+        startedSeconds = secondsNow();
+        cpuSecondsAtStart = processCpuSeconds();
+        cameraFramesAtStart = cameraFramesSoFar;
+        estimated = reused = 0;
+    }
+
+    double startedSeconds = 0, cpuSecondsAtStart = 0;
+    int cameraFramesAtStart = 0, estimated = 0, reused = 0;
+};
+} // namespace
+
+TrackingLoop::TrackingLoop (juce::File models, CameraFeed& feed, HeadOutput output, Reports r)
+    : juce::Thread ("head tracking"), modelsFolder (std::move (models)), camera (feed),
+      headOutput (std::move (output)), reports (std::move (r))
+{
+    startThread();
+}
+
+TrackingLoop::~TrackingLoop()
+{
+    stopThread (stopTimeoutMs);
+}
+
+void TrackingLoop::run()
+{
+    if (! camera.isOpen())
+        return reports.status ({ TrackerPhase::failed, "No camera" });
+
+    if (! loadEstimator())
+        return;
+
+    reports.status ({ TrackerPhase::startingCamera, {} });
+    PerformanceMeter performance (camera.framesReceived());
+    bool isFirstFrame = true;
+
+    while (! threadShouldExit())
+    {
+        const auto frame = camera.waitForFrame (frameWaitMs);
+        if (! frame.isValid())
+            continue;
+
+        if (isFirstFrame)
+            reports.status ({ TrackerPhase::compilingModels, estimator->provider() });
+
+        publishCameraPreviewIfDue (frame);
+        const auto report = trackHead (frame);
+
+        if (std::exchange (isFirstFrame, false))
+            reports.status ({ TrackerPhase::tracking, estimator->provider() });
+        reports.frame (report);
+
+        if (report.warning.isEmpty())
+            performance.countFrame (report.reusedStillHead);
+        if (const auto measured = performance.measureIfDue (frame, camera.framesReceived()))
+            reports.performance (*measured);
+    }
+}
+
+bool TrackingLoop::loadEstimator()
+{
+    reports.status ({ TrackerPhase::loadingModels, {} });
+    try
+    {
+        estimator = std::make_unique<engines::HeadPoseEstimator> (modelsFolder);
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        reports.status ({ TrackerPhase::failed, e.what() });
+        return false;
+    }
+}
+
+// The head in `frame`, passed on to Composer as it is: no filter, no smoothing.
+FrameReport TrackingLoop::trackHead (const juce::Image& frame)
+{
+    FrameReport report;
+    try
+    {
+        // A still head repeats the last observation instead of running the models.
+        const auto now = secondsNow();
+        report.reusedStillHead = lastHead.has_value() && stillHead.unchanged (frame, now);
+        if (! report.reusedStillHead)
+        {
+            lastHead = estimator->estimate (frame);
+            if (lastHead)
+                stillHead.reset (frame, lastHead->headBoxNormalised, now);
+            else
+                stillHead.clear();
+        }
+
+        headOutput (lastHead ? std::optional (lastHead->orientation) : std::nullopt);
+        report.head = lastHead;
+        report.changeSinceLastEstimate = stillHead.difference;
+    }
+    catch (const std::exception& e)
+    {
+        // One bad frame is "no head this frame", not the end of tracking.
+        report = {};
+        report.warning = e.what();
+    }
+    return report;
+}
+
+// The page can't open the camera itself (Windows allows one reader), so it gets small JPEGs.
+void TrackingLoop::publishCameraPreviewIfDue (const juce::Image& frame)
+{
+    const auto now = secondsNow();
+    if (! cameraPreviewEnabled || now - lastPreviewSeconds < previewIntervalSeconds || frame.getWidth() <= 0)
+        return;
+    lastPreviewSeconds = now;
+
+    const auto height = juce::jmax (1, previewWidthPixels * frame.getHeight() / frame.getWidth());
+    const auto small = frame.rescaled (previewWidthPixels, height, juce::Graphics::mediumResamplingQuality);
+
+    juce::MemoryOutputStream jpeg;
+    juce::JPEGImageFormat format;
+    format.setQuality (previewJpegQuality);
+    if (format.writeImageToStream (small, jpeg))
+        reports.cameraPreview (jpeg.getMemoryBlock());
+}
+} // namespace tracker
