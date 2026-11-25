@@ -25,6 +25,9 @@ public:
         pos = 0;
     }
 
+    // Silence, as if nothing had been written yet. Doesn't allocate.
+    void clear() noexcept { std::fill (buffer.begin(), buffer.end(), 0.0f); }
+
     // Reads within a block reach up to maxBlock - 1 samples further back than their delay.
     int maxDelay() const noexcept { return size - 8 - maxBlock; }
     bool isPrepared() const noexcept { return size > 0; }

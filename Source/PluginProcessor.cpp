@@ -173,6 +173,16 @@ float ComposerProcessor::readInputLevel (juce::uint32 nowMs)
     return meterLevel;
 }
 
+void ComposerProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+{
+    // The dry sound in the middle: a mono track's input on both channels (JUCE's own bypass
+    // would leave the right one silent). A stereo input passes through as it is.
+    if (getTotalNumInputChannels() == 1 && buffer.getNumChannels() > 1)
+        buffer.copyFrom (1, 0, buffer, 0, 0, buffer.getNumSamples());
+
+    bypassedSinceLastBlock = true;
+}
+
 void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -203,6 +213,14 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     {
         buffer.clear();
         return;
+    }
+
+    // Back from bypass: the sound that was on its way before it would come out now.
+    if (std::exchange (bypassedSinceLastBlock, false))
+    {
+        history.clear();
+        std::apply ([] (auto&... stage) { (stage.clear(), ...); }, stages);
+        silentFor = 0;
     }
 
     // Audio depends only on this instance's own parameters (never on UI pushes or other

@@ -36,6 +36,9 @@ public:
     void setDirection (float azimuthDegrees, bool snap) noexcept;
     void setMode (OutputMode) noexcept;
 
+    // Forgets the sound heard so far (the HRIR's input). Doesn't allocate.
+    void clear() noexcept;
+
     // Adds the placed block (n <= History::maxBlock) to `left` / `right`.
     void process (const float* in, float* left, float* right, int n) noexcept;
 

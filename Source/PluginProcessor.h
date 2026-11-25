@@ -17,6 +17,8 @@ public:
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     using AudioProcessor::processBlock;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    using AudioProcessor::processBlockBypassed;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override                     { return true; }
@@ -122,6 +124,7 @@ private:
 
     // Samples of silent input so far; a track silent for longer than the tail skips all work.
     int silentFor = 0, skipAfter = 0;
+    bool bypassedSinceLastBlock = false; // audio thread
 
     double preparedRate = 0; // from prepareToPlay (the load meter's block length)
 

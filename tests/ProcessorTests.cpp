@@ -524,6 +524,43 @@ TEST_CASE ("channels: stereo input is summed to mono, mono input is used as is",
     }
 }
 
+TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const auto mode = GENERATE (0.0f, 1.0f);
+    ComposerProcessor p;
+    set (p, "outputMode", mode);
+    p.setPlayConfigDetails (1, 2, 48000.0, 256); // a mono track
+    p.prepareToPlay (48000.0, 256);
+
+    juce::Random rng (11);
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> buffer (2, 256);
+
+    for (int block = 0; block < 100; ++block) // sound on its way through the delay
+    {
+        fillNoise (buffer, rng);
+        p.processBlock (buffer, midi);
+    }
+
+    fillNoise (buffer, rng);
+    const juce::AudioBuffer<float> dry (buffer);
+    p.processBlockBypassed (buffer, midi);
+    for (int i = 0; i < 256; ++i)
+    {
+        REQUIRE (buffer.getSample (0, i) == dry.getSample (0, i));
+        REQUIRE (buffer.getSample (1, i) == dry.getSample (0, i)); // not left-only
+    }
+
+    // Back on, with a silent input: what was in the delay before the bypass is not heard now.
+    for (int block = 0; block < 60; ++block)
+    {
+        buffer.clear();
+        p.processBlock (buffer, midi);
+        REQUIRE (buffer.getMagnitude (0, 256) == 0.0f);
+    }
+}
+
 TEST_CASE ("bus layouts: mono or stereo in, stereo out only", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;

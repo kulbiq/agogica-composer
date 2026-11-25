@@ -16,9 +16,7 @@ void Placer::prepare (double sampleRate)
     convolve = dsp::bestConvolveTwo();
 
     window.assign ((size_t) (taps + spareWindow), 0.0f);
-    end = taps - 1; // silence before the first sample
-    filled = taps;
-    live = true;
+    clear();
     blended.assign ((size_t) taps * 2, 0.0f);
 
     pan.reset (sampleRate, 0.02);
@@ -27,6 +25,14 @@ void Placer::prepare (double sampleRate)
     fadePosition = fadeLength;
     modeFade = 1.0f;
     lastPan = 2.0f;
+}
+
+void Placer::clear() noexcept
+{
+    std::fill (window.begin(), window.end(), 0.0f);
+    end = taps - 1; // silence before the first sample
+    filled = taps;
+    live = true;
 }
 
 void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
