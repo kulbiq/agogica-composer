@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "Parameters.h"
 #include "stage/StageRegistry.h"
 #include "stage/HeadTracking.h"
 #include "dsp/DirectPath.h"
@@ -41,14 +42,11 @@ public:
     void updateTrackProperties (const TrackProperties&) override;
 
     // Single source of truth for parameters and saved scene data.
-    juce::AudioProcessorValueTreeState state { *this, nullptr, "Composer", createParameterLayout() };
+    juce::AudioProcessorValueTreeState state { *this, nullptr, "Composer", params::createLayout() };
 
     // Input meter (linear gain): the loudest peak so far, falling ~300 ms after it.
     // Message thread only; any number of editors may read it (each shows every track).
     float readInputLevel (juce::uint32 nowMs);
-
-    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-    static inline const juce::StringArray sceneParams { "roomSize", "listenerX", "listenerY", "playerX", "playerY" };
 
     // Stage data (message thread). Positions are unclamped, in metres.
     float getParam (const juce::String& paramId) const  { return state.getRawParameterValue (paramId)->load(); }
@@ -115,13 +113,13 @@ private:
         std::atomic<float>* proDistanceLaw;
     };
 
-    const AudioParams audioParams { state.getRawParameterValue ("roomSize"),
-                                    state.getRawParameterValue ("listenerX"),
-                                    state.getRawParameterValue ("listenerY"),
-                                    state.getRawParameterValue ("playerX"),
-                                    state.getRawParameterValue ("playerY"),
-                                    state.getRawParameterValue ("outputMode"),
-                                    state.getRawParameterValue ("proDistanceLaw") };
+    const AudioParams audioParams { state.getRawParameterValue (params::roomSize),
+                                    state.getRawParameterValue (params::listenerX),
+                                    state.getRawParameterValue (params::listenerY),
+                                    state.getRawParameterValue (params::playerX),
+                                    state.getRawParameterValue (params::playerY),
+                                    state.getRawParameterValue (params::outputMode),
+                                    state.getRawParameterValue (params::proDistanceLaw) };
 
     // The player's mono input, read by every stage.
     History history;

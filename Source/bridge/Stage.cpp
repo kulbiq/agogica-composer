@@ -5,11 +5,6 @@ namespace stage
 {
 namespace
 {
-// Shared by every instance (each keeps its own copy). outputMode and the Pro values are
-// project-wide, not part of scenes (ComposerProcessor::sceneParams); room and listener are.
-const juce::StringArray sharedParams { "roomSize", "listenerX", "listenerY", "outputMode", "proDistanceLaw" };
-const juce::StringArray playerParams { "playerX", "playerY" };
-
 // Positions are stored on a 1 cm grid; the float range conversion leaves residue like -5.6e-7.
 float centimetres (float metres)
 {
@@ -18,13 +13,13 @@ float centimetres (float metres)
 
 geometry::Point listenerOf (const ComposerProcessor& p)
 {
-    return geometry::clampToRoom ({ centimetres (p.getParam ("listenerX")), centimetres (p.getParam ("listenerY")) },
-                                  p.getParam ("roomSize"));
+    return geometry::clampToRoom ({ centimetres (p.getParam (params::listenerX)), centimetres (p.getParam (params::listenerY)) },
+                                  p.getParam (params::roomSize));
 }
 
 geometry::Point playerOf (const ComposerProcessor& p, float roomSize)
 {
-    return geometry::clampToRoom ({ centimetres (p.getParam ("playerX")), centimetres (p.getParam ("playerY")) }, roomSize);
+    return geometry::clampToRoom ({ centimetres (p.getParam (params::playerX)), centimetres (p.getParam (params::playerY)) }, roomSize);
 }
 
 juce::var point (geometry::Point p)
@@ -129,9 +124,9 @@ geometry::Point freeSeat (geometry::Point listener, float roomSize, const std::v
 juce::var snapshot (ComposerProcessor& self)
 {
     auto o = std::make_unique<juce::DynamicObject>();
-    const auto roomSize = self.getParam ("roomSize");
+    const auto roomSize = self.getParam (params::roomSize);
     const auto listener = listenerOf (self);
-    const auto lawExponent = self.getParam ("proDistanceLaw") / (20.0f * std::log10 (2.0f));
+    const auto lawExponent = self.getParam (params::proDistanceLaw) / params::dbPerDoublingFreeField;
 
     // ponytail: the viewing instance's room/listener stand for the stage. The copies can
     // drift if someone edits one track's automation lane by hand; add an "out of sync" hint
@@ -166,7 +161,7 @@ juce::var snapshot (ComposerProcessor& self)
     });
 
     o->setProperty ("scene", self.getScene());
-    o->setProperty ("outputMode", self.getParam ("outputMode") > 0.5f ? "binaural" : "stereo");
+    o->setProperty ("outputMode", self.getParam (params::outputMode) > 0.5f ? "binaural" : "stereo");
 
     // The yaw itself changes every tick while tracking: it goes out as its own "headYaw"
     // event (ComposerEditor), so the stage stays quiet.
@@ -181,7 +176,7 @@ juce::var snapshot (ComposerProcessor& self)
 
     // Pro panel values (raw parameter values; the UI shows them with their units).
     auto pro = std::make_unique<juce::DynamicObject>();
-    for (const auto& id : sharedParams)
+    for (const auto& id : params::ofStage)
         if (id.startsWith ("pro"))
             pro->setProperty (id, self.getParam (id));
     o->setProperty ("pro", pro.release());
@@ -209,7 +204,7 @@ void applyEdit (ComposerProcessor& self, const juce::var& edit)
     {
         for (auto* p : members)
         {
-            if (sharedParams.contains (paramId) || (playerParams.contains (paramId) && p->id == target))
+            if (params::ofStage.contains (paramId) || (params::ofPlayer.contains (paramId) && p->id == target))
             {
                 apply (*p, phase, paramId, value);
                 p->markPlaced();
@@ -283,8 +278,8 @@ void setScene (ComposerProcessor& self, const juce::String& scene)
 
         if (hasBeenThere != nullptr)
             for (auto* p : newToScene)
-                for (const auto& paramId : ComposerProcessor::sceneParams)
-                    if (sharedParams.contains (paramId))
+                for (const auto& paramId : params::ofScene)
+                    if (params::ofStage.contains (paramId))
                         p->writeParam (paramId, hasBeenThere->getParam (paramId));
     });
 }
@@ -303,22 +298,22 @@ void join (ComposerProcessor& self, bool takeSeat)
         {
             self.setActiveScene (source->getScene());
 
-            for (const auto& paramId : sharedParams)
+            for (const auto& paramId : params::ofStage)
                 self.writeParam (paramId, source->getParam (paramId));
         }
 
         if (takeSeat && source != nullptr)
         {
             // Where everyone is drawn (clamped to the room), not their stored values.
-            const auto roomSize = self.getParam ("roomSize");
+            const auto roomSize = self.getParam (params::roomSize);
             std::vector<geometry::Point> taken;
             for (auto* p : members)
                 if (p != &self)
                     taken.push_back (playerOf (*p, roomSize));
 
             const auto s = freeSeat (listenerOf (self), roomSize, taken);
-            self.writeParam ("playerX", s.x);
-            self.writeParam ("playerY", s.y);
+            self.writeParam (params::playerX, s.x);
+            self.writeParam (params::playerY, s.y);
         }
 
         self.markPlaced();

@@ -6,17 +6,6 @@
 namespace
 {
 std::atomic<int> nextId { 0 };
-
-const float dbPerDoublingFreeField = 20.0f * std::log10 (2.0f); // 6.02 dB
-
-auto metres (const juce::String& id, const juce::String& name, float defaultValue)
-{
-    return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 },
-                                                        name,
-                                                        juce::NormalisableRange<float> { -25.0f, 25.0f, 0.01f },
-                                                        defaultValue,
-                                                        juce::AudioParameterFloatAttributes{}.withLabel ("m"));
-}
 } // namespace
 
 ComposerProcessor::ComposerProcessor()
@@ -48,32 +37,6 @@ ComposerProcessor::~ComposerProcessor()
     // A track removed in the middle of someone's drag: the host still gets its ends.
     for (const auto& paramId : juce::StringArray (gesturesOpen))
         endGesture (paramId);
-}
-
-juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createParameterLayout()
-{
-    return {
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "roomSize", 1 },
-                                                     "Room size",
-                                                     juce::NormalisableRange<float> { 5.0f, 50.0f, 5.0f },
-                                                     20.0f,
-                                                     juce::AudioParameterFloatAttributes{}.withLabel ("m")),
-        metres ("listenerX", "Listener X", 0.0f),
-        metres ("listenerY", "Listener Y", 0.0f),
-        metres ("playerX", "Player X", 0.0f),
-        metres ("playerY", "Player Y", 5.0f),
-        std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "outputMode", 1 },
-                                                      "Output",
-                                                      juce::StringArray { "Stereo", "Binaural" },
-                                                      0),
-
-        // Pro panel: project-wide, not part of scenes; neutral defaults.
-        // No step: the default must be exactly today's -20·log10(2)/3 dB per doubling.
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "proDistanceLaw", 1 }, "Distance law",
-                                                     juce::NormalisableRange<float> { 0.0f, dbPerDoublingFreeField },
-                                                     dbPerDoublingFreeField * geometry::distanceLawExponent,
-                                                     juce::AudioParameterFloatAttributes{}.withLabel ("dB/doubling")),
-    };
 }
 
 juce::String ComposerProcessor::getDisplayName() const
@@ -122,7 +85,7 @@ void ComposerProcessor::storeScene()
     auto scenes = state.state.getOrCreateChildWithName ("scenes", nullptr);
     auto slot = scenes.getOrCreateChildWithName (getScene(), nullptr);
 
-    for (const auto& paramId : sceneParams)
+    for (const auto& paramId : params::ofScene)
         slot.setProperty (paramId, getParam (paramId), nullptr);
 }
 
@@ -133,7 +96,7 @@ bool ComposerProcessor::recallScene (const juce::String& scene)
     if (! slot.isValid())
         return false;
 
-    for (const auto& paramId : sceneParams)
+    for (const auto& paramId : params::ofScene)
         if (slot.hasProperty (paramId))
             writeParam (paramId, slot[paramId]);
 
@@ -237,7 +200,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         acoustics.headYaw = headTracking->yaw();
 
     auto& adjust = acoustics.adjust;
-    adjust.distanceExponent = audioParams.proDistanceLaw->load() / dbPerDoublingFreeField;
+    adjust.distanceExponent = audioParams.proDistanceLaw->load() / params::dbPerDoublingFreeField;
 
     // A track silent for longer than the tail produces silence: skip all the work. When
     // sound returns, everything inside is silent too, so stages jump straight to the

@@ -22,7 +22,7 @@ void HeadTracking::pollNow()
     registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
         for (auto* p : members)
-            wanted = wanted || p->getParam ("outputMode") > 0.5f;
+            wanted = wanted || p->getParam (params::outputMode) > 0.5f;
     });
 
     if (getTimerInterval() != (wanted ? 10 : 500))
