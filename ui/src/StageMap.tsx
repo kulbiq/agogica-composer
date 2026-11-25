@@ -25,6 +25,7 @@ const round = (v: number) => Math.round(v * 100) / 100;
 
 export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const labelsRef = useRef<HTMLCanvasElement>(null);
 
   // The rAF loop reads the latest props through refs instead of restarting.
   const latest = useRef({ stage, selected });
@@ -81,7 +82,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
-    const painter = new StagePainter();
+    const painter = new StagePainter(labelsRef.current!);
     const draw = (now: number) => {
       // The window moved to a screen with another pixel ratio: no resize event tells us.
       if ((window.devicePixelRatio || 1) !== dpr) resize();
@@ -193,19 +194,22 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={styles.map}
-      tabIndex={0}
-      aria-label="Stage map. Arrow keys move the selected node, Shift for 1 m steps."
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-      onLostPointerCapture={onPointerEnd}
-      onKeyDown={onKeyDown}
-      onKeyUp={(e) => nudgeKeys[e.key] && endKeyGesture()}
-      onBlur={endKeyGesture}
-    />
+    <>
+      <canvas ref={labelsRef} hidden aria-hidden />
+      <canvas
+        ref={canvasRef}
+        className={styles.map}
+        tabIndex={0}
+        aria-label="Stage map. Arrow keys move the selected node, Shift for 1 m steps."
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onLostPointerCapture={onPointerEnd}
+        onKeyDown={onKeyDown}
+        onKeyUp={(e) => nudgeKeys[e.key] && endKeyGesture()}
+        onBlur={endKeyGesture}
+      />
+    </>
   );
 }

@@ -36,6 +36,14 @@ export class StagePainter {
   private drawn = new Map<NodeKey, Point>(); // eased positions in metres
   private shown = new Map<number, number>(); // eased input levels, 0..1
 
+  private labelsKey = "";
+
+  // `labels` holds the names as last drawn. Text is most of a frame's cost and changes only
+  // when a player moves, is renamed or selected, so it is drawn once and copied afterwards.
+  // It has to be a canvas in the page, next to the map: canvas text takes its smoothing from
+  // the element's CSS, and one outside the page draws the same letters slightly differently.
+  constructor(private labels: HTMLCanvasElement) {}
+
   paint(ctx: CanvasRenderingContext2D, frame: MapFrame): View {
     const { width: W, height: H, stage, selected, overrides, ink, paper } = frame;
     const { drawn, shown } = this;
@@ -52,6 +60,7 @@ export class StagePainter {
 
     ctx.clearRect(0, 0, W, H);
     ctx.lineWidth = 1;
+    ctx.lineJoin = "round";
 
     // Grid: 1 m minor (skipped when too dense), 5 m major, counted from the centre.
     for (let m = -Math.floor(half); m <= half; m++) {
@@ -123,20 +132,7 @@ export class StagePainter {
       ctx.fill();
     }
 
-    // Names first, with a paper halo so they stay legible where players crowd (selected last);
-    // nodes are drawn over them so a node is never hidden.
-    ctx.lineJoin = "round";
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = paper;
-    const byPriority = [...stage.players].sort((a, b) => Number(a.id === selected) - Number(b.id === selected));
-    for (const player of byPriority) {
-      const p = drawn.get(player.id)!;
-      const label = player.name.toUpperCase();
-      ctx.strokeText(label, sx(p.x) + 12, sy(p.y));
-      ctx.fillStyle = `rgba(${ink},${player.id === selected ? 0.85 : 0.55})`;
-      ctx.fillText(label, sx(p.x) + 12, sy(p.y));
-    }
-    ctx.lineWidth = 1;
+    this.paintLabels(ctx, frame, sx, sy);
 
     // Listener: an arrowhead facing +y (front), turned with the head when tracking. Slim and
     // notched so its direction reads at any angle (an equilateral triangle turned 25°
@@ -174,5 +170,54 @@ export class StagePainter {
     }
 
     return { cx, cy, scale };
+  }
+
+  // Names with a paper halo, so they stay legible where players crowd (selected last).
+  // They go over the level discs and under the nodes, so a node is never hidden.
+  private paintLabels(ctx: CanvasRenderingContext2D, frame: MapFrame, sx: (x: number) => number, sy: (y: number) => number) {
+    const { stage, selected, ink, paper } = frame;
+    const { labels } = this;
+    const pixels = ctx.canvas;
+    const byPriority = [...stage.players].sort((a, b) => Number(a.id === selected) - Number(b.id === selected));
+    const placed = byPriority.map((player) => {
+      const p = this.drawn.get(player.id)!;
+      return { text: player.name.toUpperCase(), x: sx(p.x) + 12, y: sy(p.y), selected: player.id === selected };
+    });
+
+    // Everything the picture depends on; positions to 1/64 px, finer than can be seen.
+    const key = JSON.stringify([
+      pixels.width,
+      pixels.height,
+      ctx.getTransform().a, // the pixel ratio
+      document.fonts.check(ctx.font), // until the font has loaded, text is drawn in a fallback
+      ink,
+      paper,
+      placed.map((l) => [l.text, Math.round(l.x * 64), Math.round(l.y * 64), l.selected]),
+    ]);
+
+    if (key !== this.labelsKey) {
+      this.labelsKey = key;
+      labels.width = pixels.width; // also clears it
+      labels.height = pixels.height;
+      const to = labels.getContext("2d")!;
+      to.setTransform(ctx.getTransform());
+      to.font = ctx.font;
+      to.letterSpacing = ctx.letterSpacing;
+      to.textBaseline = ctx.textBaseline;
+      to.lineJoin = "round";
+      to.lineWidth = 3;
+      to.strokeStyle = paper;
+      for (const label of placed) {
+        to.strokeText(label.text, label.x, label.y);
+        to.fillStyle = `rgba(${ink},${label.selected ? 0.85 : 0.55})`;
+        to.fillText(label.text, label.x, label.y);
+      }
+    }
+
+    if (labels.width === 0 || labels.height === 0) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // pixel for pixel, whatever the pixel ratio
+    ctx.drawImage(labels, 0, 0);
+    ctx.restore();
   }
 }
