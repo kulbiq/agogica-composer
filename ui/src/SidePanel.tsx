@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { setName, setParams, setScene, startTracker, type Stage } from "./juce";
+import { setName, setParams, setScene, startTracker, type Stage } from "./bridge";
 import ParamSlider from "./ParamSlider";
 import ProPanel from "./ProPanel";
 import type { NodeKey } from "./StageMap";

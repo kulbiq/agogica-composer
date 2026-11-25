@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import styles from "./App.module.css";
 import Footer from "./Footer";
-import { useStage } from "./juce";
+import { useStage } from "./bridge";
 import ResizeGrip from "./ResizeGrip";
 import SidePanel from "./SidePanel";
 import StageMap, { type NodeKey } from "./StageMap";

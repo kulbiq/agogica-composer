@@ -1,4 +1,4 @@
-import { setParams, type Param } from "./juce";
+import { setParams, type Param } from "./bridge";
 import ParamSlider from "./ParamSlider";
 import styles from "./App.module.css";
 

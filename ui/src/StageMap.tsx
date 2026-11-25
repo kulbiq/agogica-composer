@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react";
-import { beginGesture, useJuceEvent, type Gesture, type Point, type Stage } from "./juce";
+import { beginGesture, useEvent, type Gesture, type Point, type Stage } from "./bridge";
 import styles from "./App.module.css";
 import { levelOf, type Levels } from "./level";
 
@@ -45,9 +45,9 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   const keyGesture = useRef<{ key: NodeKey; gesture: Gesture } | null>(null);
   const view = useRef({ cx: 0, cy: 0, scale: 1 });
   const levels = useRef<Levels>({});
-  useJuceEvent<Levels>("levels", (l) => (levels.current = l));
+  useEvent("levels", (l) => (levels.current = l));
   const headYaw = useRef(0); // degrees clockwise; its own event, so the stage doesn't change every frame
-  useJuceEvent<number>("headYaw", (yaw) => (headYaw.current = yaw));
+  useEvent("headYaw", (yaw) => (headYaw.current = yaw));
 
   // A fresh stage from C++ supersedes local positions, except for a node still in a gesture.
   useEffect(() => {
