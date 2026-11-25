@@ -2,7 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "PluginProcessor.h"
-#include "bridge/Stage.h"
+#include "bridge/StageEdits.h"
 
 // Hosts the web UI; all UI logic lives in ui/.
 class ComposerEditor final : public juce::AudioProcessorEditor,

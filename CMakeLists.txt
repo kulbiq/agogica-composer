@@ -58,7 +58,10 @@ juce_add_plugin(Composer
 target_sources(Composer PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/bridge/Stage.cpp
+    Source/bridge/StageSnapshot.cpp
+    Source/bridge/StageEdits.cpp
+    Source/stage/Scenes.cpp
+    Source/stage/Seating.cpp
     Source/stage/StageRegistry.cpp
     Source/stage/HeadTracking.cpp
     Source/stage/HeadTrackingFile.cpp

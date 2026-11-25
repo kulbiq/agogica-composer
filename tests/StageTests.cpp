@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
-#include "../Source/bridge/Stage.h"
+#include "../Source/bridge/StageSnapshot.h"
+#include "../Source/bridge/StageEdits.h"
+#include "../Source/stage/Scenes.h"
+#include "../Source/stage/Seating.h"
 
 using Catch::Matchers::WithinAbs;
 

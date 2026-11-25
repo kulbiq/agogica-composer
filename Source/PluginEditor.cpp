@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
-#include "bridge/Stage.h"
+#include "bridge/StageSnapshot.h"
+#include "stage/Scenes.h"
 #include "bridge/Mime.h"
 #include <BinaryData.h>
 

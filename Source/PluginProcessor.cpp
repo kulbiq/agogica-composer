@@ -1,6 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include "bridge/Stage.h"
+#include "stage/Seating.h"
 #include "dsp/Geometry.h"
 
 namespace
