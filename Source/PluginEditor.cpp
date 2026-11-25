@@ -92,7 +92,7 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                                          })
                     .withNativeFunction ("setName", [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
-                                             if (args.size() == 2)
+                                             if (args.size() == 2 && args[0].isInt() && args[1].isString())
                                                  stage::setName (composer, (int) args[0], args[1].toString());
 
                                              complete ({});

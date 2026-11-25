@@ -32,7 +32,9 @@ private:
     std::vector<Begun> begun;
 };
 
-// Renames player `id` (empty = back to the host track name).
+// Renames player `id` (empty = back to the host track name). Longer names are cut: the name
+// is saved with the project and sent to every window.
+constexpr int maxNameLength = 64;
 void setName (ComposerProcessor& self, int id, const juce::String& name);
 
 // Switches every instance to scene "A".."H": each stores its current values in the

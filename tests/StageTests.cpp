@@ -117,6 +117,34 @@ TEST_CASE ("applyEdit: writes metres, ignores unknown params and other targets",
     drag (p, p.id + 1000, "playerX", 7.0f);
     drag (p, p.id, "notAParam", 7.0f);
     CHECK_THAT (p.getParam ("playerX"), WithinAbs (-3.25, 1e-4));
+
+    SECTION ("an edit the page could never send does nothing")
+    {
+        auto change = [&] (std::function<void (juce::DynamicObject&)> spoil)
+        {
+            auto e = edit ("change", p.id, "playerX", 7.0f);
+            spoil (*e.getDynamicObject());
+            stage::applyEdit (p, e);
+        };
+
+        change ([] (auto& e) { e.removeProperty ("value"); });
+        change ([] (auto& e) { e.setProperty ("value", juce::var()); }); // what NaN becomes as JSON
+        change ([] (auto& e) { e.setProperty ("value", std::numeric_limits<float>::infinity()); });
+        change ([] (auto& e) { e.setProperty ("value", "7"); });
+        change ([] (auto& e) { e.removeProperty ("target"); });
+        change ([] (auto& e) { e.setProperty ("target", "first"); });
+        CHECK_THAT (p.getParam ("playerX"), WithinAbs (-3.25, 1e-4));
+
+        ComposerProcessor fresh;
+        stage::applyEdit (fresh, edit ("wobble", fresh.id, "playerX", 7.0f));
+        CHECK_FALSE (fresh.isPlaced());
+    }
+
+    SECTION ("a name is cut to 64 characters")
+    {
+        stage::setName (p, p.id, juce::String::repeatedString ("x", 200));
+        CHECK (p.getDisplayName().length() == 64);
+    }
 }
 
 TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float residue", "[integration]")

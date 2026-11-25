@@ -192,8 +192,16 @@ juce::var snapshot (ComposerProcessor& self)
 
 void applyEdit (ComposerProcessor& self, const juce::var& edit)
 {
+    // The page is the other side of a trust boundary: anything but a whole, well-formed edit
+    // is dropped. (A missing target would read as 0, the first track; a NaN arrives as null.)
+    const auto isNumber = [] (const juce::var& v) { return (v.isInt() || v.isInt64() || v.isDouble()) && std::isfinite ((double) v); };
     const auto paramId = edit["param"].toString();
     const auto phase = edit["phase"].toString();
+
+    if (! (phase == "begin" || phase == "change" || phase == "end") || ! isNumber (edit["target"])
+        || (phase == "change" && ! isNumber (edit["value"])))
+        return;
+
     const auto value = (float) edit["value"];
     const auto target = (int) edit["target"];
 
@@ -241,7 +249,7 @@ void setName (ComposerProcessor& self, int id, const juce::String& name)
     {
         for (auto* p : members)
             if (p->id == id)
-                p->setNameOverride (name);
+                p->setNameOverride (name.trim().substring (0, maxNameLength));
     });
 }
 
