@@ -135,7 +135,7 @@ std::optional<Pose> Reader::read()
 
     // Checked on every read: a new file gets its magic just after it appears.
     if (record == nullptr || std::memcmp (record->magic, "AGHT", 4) != 0 || record->version.load() != version)
-        return std::nullopt;
+        return lastRead = std::nullopt;
 
     for (int attempt = 0; attempt < 8; ++attempt)
     {
@@ -153,10 +153,19 @@ std::optional<Pose> Reader::read()
 
         std::atomic_thread_fence (std::memory_order_acquire);
 
-        if (record->sequence.load (std::memory_order_relaxed) == before)
-            return pose;
+        if (record->sequence.load (std::memory_order_relaxed) != before)
+            continue;
+
+        // Angles that aren't numbers (a tracker gone wrong) are no head at all: a NaN would
+        // go all the way to the audio and never ease away.
+        if (! (std::isfinite (pose.yaw) && std::isfinite (pose.pitch) && std::isfinite (pose.roll)))
+            pose = Pose { .timestampMs = pose.timestampMs };
+
+        return lastRead = pose;
     }
 
-    return std::nullopt; // the writer kept us busy; try again next tick
+    // The writer kept us busy: the pose we had still stands (it goes stale by its own
+    // timestamp if this lasts).
+    return lastRead;
 }
 } // namespace headtracking

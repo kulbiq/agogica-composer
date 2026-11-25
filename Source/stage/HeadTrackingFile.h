@@ -77,7 +77,8 @@ class Reader
 public:
     explicit Reader (juce::File, juce::uint32 checkEveryMs = 500);
 
-    // The latest consistent pose, or nothing if there's no valid file.
+    // The latest consistent pose (the previous one while a write is in progress), or nothing
+    // if there's no valid file.
     std::optional<Pose> read();
 
 private:
@@ -86,6 +87,7 @@ private:
     juce::File file;
     std::unique_ptr<juce::MemoryMappedFile> map;
     const Record* record = nullptr;
+    std::optional<Pose> lastRead;
     juce::uint64 identity = 0;
     juce::int64 size = 0;
     juce::uint32 checkEveryMs, checkedAt = 0;

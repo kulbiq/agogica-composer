@@ -94,6 +94,25 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         CHECK_THAT (read->yaw, WithinAbs (20.0, 0.0));
     }
 
+    SECTION ("a read that meets a write in progress keeps the pose it had")
+    {
+        const auto file = tempFile ("busy");
+        Writer writer (file);
+        writer.write (pose (30.0f));
+        Reader reader (file);
+        REQUIRE (reader.read().has_value());
+
+        {
+            juce::MemoryMappedFile map (file, juce::MemoryMappedFile::readWrite);
+            auto* sequence = reinterpret_cast<std::uint32_t*> (static_cast<char*> (map.getData()) + offsetof (Record, sequence));
+            *sequence |= 1u; // as if the writer were between its two stores
+        }
+
+        const auto kept = reader.read();
+        REQUIRE (kept.has_value());
+        CHECK_THAT (kept->yaw, WithinAbs (30.0, 1e-4));
+    }
+
     SECTION ("the file is looked at only every so often (not on every 10 ms poll)")
     {
         const auto file = tempFile ("throttled");
@@ -360,6 +379,15 @@ TEST_CASE ("head tracking: stale or faceless data is not live, the scene eases b
 
     SECTION ("no face: the listener left")
     {
+        writer.write (pose (60.0f, false));
+    }
+
+    SECTION ("a yaw that isn't a number")
+    {
+        writer.write (pose (std::numeric_limits<float>::quiet_NaN()));
+        tracking.pollNow();
+        CHECK_FALSE (tracking.isLive());
+        CHECK (std::isfinite (tracking.yaw()));
         writer.write (pose (60.0f, false));
     }
 
