@@ -34,6 +34,7 @@ private:
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int menuIndex, const juce::String&) override;
     void menuItemSelected (int itemId, int) override;
+    juce::PopupMenu cameraMenu() const;
     static juce::PopupMenu aboutMenu();
 
     bool isDebugView = false;

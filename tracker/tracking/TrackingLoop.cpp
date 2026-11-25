@@ -115,7 +115,7 @@ void TrackingLoop::run()
 // Without frames there is no head: Composer and the page are told once, not left with the last one.
 void TrackingLoop::reportCameraSilent()
 {
-    const TrackerStatus waiting { TrackerPhase::waitingForCamera, camera.cameraName() };
+    const TrackerStatus waiting { camera.hasGivenUp() ? TrackerPhase::noPicture : TrackerPhase::waitingForCamera, camera.cameraName() };
     if (status.has_value() && status->phase == TrackerPhase::tracking)
     {
         lastHead.reset();

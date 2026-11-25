@@ -13,12 +13,14 @@ struct SizeRange { int minWidth, minHeight, maxWidth, maxHeight; };
 // On Windows JUCE takes the largest size in the range.
 constexpr SizeRange preferredSizes[] { { 640, 480, 640, 480 }, { 640, 360, 640, 360 }, { 320, 240, 1280, 720 } };
 
-// Long enough for a camera to start (a phone connects first), short enough not to feel dead.
-constexpr int noPictureTimeoutMs = 4000;
+// Long enough for a camera to start: a phone offered as a camera has to wake and connect first,
+// and at 4 s it was closed and opened again before it could answer.
+constexpr int noPictureTimeoutMs = 10000;
+constexpr int attemptsPerCamera = 3; // for a camera the user chose, or one that did work
 constexpr int developmentFramesPerSecond = 30;
 } // namespace
 
-CameraFeed::CameraFeed()
+CameraFeed::CameraFeed (const juce::String& chosenCamera)
     : developmentFrame (juce::ImageFileFormat::loadFrom (juce::File (juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_STILL_FRAME", {}))))
 {
     if (developmentFrame.isValid())
@@ -28,8 +30,8 @@ CameraFeed::CameraFeed()
         return;
     }
 
-    open (0);
-    startTimer (noPictureTimeoutMs);
+    const auto chosenIndex = availableCameras().indexOf (chosenCamera);
+    startTrying (juce::jmax (0, chosenIndex), chosenIndex >= 0);
 }
 
 CameraFeed::~CameraFeed()
@@ -38,11 +40,32 @@ CameraFeed::~CameraFeed()
     close();
 }
 
+void CameraFeed::choose (const juce::String& cameraName)
+{
+    if (developmentFrame.isValid())
+        return;
+
+    if (const auto index = availableCameras().indexOf (cameraName); index >= 0)
+        startTrying (index, true);
+}
+
+void CameraFeed::startTrying (int index, bool usersChoice)
+{
+    isUsersChoice = usersChoice;
+    camerasTriedWithoutPicture = 0;
+    gaveUp = false;
+    open (index);
+    startTimer (noPictureTimeoutMs);
+}
+
 void CameraFeed::open (int index)
 {
     close();
+    hasCurrentCameraDelivered = false;
+    attemptsWithoutPicture = 0;
+    receivedAtLastLook = framesReceived();
 
-    const auto cameras = juce::CameraDevice::getAvailableDevices();
+    const auto cameras = availableCameras();
     if (cameras.isEmpty())
         return;
 
@@ -63,14 +86,19 @@ void CameraFeed::open (int index)
         camera->addListener (this);
 }
 
+// The camera is let go; its name stays, for the status.
 void CameraFeed::close()
 {
     if (camera != nullptr)
         camera->removeListener (this);
     camera.reset();
+}
 
-    const juce::ScopedLock sl (frameLock);
-    name.clear();
+void CameraFeed::giveUp()
+{
+    stopTimer();
+    close();
+    gaveUp = true;
 }
 
 void CameraFeed::timerCallback()
@@ -81,11 +109,38 @@ void CameraFeed::timerCallback()
         retryIfNoPicture();
 }
 
+// Every `noPictureTimeoutMs`: did frames come since the last look?
 void CameraFeed::retryIfNoPicture()
 {
     const auto receivedNow = framesReceived();
-    if (receivedNow == std::exchange (receivedAtLastLook, receivedNow))
-        open (cameraIndex + 1); // the next camera, or the only one again
+    if (receivedNow != std::exchange (receivedAtLastLook, receivedNow))
+    {
+        hasCurrentCameraDelivered = true;
+        attemptsWithoutPicture = 0;
+        return;
+    }
+
+    // The user's camera, or one that worked until now: the same one again, a few times.
+    if (isUsersChoice || hasCurrentCameraDelivered)
+    {
+        const auto attempts = attemptsWithoutPicture + 1;
+        const bool delivered = hasCurrentCameraDelivered;
+        if (attempts >= attemptsPerCamera)
+            return giveUp();
+
+        camera.reset(); // open() starts the counts again: keep them across it
+        open (cameraIndex);
+        attemptsWithoutPicture = attempts;
+        hasCurrentCameraDelivered = delivered;
+        return;
+    }
+
+    // No choice made, and this camera never gave a picture: the next one, each camera once.
+    if (++camerasTriedWithoutPicture >= availableCameras().size())
+        return giveUp();
+    const auto tried = camerasTriedWithoutPicture;
+    open (cameraIndex + 1);
+    camerasTriedWithoutPicture = tried;
 }
 
 juce::String CameraFeed::cameraName() const

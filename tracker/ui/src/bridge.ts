@@ -5,9 +5,10 @@ import { getNativeFunction } from "@juce-framework/webview";
 export type InitialState = { inverted: boolean; debugView: boolean; version: string };
 
 export type TrackerStatus = {
-  phase: "loadingModels" | "waitingForCamera" | "compilingModels" | "tracking" | "failed";
+  phase: "loadingModels" | "waitingForCamera" | "noPicture" | "compilingModels" | "tracking" | "failed";
   // failed: the reason; compilingModels, tracking: what runs the models ("CoreML", "CPU");
-  // waitingForCamera: the camera's name, empty when the computer has none.
+  // waitingForCamera, noPicture (no camera answered; the Camera menu chooses another): the camera's name,
+  // empty when the computer has none.
   detail: string;
 };
 

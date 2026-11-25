@@ -31,7 +31,7 @@ camera ──frame──> TrackingLoop ──head, as the camera sees it──> 
 | | `TrackerPage` | The web view and everything said between app and page: the only C++ with the page's function and event names and their JSON. |
 | | `TrackerSettings.h` | What is remembered between runs; the only place with the settings file's keys. |
 | | `AppFiles.h` | Where the build puts the page and the models. |
-| `tracking/` | `CameraFeed` | The camera and its latest frame; reopens a camera that gives no picture, or tries the next. |
+| `tracking/` | `CameraFeed` | The camera (the Camera menu's choice, else the first that gives a picture) and its latest frame; a silent camera is tried a few times, then left alone. |
 | | `TrackingLoop` | The tracking thread: a short loop over named steps. |
 | | `TrackingReports.h` | What the loop reports: status, frame, performance. Plain structs. |
 | | `ListenerPose.h` | Pure: camera-frame head to listener-frame head. Invert, Recenter, Pause, "live". |
@@ -90,7 +90,7 @@ Vanilla TypeScript, built by Vite to static files next to the app.
 
 | App sends | When |
 |---|---|
-| `status` | the phase changed: loading models, waiting for the camera, compiling, tracking, failed |
+| `status` | the phase changed: loading models, waiting for the camera, no picture, compiling, tracking, failed |
 | `trackingFrame` | every camera frame processed: found, live, what Composer hears, the camera's angles, head box, timings |
 | `performance` | once a second |
 | `cameraPreview` | about ten JPEGs a second while enabled |
@@ -125,11 +125,11 @@ AGOGICA_TRACKER_STILL_FRAME=face.png AGOGICA_TRACKER_LOG=/tmp/tracker.log AGOGIC
 ```
 
 Then: the chip says Tracking, the dial points where the face does, the box sits on the head in the Camera section, Recenter turns the dial to 0, Invert mirrors it, Pause says Paused and Composer goes straight ahead.
-With a real camera: cover it (No head), and unplug it (Starting camera, then the next camera).
+With a real camera: cover it (No head); choose a camera that can't answer in the Camera menu (Starting camera, then No picture after three tries of 10 s).
 
 ## Known limits
 
 - macOS: JUCE's camera frames are still captures; a camera that fails them (seen with an iPhone as camera) gives no picture, and the app moves on to the next camera.
-- There is no camera chooser: the first camera that delivers frames is used.
+- A MacBook's own camera gives no picture while the lid is closed; the app then says "No picture" and the Camera menu chooses another.
 - Windows: runs from the build folder; no installer, and Composer's "Start head tracking" does nothing there yet.
 - macOS builds are arm64 only (ONNX Runtime ships no universal build).

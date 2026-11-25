@@ -12,7 +12,9 @@ constexpr int debugViewMinWidth = 340, debugViewMinHeight = 200, debugViewMaxWid
 constexpr int debugViewDefaultWidth = 900, debugViewDefaultHeight = 720;
 constexpr int anySize = 1 << 15;
 
-enum MenuItem { debuggingItem = 1, aboutItem };
+enum MenuItem { debuggingItem = 1, aboutItem, firstCameraItem = 100 }; // cameras: firstCameraItem + index
+const char* const viewMenuName = "View";
+const char* const cameraMenuName = "Camera";
 const char* const aboutItemText = "About Agogica Tracker";
 } // namespace
 
@@ -20,6 +22,7 @@ TrackerWindow::TrackerWindow()
     : DocumentWindow ("Agogica Tracker", juce::Colours::black, closeButton | minimiseButton),
       listenerPoseOutput (headtracking::defaultFile()),
       page (appResourcesFolder().getChildFile ("ui"), pageActions()),
+      camera (settings.cameraName()),
       trackingLoop (appResourcesFolder().getChildFile ("models"), camera,
                     [this] (std::optional<HeadOrientation> head) { return listenerPoseOutput.observe (head); },
                     trackingReports())
@@ -103,7 +106,8 @@ void TrackerWindow::setDebugView (bool on)
     if (on == isDebugView && isVisible())
         return;
 
-    saveBounds();
+    if (isVisible()) // not while the window is being set up: its bounds aren't the user's yet
+        saveBounds();
     isDebugView = on;
     settings.setDebugView (on);
 
@@ -162,20 +166,35 @@ void TrackerWindow::saveBounds()
 juce::StringArray TrackerWindow::getMenuBarNames()
 {
    #if JUCE_MAC
-    return { "View" };
+    return { viewMenuName, cameraMenuName };
    #else
-    return { "View", "Help" };
+    return { viewMenuName, cameraMenuName, "Help" };
    #endif
 }
 
-juce::PopupMenu TrackerWindow::getMenuForIndex (int menuIndex, const juce::String&)
+juce::PopupMenu TrackerWindow::getMenuForIndex (int, const juce::String& menuName)
 {
-    if (menuIndex != 0)
+    if (menuName == cameraMenuName)
+        return cameraMenu();
+    if (menuName != viewMenuName)
         return aboutMenu();
 
     juce::PopupMenu view;
     view.addItem (debuggingItem, "Debugging", true, isDebugView);
     return view;
+}
+
+// The computer's cameras as they are now, the one in use ticked.
+juce::PopupMenu TrackerWindow::cameraMenu() const
+{
+    juce::PopupMenu menu;
+    const auto cameras = CameraFeed::availableCameras();
+    const auto inUse = camera.cameraName();
+    for (int index = 0; index < cameras.size(); ++index)
+        menu.addItem (firstCameraItem + index, cameras[index], true, cameras[index] == inUse);
+    if (cameras.isEmpty())
+        menu.addItem (firstCameraItem, "No camera found", false);
+    return menu;
 }
 
 juce::PopupMenu TrackerWindow::aboutMenu()
@@ -191,5 +210,12 @@ void TrackerWindow::menuItemSelected (int itemId, int)
         setDebugView (! isDebugView);
     else if (itemId == aboutItem)
         page.showAbout();
+    else if (const auto cameras = CameraFeed::availableCameras(); juce::isPositiveAndBelow (itemId - firstCameraItem, cameras.size()))
+    {
+        const auto chosen = cameras[itemId - firstCameraItem];
+        settings.setCameraName (chosen);
+        camera.choose (chosen);
+        menuItemsChanged();
+    }
 }
 } // namespace tracker

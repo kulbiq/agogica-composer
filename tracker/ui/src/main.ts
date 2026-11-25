@@ -14,6 +14,7 @@ import { SessionStats } from "./sessionStats";
 const STATUS_TEXT: Record<TrackerStatus["phase"], (detail: string) => string> = {
   loadingModels: () => "Loading model",
   waitingForCamera: (cameraName) => (cameraName ? "Starting camera" : "No camera"),
+  noPicture: (cameraName) => (cameraName ? "No picture" : "No camera"),
   compilingModels: (provider) => `Compiling for ${provider}`,
   tracking: () => "Tracking",
   failed: (reason) => `Error: ${reason}`,
@@ -32,7 +33,9 @@ function showStatus(status: TrackerStatus | undefined, frame: TrackingFrame | un
   chip.textContent = text;
   chip.dataset.status = isTracking && frame?.live ? "live" : "soon";
   // The longer story on hover: which camera, or why a frame failed.
-  chip.title = status?.phase === "waitingForCamera" ? status.detail : (frame?.warning ?? "");
+  if (status?.phase === "waitingForCamera") chip.title = status.detail;
+  else if (status?.phase === "noPicture") chip.title = `${status.detail} gives no picture. Choose a camera in the Camera menu.`;
+  else chip.title = frame?.warning ?? "";
 }
 
 function showError(error: unknown) {

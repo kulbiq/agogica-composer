@@ -12,7 +12,8 @@ namespace tracker
 enum class TrackerPhase
 {
     loadingModels,
-    waitingForCamera, // no picture (yet, or any more): the camera is starting, missing or silent
+    waitingForCamera, // no picture yet: the camera is starting, or the computer has none
+    noPicture,        // no camera gave a picture and none is tried any more: the Camera menu is the way on
     compilingModels,  // the first frame is being processed (CoreML compiles on its first run)
     tracking,
     failed
@@ -22,7 +23,7 @@ struct TrackerStatus
 {
     TrackerPhase phase = TrackerPhase::loadingModels;
     // failed: the reason; compilingModels and tracking: what runs the models ("CoreML", "CPU");
-    // waitingForCamera: the camera's name, empty when the computer has none.
+    // waitingForCamera, noPicture: the camera's name, empty when the computer has none.
     juce::String detail;
 
     bool operator== (const TrackerStatus& other) const { return phase == other.phase && detail == other.detail; }
