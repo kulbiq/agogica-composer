@@ -41,7 +41,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   // Nodes the user is moving are drawn from here (exactly under the pointer)
   // until C++ reports the new position back.
   const overrides = useRef(new Map<NodeKey, Point>());
-  const drag = useRef<{ key: NodeKey; gesture: Gesture } | null>(null);
+  const drag = useRef<{ key: NodeKey; gesture: Gesture; pointerId: number } | null>(null);
   const keyGesture = useRef<{ key: NodeKey; gesture: Gesture } | null>(null);
   const view = useRef({ cx: 0, cy: 0, scale: 1 });
   const levels = useRef<Levels>({});
@@ -77,9 +77,10 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     };
     theme.addEventListener("change", onTheme);
 
+    let dpr = 0; // the pixel ratio the canvas was last sized for
     const resize = () => {
       const r = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = window.devicePixelRatio || 1;
       W = r.width;
       H = r.height;
       canvas.width = Math.round(W * dpr);
@@ -91,6 +92,8 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     ro.observe(canvas);
 
     const draw = (now: number) => {
+      // The window moved to a screen with another pixel ratio: no resize event tells us.
+      if ((window.devicePixelRatio || 1) !== dpr) resize();
       const t = (now - t0) / 1000;
       const { stage, selected } = latest.current;
       const half = stage.room / 2;
@@ -278,22 +281,28 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     gesture.change(key === "listener" ? { listenerX: p.x, listenerY: p.y } : { playerX: p.x, playerY: p.y });
   };
 
+  // One drag at a time, with the primary button (or one finger): a right click, a second
+  // finger or a second mouse button neither starts a drag nor ends the one in progress.
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0 || drag.current) return;
     const key = hitTest(e);
     if (key === null) return;
     onSelect(key);
+    endKeyGesture(); // the same node's parameters can't be in two gestures
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.style.cursor = "grabbing";
-    drag.current = { key, gesture: startGesture(key) };
+    drag.current = { key, gesture: startGesture(key), pointerId: e.pointerId };
   };
 
   const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
-    if (drag.current) move(drag.current.key, drag.current.gesture, toMetres(e));
-    else e.currentTarget.style.cursor = hitTest(e) !== null ? "grab" : "";
+    if (drag.current?.pointerId === e.pointerId) move(drag.current.key, drag.current.gesture, toMetres(e));
+    else if (!drag.current) e.currentTarget.style.cursor = hitTest(e) !== null ? "grab" : "";
   };
 
-  const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
-    drag.current?.gesture.end();
+  // Released, cancelled, or the capture taken away (the window lost the pointer): the drag ends.
+  const onPointerEnd = (e: PointerEvent<HTMLCanvasElement>) => {
+    if (drag.current?.pointerId !== e.pointerId) return;
+    drag.current.gesture.end();
     drag.current = null;
     e.currentTarget.style.cursor = hitTest(e) !== null ? "grab" : "";
   };
@@ -301,7 +310,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   // Arrow keys nudge the selected node 0.1 m (Shift: 1 m); one gesture per key press.
   const onKeyDown = (e: KeyboardEvent) => {
     const dir = nudgeKeys[e.key];
-    if (!dir || selected === null) return;
+    if (!dir || selected === null || drag.current) return;
     e.preventDefault();
 
     if (keyGesture.current?.key !== selected) {
@@ -329,8 +338,9 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
       aria-label="Stage map. Arrow keys move the selected node, Shift for 1 m steps."
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onLostPointerCapture={onPointerEnd}
       onKeyDown={onKeyDown}
       onKeyUp={(e) => nudgeKeys[e.key] && endKeyGesture()}
       onBlur={endKeyGesture}
