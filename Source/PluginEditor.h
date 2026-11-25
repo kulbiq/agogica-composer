@@ -2,6 +2,7 @@
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "PluginProcessor.h"
+#include "bridge/Stage.h"
 
 // Hosts the web UI; all UI logic lives in ui/.
 class ComposerEditor final : public juce::AudioProcessorEditor,
@@ -9,6 +10,7 @@ class ComposerEditor final : public juce::AudioProcessorEditor,
 {
 public:
     explicit ComposerEditor (ComposerProcessor&);
+    ~ComposerEditor() override;
 
     void resized() override;
 
@@ -45,6 +47,7 @@ private:
     ComposerProcessor& composer;
     Browser browser;
     juce::String lastStage;
+    stage::OpenGestures gesturesBegunHere; // a drag still open when the window closes is ended for the page
     float lastHeadYaw = 0.0f; // the page starts at 0
     int loadTicks = 0; // the DSP load goes out every 8th tick
 

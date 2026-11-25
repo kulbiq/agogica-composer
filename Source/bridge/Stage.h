@@ -15,6 +15,23 @@ juce::var snapshot (ComposerProcessor& self);
 // Unknown params or targets are ignored.
 void applyEdit (ComposerProcessor& self, const juce::var& edit);
 
+// The gestures one editor window has begun and not ended. A window that closes (or whose
+// page reloads) in the middle of a drag can't send the end itself: endAll does.
+class OpenGestures
+{
+public:
+    void applyEdit (ComposerProcessor& self, const juce::var& edit);
+    void endAll (ComposerProcessor& self);
+
+private:
+    struct Begun
+    {
+        int target;
+        juce::String paramId;
+    };
+    std::vector<Begun> begun;
+};
+
 // Renames player `id` (empty = back to the host track name).
 void setName (ComposerProcessor& self, int id, const juce::String& name);
 

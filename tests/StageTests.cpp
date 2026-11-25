@@ -23,7 +23,86 @@ void drag (ComposerProcessor& p, int target, const juce::String& param, float va
     stage::applyEdit (p, edit ("change", target, param, value));
     stage::applyEdit (p, edit ("end", target, param));
 }
+
+// What the host hears about gestures on one instance: every begin needs its end, and a
+// parameter is never begun twice (hosts latch automation, or stop recording, otherwise).
+struct HostGestureLog final : juce::AudioProcessorListener
+{
+    explicit HostGestureLog (ComposerProcessor& p) : processor (p)   { processor.addListener (this); }
+    ~HostGestureLog() override                                       { processor.removeListener (this); }
+
+    void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
+    void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+    void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index) override
+    {
+        begunTwice = begunTwice || open.contains (index);
+        open.addIfNotAlreadyThere (index);
+    }
+    void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int index) override
+    {
+        endedUnbegun = endedUnbegun || ! open.contains (index);
+        open.removeAllInstancesOf (index);
+    }
+
+    bool balanced() const   { return open.isEmpty() && ! begunTwice && ! endedUnbegun; }
+
+    ComposerProcessor& processor;
+    juce::Array<int> open;
+    bool begunTwice = false, endedUnbegun = false;
+};
 } // namespace
+
+TEST_CASE ("gestures reach the host balanced, whatever the page and the stage do", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+    HostGestureLog hostOfA (a), hostOfB (b);
+
+    SECTION ("a gesture begun twice, or ended twice")
+    {
+        stage::applyEdit (a, edit ("begin", a.id, "playerX"));
+        stage::applyEdit (a, edit ("begin", a.id, "playerX"));
+        stage::applyEdit (a, edit ("change", a.id, "playerX", 2.0f));
+        stage::applyEdit (a, edit ("end", a.id, "playerX"));
+        stage::applyEdit (a, edit ("end", a.id, "playerX"));
+        CHECK_THAT (a.getParam ("playerX"), WithinAbs (2.0, 1e-4));
+    }
+
+    SECTION ("a scene switch from another window during a drag")
+    {
+        stage::applyEdit (a, edit ("begin", a.id, "playerX"));
+        stage::setScene (b, "B");
+        stage::setScene (b, "A");
+        stage::applyEdit (a, edit ("change", a.id, "playerX", 2.0f));
+        stage::applyEdit (a, edit ("end", a.id, "playerX"));
+    }
+
+    SECTION ("a track that joins while the room is being dragged")
+    {
+        stage::applyEdit (a, edit ("begin", a.id, "roomSize"));
+        ComposerProcessor late;
+        HostGestureLog hostOfLate (late);
+        stage::join (late, true);
+        stage::applyEdit (a, edit ("change", a.id, "roomSize", 30.0f));
+        stage::applyEdit (a, edit ("end", a.id, "roomSize"));
+        CHECK (hostOfLate.balanced());
+        CHECK_THAT (late.getParam ("roomSize"), WithinAbs (30.0, 1e-4));
+    }
+
+    SECTION ("the window closes in the middle of a drag")
+    {
+        {
+            stage::OpenGestures ofThisWindow;
+            ofThisWindow.applyEdit (a, edit ("begin", a.id, "listenerX"));
+            ofThisWindow.applyEdit (a, edit ("change", a.id, "listenerX", 2.0f));
+            ofThisWindow.endAll (a);
+        }
+        CHECK_THAT (b.getParam ("listenerX"), WithinAbs (2.0, 1e-4));
+    }
+
+    CHECK (hostOfA.balanced());
+    CHECK (hostOfB.balanced());
+}
 
 TEST_CASE ("applyEdit: writes metres, ignores unknown params and other targets", "[integration]")
 {

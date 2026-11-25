@@ -44,6 +44,10 @@ ComposerProcessor::~ComposerProcessor()
 {
     // First, before any member goes away: other editors may be reading this instance.
     registry->remove (*this);
+
+    // A track removed in the middle of someone's drag: the host still gets its ends.
+    for (const auto& paramId : juce::StringArray (gesturesOpen))
+        endGesture (paramId);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createParameterLayout()
@@ -80,12 +84,36 @@ juce::String ComposerProcessor::getDisplayName() const
     return trackName;
 }
 
+void ComposerProcessor::beginGesture (const juce::String& paramId)
+{
+    if (! gesturesOpen.contains (paramId))
+    {
+        gesturesOpen.add (paramId);
+        state.getParameter (paramId)->beginChangeGesture();
+    }
+}
+
+void ComposerProcessor::endGesture (const juce::String& paramId)
+{
+    if (gesturesOpen.contains (paramId))
+    {
+        gesturesOpen.removeString (paramId);
+        state.getParameter (paramId)->endChangeGesture();
+    }
+}
+
 void ComposerProcessor::writeParam (const juce::String& paramId, float value)
 {
     auto* param = state.getParameter (paramId);
-    param->beginChangeGesture();
+    const auto insideGesture = gesturesOpen.contains (paramId);
+
+    if (! insideGesture)
+        param->beginChangeGesture();
+
     param->setValueNotifyingHost (param->convertTo0to1 (value));
-    param->endChangeGesture();
+
+    if (! insideGesture)
+        param->endChangeGesture();
 }
 
 void ComposerProcessor::storeScene()

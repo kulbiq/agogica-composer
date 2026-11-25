@@ -62,14 +62,12 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
 
 void apply (ComposerProcessor& p, const juce::String& phase, const juce::String& paramId, float value)
 {
-    auto* param = p.state.getParameter (paramId);
-
     if (phase == "begin")
-        param->beginChangeGesture();
+        p.beginGesture (paramId);
     else if (phase == "change")
-        param->setValueNotifyingHost (param->convertTo0to1 (value));
+        p.writeParam (paramId, value);
     else if (phase == "end")
-        param->endChangeGesture();
+        p.endGesture (paramId);
 }
 
 } // namespace
@@ -210,6 +208,31 @@ void applyEdit (ComposerProcessor& self, const juce::var& edit)
             }
         }
     });
+}
+
+void OpenGestures::applyEdit (ComposerProcessor& self, const juce::var& edit)
+{
+    const Begun gesture { (int) edit["target"], edit["param"].toString() };
+    const auto same = [&] (const Begun& other) { return other.target == gesture.target && other.paramId == gesture.paramId; };
+
+    if (edit["phase"] == "begin" && std::none_of (begun.begin(), begun.end(), same))
+        begun.push_back (gesture);
+    else if (edit["phase"] == "end")
+        std::erase_if (begun, same);
+
+    stage::applyEdit (self, edit);
+}
+
+void OpenGestures::endAll (ComposerProcessor& self)
+{
+    for (const auto& gesture : std::exchange (begun, {}))
+    {
+        auto end = std::make_unique<juce::DynamicObject>();
+        end->setProperty ("phase", "end");
+        end->setProperty ("target", gesture.target);
+        end->setProperty ("param", gesture.paramId);
+        stage::applyEdit (self, end.release());
+    }
 }
 
 void setName (ComposerProcessor& self, int id, const juce::String& name)

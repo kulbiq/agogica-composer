@@ -86,7 +86,7 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                     .withNativeFunction ("edit", [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
                                              if (args.size() == 1)
-                                                 stage::applyEdit (composer, args[0]);
+                                                 gesturesBegunHere.applyEdit (composer, args[0]);
 
                                              complete ({});
                                          })
@@ -132,8 +132,17 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
     setResizeLimits (640, 400, 2560, 1600);
     setSize (960, 600);
 
-    browser.onPageLoaded = [this] { startTimerHz (30); };
+    browser.onPageLoaded = [this]
+    {
+        gesturesBegunHere.endAll (composer); // a page that reloaded in the middle of a drag
+        startTimerHz (30);
+    };
     browser.goToURL (uiUrl);
+}
+
+ComposerEditor::~ComposerEditor()
+{
+    gesturesBegunHere.endAll (composer);
 }
 
 void ComposerEditor::openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion complete)

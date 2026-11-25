@@ -74,7 +74,12 @@ public:
     juce::SharedResourcePointer<StageRegistry> registry;
     juce::SharedResourcePointer<HeadTracking> headTracking;
 
-    // A complete gesture on one parameter, in its real units.
+    // Gestures (message thread). Hosts record automation only for writes inside one, and want
+    // every begin ended exactly once: a second begin, or an end without a begin, does nothing.
+    void beginGesture (const juce::String& paramId);
+    void endGesture (const juce::String& paramId);
+    // Writes one parameter, in its real units: inside the gesture that is open on it, else as
+    // a complete gesture of its own.
     void writeParam (const juce::String& paramId, float value);
 
     // How long the output goes on after the input stops (reported to the host; also how long a
@@ -85,6 +90,8 @@ public:
     LoadMeter load;
 
 private:
+    juce::StringArray gesturesOpen; // parameter ids, message thread only
+
     // Cached for the audio thread (looking up by name would allocate a String).
     struct AudioParams
     {
