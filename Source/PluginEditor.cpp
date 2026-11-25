@@ -143,6 +143,10 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
     browser.onPageLoaded = [this]
     {
         gesturesBegunHere.endAll (composer); // a page that reloaded in the middle of a drag
+
+        // A fresh page knows nothing: what was last sent to the old one doesn't count.
+        lastStage.clear();
+        lastHeadYaw = 0.0f;
         startTimerHz (30);
     };
     browser.goToURL (uiUrl);
@@ -189,6 +193,11 @@ void ComposerEditor::finishOpening()
 void ComposerEditor::timerCallback()
 {
     finishOpening();
+
+    // Nothing is sent to a page that isn't shown, so nothing is worked out for it either:
+    // what it last saw stays "last sent", and it catches up when it is shown again.
+    if (! browser.isVisible())
+        return;
 
     // Every track's input level in dB, by player id; its own event so the stage diff
     // below stays quiet while audio plays.
