@@ -60,6 +60,7 @@ target_sources(Composer PRIVATE
     Source/PluginEditor.cpp
     Source/bridge/StageSnapshot.cpp
     Source/bridge/StageEdits.cpp
+    Source/bridge/UiResources.cpp
     Source/stage/Scenes.cpp
     Source/stage/Seating.cpp
     Source/stage/StageRegistry.cpp
