@@ -8,7 +8,7 @@ Measurements name the model and machine they were taken with: several predate th
 
 - JUCE's macOS camera takes a still photo per frame (`AVCapturePhotoOutput`), gets it compressed and decodes it again, one after the other: about 15 frames a second from a 30 fps camera, and one failed photo ended the picture for good.
 - `CameraSource_mac.mm` reads the video output instead (`AVCaptureVideoDataOutput`, 640x480, BGRA copied straight into a JUCE ARGB image). Windows keeps `juce::CameraDevice`, which reads real video frames there.
-- Not yet measured: the frame rate with it.
+- With it the iPhone camera delivers 30 frames a second (seen in the debugging view, M4 Pro, 2026-11-25).
 - A MacBook's own camera gives no picture while the lid is closed; a phone offered as a camera needs several seconds to connect (the 4 s retry closed it before it answered: now 10 s, three tries, then "No picture").
 - Launched from a terminal session of a coding agent, the app got no camera frames at all, while the same build started from Finder did: checks of the camera need a normal launch.
 
