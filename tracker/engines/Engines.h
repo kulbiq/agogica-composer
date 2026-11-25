@@ -6,13 +6,13 @@
 
 namespace engines
 {
-// One head-pose estimate from a camera frame. Angles in each model's own sign convention
-// (the tracker page's Invert makes "head turned right" positive per engine).
+// One head-pose estimate from a camera frame, degrees. yaw: 0 = facing the camera, + = turned to
+// the person's right (the page's Invert flips it for Composer if a camera mirrors); pitch and
+// roll as the model gives them (diagnostics).
 struct Estimate
 {
     float yaw = 0, pitch = 0, roll = 0;
-    float rawYaw = 0;             // before any reconstruction (diagnostics)
-    float confidence = 0;
+    float confidence = 0;         // 0..1, the model's own (kappaConfidence)
     juce::Rectangle<float> box;   // the head/person used, normalised 0..1 (debug overlay)
     float detectMs = 0, poseMs = 0;
 };
@@ -25,7 +25,7 @@ public:
     virtual juce::String provider() const = 0; // "CoreML" / "CPU"
 };
 
-// "6drepnet360" (the chosen engine); models from `modelsDir`. Loading can take
+// "hfhpe" (the chosen engine); models from `modelsDir`. Loading can take
 // seconds (CoreML compiles on first use): call off the message thread. Throws on failure.
 std::unique_ptr<Engine> makeEngine (const juce::String& name, const juce::File& modelsDir);
 } // namespace engines

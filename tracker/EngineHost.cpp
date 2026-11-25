@@ -1,5 +1,4 @@
 #include "EngineHost.h"
-#include "engines/FilterTuner.h"
 #include "engines/StillGate.h"
 #include "ProcessCpu.h"
 
@@ -38,16 +37,6 @@ void EngineHost::setEngine (const juce::String& name)
     }
 
     startThread();
-}
-
-void EngineHost::setFilterParam (const juce::String& name, const juce::var& value)
-{
-    for (int i = 0; i < (int) engines::Param::count; ++i)
-        if (name == engines::paramName ((engines::Param) i))
-        {
-            const juce::ScopedLock sl (pinsLock);
-            pins[(size_t) i] = value.isVoid() || value.isUndefined() ? std::nullopt : std::optional<float> ((float) value);
-        }
 }
 
 void EngineHost::imageReceived (const juce::Image& image)
@@ -143,14 +132,10 @@ void EngineHost::run()
     bool first = true;
     status ("starting camera");
 
-    // The temporal gate: 6DRepNet360's raw headings -> a stable output (see HeadFilter.h).
-    engines::HeadFilter filter;
-    engines::FilterTuner tuner;
+    // Each frame's reading goes to Composer as it is: no filter, no smoothing (for now).
     engines::StillGate still;
     std::optional<engines::Estimate> last;
     const auto started = juce::Time::getMillisecondCounterHiRes();
-    auto lastFrame = started;
-    double lastRetune = 0;
 
     // Development monitoring, once a second in the "estimate" payload ("perf") and the log:
     // the whole process's CPU (in cores), frames the models ran on, frames a still head
@@ -186,11 +171,10 @@ void EngineHost::run()
             o->setProperty ("provider", engine->provider());
 
             const auto now = juce::Time::getMillisecondCounterHiRes();
-            const auto dt = (float) (now - std::exchange (lastFrame, now)) / 1000.0f;
             const auto time = (now - started) / 1000.0;
 
-            // A still head repeats the last reading instead of running the models: the filter,
-            // the page and Composer's file go on as usual (the file is stale after 0.5 s).
+            // A still head repeats the last reading instead of running the models: the page
+            // and Composer's file go on as usual (the file is stale after 0.5 s).
             const bool reused = last.has_value() && still.unchanged (frame, time);
             if (! reused)
             {
@@ -201,59 +185,16 @@ void EngineHost::run()
                     still.clear();
             }
             const auto& e = last;
+            output (e.has_value(), e ? e->yaw : 0.0f, e ? e->pitch : 0.0f, e ? e->roll : 0.0f);
 
-            std::optional<engines::Measurement> m;
-            if (e)
-                m = engines::Measurement { e->yaw, engines::hemisphereCertainty (e->pitch, e->roll) };
-
-            // Adapt the parameters from the recent raw readings (and the user's pins); repeated
-            // readings would fake a perfectly still head. The filter re-calibrates on
-            // setParams, so apply them at most once a second.
-            if (! reused)
-                tuner.add (time, e ? std::optional<float> (e->yaw) : std::nullopt, m ? m->confidence : 0.0f);
-            std::array<std::optional<float>, (size_t) engines::Param::count> currentPins;
-            {
-                const juce::ScopedLock sl (pinsLock);
-                currentPins = pins;
-            }
-            const auto params = tuner.tuned (time, currentPins);
-            if (time - lastRetune >= 1.0)
-            {
-                filter.setParams (params);
-                lastRetune = time;
-            }
-
-            const auto s = filter.update (m, dt);
-            output (s.tracking, s.output, e ? e->pitch : 0.0f, e ? e->roll : 0.0f);
-
-            auto parameters = std::make_unique<juce::DynamicObject>();
-            for (int i = 0; i < (int) engines::Param::count; ++i)
-            {
-                const auto p = (engines::Param) i;
-                auto entry = std::make_unique<juce::DynamicObject>();
-                entry->setProperty ("value", p == engines::Param::confirmFrames ? (float) filter.getParams().confirmFrames
-                                                                                  : engines::field (filter.getParams(), p));
-                entry->setProperty ("pinned", currentPins[(size_t) i].has_value());
-                parameters->setProperty (engines::paramName (p), entry.release());
-            }
-            o->setProperty ("params", parameters.release());
-
-            // "found" = the gate is tracking (it holds through short losses); raw values only
-            // when this frame had a head.
-            o->setProperty ("found", s.tracking);
-            o->setProperty ("output", s.output);
-            o->setProperty ("estimate", s.estimate);
-            o->setProperty ("certainty", s.certainty);
-            o->setProperty ("reacquiring", s.reacquiring);
+            o->setProperty ("found", e.has_value());
 
             if (e)
             {
-                o->setProperty ("measured", true);
                 o->setProperty ("yaw", e->yaw);
-                o->setProperty ("rawYaw", e->rawYaw);
                 o->setProperty ("pitch", e->pitch);
                 o->setProperty ("roll", e->roll);
-                o->setProperty ("confidence", m->confidence);
+                o->setProperty ("confidence", e->confidence);
                 o->setProperty ("box", juce::Array<juce::var> { e->box.getX(), e->box.getY(), e->box.getWidth(), e->box.getHeight() });
                 if (! reused)
                 {

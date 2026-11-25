@@ -3,7 +3,7 @@
 # of shipping silently. After a deliberate model update, put the new hashes here.
 set(models
     yolox_n_body_head_hand_192x320.onnx 3455b3aaafae74869d873ec5107142f704c8fedba7bf9b7154e1e4c6b9be5371
-    sixdrepnet360_1x3x224x224_full.onnx 422b69d17bf02e164bd1062f5e970f67f1688cadf7d700800fad5fa12a16fc82)
+    hfhpe_vitt_ypr_kappa_1x3x128x128.onnx 6dc06f19d1cc89a2a72e8663bc246eeb5aaa4888dce914695794d79af00ceb66)
 
 while(models)
     list(POP_FRONT models name expected)

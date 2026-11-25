@@ -1,4 +1,4 @@
-// Agogica Tracker: follows the head with the camera (native 6DRepNet360 engine, EngineHost)
+// Agogica Tracker: follows the head with the camera (native HFHPE engine, EngineHost)
 // and shares its orientation with every Composer instance through the head-tracking file
 // (Source/stage/HeadTrackingFile.h, written by PoseOutput on its own thread); the page
 // (tracker/ui) shows the status and the dial and sends the buttons. No network: the page and
@@ -107,12 +107,6 @@ public:
                     engines.setPreview ((bool) args[0]);
                 complete ({});
             })
-            .withNativeFunction ("setFilterParam", [this] (const juce::Array<juce::var>& args, auto complete)
-            {
-                if (args.size() == 2)
-                    engines.setFilterParam (args[0].toString(), args[1]);
-                complete ({});
-            })
             .withNativeFunction ("getDebug", [this] (const auto&, auto complete)
             {
                 pageReady = true; // events sent before the page has loaded assert
@@ -136,7 +130,7 @@ public:
         output.setInvert (settings().getBoolValue ("invert", false));
         setContentNonOwned (browser.get(), false);
         browser->setSize (380, 680);
-        // Development: AGOGICA_TRACKER_ENGINE=whenet starts on that engine.
+        // Development: AGOGICA_TRACKER_ENGINE=<name> starts on that engine (engines::makeEngine).
         const auto engine = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_ENGINE", {});
         browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + (engine.isNotEmpty() ? "?engine=" + engine : juce::String()));
         setUsingNativeTitleBar (true);
@@ -174,7 +168,7 @@ public:
     void closeButtonPressed() override { juce::JUCEApplication::quit(); }
 
 private:
-    // View > Debugging: readouts, Stability and the plot, in a resizable window whose size is
+    // View > Debugging: readouts and the plot, in a resizable window whose size is
     // remembered. Off: a fixed compact window with the status, dial, buttons and camera.
     void setDebug (bool on)
     {
@@ -279,7 +273,7 @@ private:
             browser->emitEventIfBrowserIsVisible ("about", juce::JUCEApplication::getInstance()->getApplicationVersion());
     }
 
-    // The dial: what Composer hears, smoothed between camera frames (60 Hz while the page shows).
+    // The dial: what Composer hears (60 Hz while the page shows).
     void timerCallback() override
     {
         const auto [yaw, live] = output.current();
@@ -308,10 +302,36 @@ public:
     const juce::String getApplicationName() override    { return "Agogica Tracker"; }
     const juce::String getApplicationVersion() override { return JUCE_APPLICATION_VERSION_STRING; }
     bool moreThanOneInstanceAllowed() override          { return false; }
-    void initialise (const juce::String&) override      { window = std::make_unique<Window>(); }
+
+    void initialise (const juce::String&) override
+    {
+        // A crash leaves its cause next to the settings (Agogica/Tracker-crash.log): the exception
+        // that ended the app, or the fault, with the stack (module + offset without symbols).
+        std::set_terminate ([]
+        {
+            juce::String what = "terminate (no exception)";
+            if (auto e = std::current_exception())
+            {
+                try { std::rethrow_exception (e); }
+                catch (const std::exception& x) { what = "uncaught exception: " + juce::String (x.what()); }
+                catch (...) { what = "uncaught non-std exception"; }
+            }
+            writeCrash (what);
+            std::abort();
+        });
+        juce::SystemStats::setApplicationCrashHandler ([] (void*) { writeCrash ("fault"); });
+        window = std::make_unique<Window>();
+    }
     void shutdown() override                            { window.reset(); }
 
 private:
+    static void writeCrash (const juce::String& what)
+    {
+        settings().getFile().getSiblingFile ("Tracker-crash.log")
+            .appendText (juce::Time::getCurrentTime().toISO8601 (true) + " " + what + "\n"
+                         + juce::SystemStats::getStackBacktrace() + "\n");
+    }
+
     std::unique_ptr<Window> window;
 };
 } // namespace

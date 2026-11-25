@@ -35,18 +35,12 @@
 
       <p class="note small debug" id="stats"></p>
       <p class="note small debug" id="perf"></p>
-
-      <section class="stability debug">
-        <span class="label">Stability</span>
-        <p class="note">Auto adapts each value to the last seconds of tracking; move a slider to pin your own value.</p>
-        <div id="params"></div>
-      </section>
       </div>
 
       <div class="side">
       <figure class="plot debug">
-        <canvas id="plot" aria-label="Last 10 seconds: raw readings (dots), the filter estimate and the output"></canvas>
-        <figcaption class="note">Last 10 s · dots = raw readings (fainter = unsure front/back) · thin = estimate · bold = what Composer hears</figcaption>
+        <canvas id="plot" aria-label="Last 10 seconds of what Composer hears, one dot per camera frame"></canvas>
+        <figcaption class="note">Last 10 s · what Composer hears, a dot per camera frame (fainter = the model is less sure) · no smoothing</figcaption>
       </figure>
 
       <details class="more">
@@ -67,7 +61,7 @@
         <p class="note">Video never leaves this computer.</p>
         <dl class="credits">
           <dt class="label">Head pose</dt>
-          <dd class="note">6DRepNet360 · MIT licence · trained on data for non-commercial research</dd>
+          <dd class="note">HFHPE by Katsuya Hyodo (PINTO) · code MIT licence · weights: licence to be confirmed</dd>
           <dt class="label">Head detection</dt>
           <dd class="note">YOLOX Body-Head-Hand from PINTO's model zoo · Apache 2.0</dd>
           <dt class="label">Inference</dt>

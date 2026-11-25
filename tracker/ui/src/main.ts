@@ -3,21 +3,20 @@ import "../../../ui/src/styles/tokens.css";
 import "./tracker.css";
 import { getNativeFunction } from "@juce-framework/webview";
 
-// The app runs 6DRepNet360 natively (ONNX Runtime) and writes the pose for Composer itself
-// (tracker/PoseOutput.h: Invert, Recenter, Pause and the smoothing between camera frames;
-// yaw clockwise = head turned right). This page shows it: "pose" events (60 Hz) turn the dial,
-// "estimate" events (one per camera frame) carry the status, readouts and plot.
+// The app runs HFHPE natively (ONNX Runtime) and writes the pose for Composer itself
+// (tracker/PoseOutput.h: Invert, Recenter and Pause on each frame's reading as it is, no
+// smoothing; yaw clockwise = head turned right). This page shows it: "pose" events (60 Hz) turn
+// the dial, "estimate" events (one per camera frame) carry the status, readouts and plot.
 const getInvert = getNativeFunction("getInvert") as () => Promise<boolean>;
 const setInvert = getNativeFunction("setInvert") as (on: boolean) => Promise<void>;
 const recenter = getNativeFunction("recenter") as () => Promise<void>;
 const setPaused = getNativeFunction("setPaused") as (on: boolean) => Promise<void>;
 const setPreview = getNativeFunction("setPreview") as (on: boolean) => Promise<void>;
 const setEngine = getNativeFunction("setEngine") as (id: string) => Promise<void>;
-const setFilterParam = getNativeFunction("setFilterParam") as (name: string, value: number | null) => Promise<void>;
 const getDebug = getNativeFunction("getDebug") as () => Promise<boolean>;
 const fitHeight = getNativeFunction("fitHeight") as (height: number) => Promise<void>;
 
-const engine = "6drepnet360";
+const engine = "hfhpe";
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = $("status");
 const frame = $<HTMLImageElement>("frame");
@@ -60,8 +59,7 @@ function buildGrid() {
 }
 
 // ---- Output ----------------------------------------------------------------------------------
-// The app's temporal gate (tracker/engines/HeadFilter.h) smooths, rejects the model's jumps and
-// holds through short losses; the app then applies Invert and Recenter and writes the pose.
+// The app applies Invert and Recenter to each frame's reading and writes the pose (no filter).
 // Here: the status and readouts per camera frame.
 
 class Output {
@@ -71,22 +69,20 @@ class Output {
   frames = 0;
   dropouts = 0;
 
-  feed(e: { found: boolean; output: number; measured?: boolean; yaw?: number; reacquiring?: boolean }) {
+  feed(e: { found: boolean; yaw?: number }) {
     const now = performance.now();
     this.frames++;
-    if (!e.measured) this.dropouts++;
 
-    if (!e.found) {
+    if (!e.found || e.yaw === undefined) {
+      this.dropouts++;
       setStatus("No head", false);
       return;
     }
 
     const sign = settings.invert ? -1 : 1;
-    if (e.measured && e.yaw !== undefined)
-      this.recent = [...this.recent.filter((r) => now - r.t < 2000), { t: now, raw: sign * e.yaw }];
-
-    this.lastOutput = sign * e.output;
-    setStatus(e.reacquiring ? "Re-acquiring" : e.measured ? "Tracking" : "Holding", true);
+    this.recent = [...this.recent.filter((r) => now - r.t < 2000), { t: now, raw: sign * e.yaw }];
+    this.lastOutput = sign * e.yaw;
+    setStatus("Tracking", true);
   }
 
   // What Composer hears (the app's "pose" event).
@@ -105,60 +101,9 @@ class Output {
 
 const output = new Output();
 
-// ---- Stability parameters (tracker/engines/FilterTuner.h) --------------------------------------
-
-type ParamState = { value: number; pinned: boolean };
-const paramInfo: { name: string; label: string; min: number; max: number; step: number; format: (v: number) => string }[] = [
-  { name: "confirmFrames", label: "Confirm frames", min: 1, max: 20, step: 1, format: (v) => `${Math.round(v)}` },
-  { name: "reacquireSpeed", label: "Re-acquire speed", min: 20, max: 360, step: 5, format: (v) => `${Math.round(v)} °/s` },
-  { name: "maxSpeed", label: "Max speed", min: 60, max: 720, step: 10, format: (v) => `${Math.round(v)} °/s` },
-  { name: "turnSpeed", label: "Turn speed", min: 30, max: 500, step: 5, format: (v) => `${Math.round(v)} °/s` },
-  { name: "sigmaZ", label: "Noise", min: 1, max: 20, step: 0.5, format: (v) => `${v.toFixed(1)}°` },
-  { name: "flipWeight", label: "Front/back doubt", min: 0, max: 1, step: 0.01, format: (v) => `${Math.round(v * 100)} %` },
-  { name: "outlierWeight", label: "Outliers", min: 0, max: 0.5, step: 0.01, format: (v) => `${Math.round(v * 100)} %` },
-];
-
-function buildParams() {
-  const rows = new Map<string, { value: HTMLElement; auto: HTMLButtonElement; slider: HTMLInputElement }>();
-  for (const info of paramInfo) {
-    const row = document.createElement("div");
-    row.className = "param";
-    row.innerHTML = `<span class="label">${info.label}</span><span class="small"></span><button class="chip" aria-pressed="true">Auto</button>
-      <input class="range" type="range" min="${info.min}" max="${info.max}" step="${info.step}" disabled />`;
-    const value = row.querySelector<HTMLElement>(".small")!;
-    const auto = row.querySelector<HTMLButtonElement>(".chip")!;
-    const slider = row.querySelector<HTMLInputElement>(".range")!;
-    auto.title = "Auto: adapted to the last seconds of tracking";
-    auto.onclick = () => {
-      const pinned = auto.getAttribute("aria-pressed") === "true"; // Auto -> pin the current value
-      void setFilterParam(info.name, pinned ? Number(slider.value) : null);
-    };
-    slider.oninput = () => {
-      value.textContent = info.format(Number(slider.value));
-      void setFilterParam(info.name, Number(slider.value));
-    };
-    $("params").append(row);
-    rows.set(info.name, { value, auto, slider });
-  }
-
-  return (params: Record<string, ParamState>) => {
-    for (const info of paramInfo) {
-      const state = params[info.name];
-      const row = rows.get(info.name);
-      if (!state || !row) continue;
-      row.auto.setAttribute("aria-pressed", String(!state.pinned));
-      row.slider.disabled = !state.pinned;
-      if (document.activeElement !== row.slider) {
-        row.slider.value = String(state.value);
-        row.value.textContent = info.format(state.value);
-      }
-    }
-  };
-}
-
 // ---- Plot: the last 10 s ------------------------------------------------------------------------
 
-type PlotPoint = { t: number; raw?: number; confidence: number; estimate: number; output: number };
+type PlotPoint = { t: number; yaw: number; confidence: number };
 const plotPoints: PlotPoint[] = [];
 
 function startPlot() {
@@ -194,31 +139,15 @@ function startPlot() {
 
     while (plotPoints.length && now - plotPoints[0].t > 10000) plotPoints.shift();
 
-    for (const p of plotPoints)
-      if (p.raw !== undefined) {
-        ctx.fillStyle = `rgba(${rgb},${0.15 + 0.6 * p.confidence})`;
-        ctx.fillRect(x(p.t) - 1, y(p.raw) - 1, 2, 2);
-      }
-
-    // Lines break where they wrap across ±180.
-    const line = (key: "estimate" | "output", alpha: number, width: number) => {
-      ctx.strokeStyle = `rgba(${rgb},${alpha})`;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      plotPoints.forEach((p, i) => {
-        const jump = i > 0 && Math.abs(p[key] - plotPoints[i - 1][key]) > 180;
-        if (i === 0 || jump) ctx.moveTo(x(p.t), y(p[key]));
-        else ctx.lineTo(x(p.t), y(p[key]));
-      });
-      ctx.stroke();
-    };
-    line("estimate", 0.35, 1);
-    line("output", 0.9, 1.5);
+    for (const p of plotPoints) {
+      ctx.fillStyle = `rgba(${rgb},${0.2 + 0.7 * p.confidence})`;
+      ctx.fillRect(x(p.t) - 1.5, y(p.yaw) - 1.5, 3, 3);
+    }
   };
   requestAnimationFrame(draw);
 }
 
-// Debugging (the app's View menu) shows the readouts, Stability and the plot; off, the window
+// Debugging (the app's View menu) shows the readouts and the plot; off, the window
 // is fixed and fitted to what's left.
 function setDebug(on: boolean) {
   document.body.toggleAttribute("data-debug", on);
@@ -254,10 +183,10 @@ async function main() {
   $("aboutBack").onclick = () => document.body.toggleAttribute("data-about", false);
 
   // Invert lives in the app's settings now; an older page kept it here (one-off move).
-  const legacyInvert = localStorage.getItem(`invert:${engine}`);
+  const legacyInvert = localStorage.getItem("invert:6drepnet360");
   if (legacyInvert !== null) {
     if (legacyInvert === "1") await setInvert(true);
-    localStorage.removeItem(`invert:${engine}`);
+    localStorage.removeItem("invert:6drepnet360");
   }
   settings.invert = await getInvert();
 
@@ -281,14 +210,13 @@ async function main() {
     if (p.live && !settings.paused) output.pose(p.yaw);
   });
 
-  const showParams = buildParams();
   startPlot();
 
   let ms = 0;
   window.__JUCE__.backend.addEventListener("estimate", (payload) => {
     const e = payload as {
-      status: string; detail?: string; provider?: string; found: boolean; output: number; measured?: boolean;
-      yaw?: number; pitch?: number; roll?: number; box?: number[]; detectMs?: number; poseMs?: number; reacquiring?: boolean;
+      status: string; detail?: string; provider?: string; found: boolean; yaw?: number; pitch?: number; roll?: number;
+      confidence?: number; box?: number[]; detectMs?: number; poseMs?: number;
     };
     if (settings.paused) return;
 
@@ -305,7 +233,7 @@ async function main() {
     }
 
     const box = $("box");
-    if (e.measured && e.box) {
+    if (e.found && e.box) {
       const [x, y, w, h] = e.box;
       Object.assign(box.style, { left: `${(1 - x - w) * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` });
       box.hidden = false;
@@ -317,16 +245,8 @@ async function main() {
 
     // Plot in the same frame the listener hears (Invert and Recenter applied).
     const sign = settings.invert ? -1 : 1;
-    const ev = e as unknown as { estimate?: number; confidence?: number; params?: Record<string, ParamState> };
-    if (e.found)
-      plotPoints.push({
-        t: performance.now(),
-        raw: e.measured && e.yaw !== undefined ? wrap(sign * e.yaw - centre) : undefined,
-        confidence: ev.confidence ?? 1,
-        estimate: wrap(sign * (ev.estimate ?? e.output) - centre),
-        output: wrap(sign * e.output - centre),
-      });
-    if (ev.params) showParams(ev.params);
+    if (e.found && e.yaw !== undefined)
+      plotPoints.push({ t: performance.now(), yaw: wrap(sign * e.yaw - centre), confidence: e.confidence ?? 1 });
 
     // Monitoring, once a second: the app's CPU (all threads) and where camera frames went.
     const perf = (e as { perf?: { cpu: number; models: number; reused: number; dropped: number } }).perf;

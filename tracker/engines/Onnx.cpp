@@ -74,7 +74,7 @@ Ort::Session openSession (const juce::File& file, juce::String& provider)
    #endif
 
     Ort::SessionOptions options;
-    // Measured on an i5-10210U (6DRepNet360 = ResNet-50): denormals in the activations made
+    // Measured on an i5-10210U with the former 6DRepNet360 (a ResNet-50): denormals in the activations made
     // pose 4x slower (404 -> 97 ms), and the detector's and the pose model's thread pools
     // spinning against each other cost another 40 % (-> 57 ms). Two threads (79 ms) leave
     // cores to the DAW's audio and spend less CPU time per frame than four.
@@ -150,6 +150,26 @@ void toTensor (const juce::Image& image, juce::Rectangle<float> source, int widt
             }
         }
     }
+}
+
+void squareTensor (const juce::Image& image, SquareCrop crop, int size, float* out)
+{
+    const juce::Image::BitmapData pixels (image, juce::Image::BitmapData::readOnly);
+    const bool argb = image.getFormat() == juce::Image::ARGB;
+    squareToTensor ([&] (int x, int y, float* c)
+    {
+        const auto* p = pixels.getPixelPointer (x, y);
+        if (argb)
+        {
+            const auto* px = reinterpret_cast<const juce::PixelARGB*> (p);
+            c[0] = px->getRed(), c[1] = px->getGreen(), c[2] = px->getBlue();
+        }
+        else
+        {
+            const auto* px = reinterpret_cast<const juce::PixelRGB*> (p);
+            c[0] = px->getRed(), c[1] = px->getGreen(), c[2] = px->getBlue();
+        }
+    }, pixels.width, pixels.height, crop, size, out);
 }
 
 Model::Model (const juce::File& file) : session (openSession (file, usedProvider))

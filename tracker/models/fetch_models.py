@@ -1,10 +1,10 @@
-"""Downloads the head-pose models of the Agogica Tracker (6DRepNet360 + its head detector) (dev builds only; the files
-are not committed - see MODELS.md for sources, licences and training-data terms).
+"""Downloads the Agogica Tracker's models (HFHPE + the YOLOX head detector) for development builds;
+the files are not committed - see MODELS.md for sources, licences and training-data terms.
 
     python3 tracker/models/fetch_models.py
 
-PINTO's archives are streamed and abandoned as soon as the needed file has been read, so
-only a fraction of each (up to ~250 MB) is downloaded.
+The archives are streamed and abandoned as soon as the needed file has been read, so only a
+fraction of each is downloaded. The build checks every file against check_models.cmake.
 """
 
 from __future__ import annotations  # `str | None` on the macOS system Python (3.9)
@@ -15,6 +15,7 @@ import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
 PINTO = "https://s3.ap-northeast-2.wasabisys.com/pinto-model-zoo"
+HFHPE = "https://github.com/PINTO0309/High-Angle_Robust_Fast_Head_Pose_Estimation/releases/download/weights"
 
 # name in tracker/models -> (url, member inside a .tar.gz or None for a plain file)
 MODELS = {
@@ -22,9 +23,9 @@ MODELS = {
         f"{PINTO}/426_YOLOX-Body-Head-Hand/resources_n.tar.gz",
         "yolox_n_body_head_hand_post_0461_0.4428_1x3x192x320.onnx",
     ),
-    "sixdrepnet360_1x3x224x224_full.onnx": (
-        f"{PINTO}/423_6DRepNet360/resources_full.tar.gz",
-        "sixdrepnet360_1x3x224x224_full.onnx",
+    "hfhpe_vitt_ypr_kappa_1x3x128x128.onnx": (
+        f"{HFHPE}/vitt_distill_128_ypr_unified_v19_r180_lr2e4.tar.gz",
+        "hfhpe_vitt_ypr_kappa_1x3x128x128.onnx",
     ),
 }
 

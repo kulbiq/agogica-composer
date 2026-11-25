@@ -9,7 +9,6 @@ using Clock = std::chrono::steady_clock;
 float msSince (Clock::time_point t) { return std::chrono::duration<float, std::milli> (Clock::now() - t).count(); }
 
 constexpr std::array<float, 3> zero { 0, 0, 0 }, one { 1, 1, 1 };
-constexpr std::array<float, 3> imagenetMean { 0.485f, 0.456f, 0.406f }, imagenetStd { 0.229f, 0.224f, 0.225f };
 
 juce::Rectangle<float> normalised (const Box& b, const juce::Image& frame)
 {
@@ -62,36 +61,40 @@ private:
     std::optional<Box> previous;
 };
 
-// 6DRepNet360 (MIT; trained on non-commercial data): head box x1.2, resized to 256 and
-// centre-cropped to 224 (= the central 7/8 of the expanded box), RGB, ImageNet mean/std.
-// Output "yaw_pitch_roll"; the full heading is rebuilt by sixDRepNetHeading.
-class SixDRepNet final : public Engine
+// HFHPE (PINTO0309, 2026; code MIT, weights' licence to be confirmed before shipping; trained
+// without non-commercial data): the joint ViT-T 128 graph - yaw, pitch and roll in one pass, each
+// as (cos, sin), plus a confidence per angle (kappa). Input: the crop contract (hfhpeCrop) of the
+// YOLOX head box, RGB, x / 127.5 - 1 (HFHPE's own DEIMv2 detector gives the same readings to
+// within ~0.6 deg but costs ~250 ms per frame on an i5-10210U; research/head-tracking).
+// Yaw: 0 = facing the camera, + = the head turned to the person's right, the full circle.
+class Hfhpe final : public Engine
 {
 public:
-    explicit SixDRepNet (const juce::File& dir) : heads (dir), model (dir.getChildFile ("sixdrepnet360_1x3x224x224_full.onnx")) {}
+    static constexpr int size = 128;
+
+    explicit Hfhpe (const juce::File& dir) : heads (dir), model (dir.getChildFile ("hfhpe_vitt_ypr_kappa_1x3x128x128.onnx")) {}
 
     std::optional<Estimate> estimate (const juce::Image& frame) override
     {
         Estimate e;
         const auto head = heads.find (frame, e.detectMs);
-        if (! head)
+        if (! head || ! (head->x2 - head->x1 >= 1.0f && head->y2 - head->y1 >= 1.0f)) // NaN included
             return std::nullopt;
 
         const auto start = Clock::now();
-        const auto cx = centreX (*head), cy = centreY (*head);
-        const auto side = std::max (head->x2 - head->x1, head->y2 - head->y1) * 1.2f * 224.0f / 256.0f;
-        if (! (side >= 1.0f)) // a degenerate box (NaN included): no head this frame
-            return std::nullopt;
-        input.resize (3 * 224 * 224);
-        toTensor (frame, { cx - side / 2, cy - side / 2, side, side }, 224, 224, ColourOrder::rgb, 1.0f / 255.0f,
-                  imagenetMean, imagenetStd, input.data());
+        input.resize (3 * size * size);
+        squareTensor (frame, hfhpeCrop (*head), size, input.data());
+        const auto outputs = model.run (input, { 1, 3, size, size });
+        const auto* cosSin = outputs[0].GetTensorData<float>(); // cos/sin of yaw, pitch, roll
+        const auto* kappa = outputs[1].GetTensorData<float>();
+        for (int i = 0; i < 6; ++i)
+            if (! std::isfinite (cosSin[i]))
+                return std::nullopt;
 
-        const auto* out = model.run (input, { 1, 3, 224, 224 })[0].GetTensorData<float>();
-        e.yaw = sixDRepNetHeading (out[0], out[1], out[2]);
-        e.rawYaw = out[0]; // the model's own Euler yaw (±90°), before the hemisphere reconstruction
-        e.pitch = out[1];
-        e.roll = out[2];
-        e.confidence = 1.0f;
+        e.yaw = angleOf (cosSin[0], cosSin[1]);
+        e.pitch = angleOf (cosSin[2], cosSin[3]);
+        e.roll = angleOf (cosSin[4], cosSin[5]);
+        e.confidence = kappaConfidence (kappa[0]);
         e.box = normalised (*head, frame);
         e.poseMs = msSince (start);
         return e;
@@ -109,7 +112,7 @@ private:
 
 std::unique_ptr<Engine> makeEngine (const juce::String& name, const juce::File& dir)
 {
-    if (name == "6drepnet360") return std::make_unique<SixDRepNet> (dir);
+    if (name == "hfhpe") return std::make_unique<Hfhpe> (dir);
     throw std::runtime_error ("unknown engine " + name.toStdString());
 }
 } // namespace engines

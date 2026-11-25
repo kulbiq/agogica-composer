@@ -275,7 +275,7 @@ if(APPLE OR WIN32)
     set(TRACKER_MODELS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tracker/models)
     set(TRACKER_MODELS_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-models.stamp)
     set(TRACKER_MODEL_FILES ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx
-        ${TRACKER_MODELS_DIR}/sixdrepnet360_1x3x224x224_full.onnx)
+        ${TRACKER_MODELS_DIR}/hfhpe_vitt_ypr_kappa_1x3x128x128.onnx)
     set(TRACKER_CHECK_MODELS ${CMAKE_COMMAND} -P ${TRACKER_MODELS_DIR}/check_models.cmake)
     # Fetched only while a file is missing. ponytail: Windows has no python3 by default - the two
     # .onnx files are put in tracker/models by hand (the check names a missing one); CI needs a
