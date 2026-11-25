@@ -30,7 +30,7 @@ private:
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int menuIndex, const juce::String&) override;
     void menuItemSelected (int itemId, int) override;
-    juce::PopupMenu cameraMenu() const;
+    juce::PopupMenu cameraMenu();
     static juce::PopupMenu aboutMenu();
 
     bool isDebugView = false;
@@ -41,6 +41,7 @@ private:
     ListenerPoseOutput listenerPoseOutput;
     TrackerPage page;
     CameraFeed camera;
+    juce::StringArray camerasInMenu; // as listed when the Camera menu was last built
     TrackingLoop trackingLoop;
     juce::ScopedLowPowerModeDisabler noAppNap; // tracking must keep running in the background
 };

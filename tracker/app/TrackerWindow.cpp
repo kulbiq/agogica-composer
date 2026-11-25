@@ -159,14 +159,14 @@ juce::PopupMenu TrackerWindow::getMenuForIndex (int, const juce::String& menuNam
 }
 
 // The computer's cameras as they are now, the one in use ticked.
-juce::PopupMenu TrackerWindow::cameraMenu() const
+juce::PopupMenu TrackerWindow::cameraMenu()
 {
     juce::PopupMenu menu;
-    const auto cameras = CameraFeed::availableCameras();
+    camerasInMenu = CameraFeed::availableCameras();
     const auto inUse = camera.cameraName();
-    for (int index = 0; index < cameras.size(); ++index)
-        menu.addItem (firstCameraItem + index, cameras[index], true, cameras[index] == inUse);
-    if (cameras.isEmpty())
+    for (int index = 0; index < camerasInMenu.size(); ++index)
+        menu.addItem (firstCameraItem + index, camerasInMenu[index], true, camerasInMenu[index] == inUse);
+    if (camerasInMenu.isEmpty())
         menu.addItem (firstCameraItem, "No camera found", false);
     return menu;
 }
@@ -184,9 +184,9 @@ void TrackerWindow::menuItemSelected (int itemId, int)
         setDebugView (! isDebugView);
     else if (itemId == aboutItem)
         page.showAbout();
-    else if (const auto cameras = CameraFeed::availableCameras(); juce::isPositiveAndBelow (itemId - firstCameraItem, cameras.size()))
+    else if (juce::isPositiveAndBelow (itemId - firstCameraItem, camerasInMenu.size()))
     {
-        const auto chosen = cameras[itemId - firstCameraItem];
+        const auto chosen = camerasInMenu[itemId - firstCameraItem]; // the list the user clicked in
         settings.setCameraName (chosen);
         camera.choose (chosen);
         menuItemsChanged();
