@@ -1,9 +1,16 @@
 #pragma once
 
 #include <juce_graphics/juce_graphics.h>
+#include <vector>
 
 namespace tracker
 {
+struct CameraDeviceInfo
+{
+    juce::String id;
+    juce::String name;
+};
+
 // One open camera delivering video frames. Two implementations, chosen by the build:
 // - macOS: CameraSource_mac.mm, AVFoundation's video output. Not JUCE's camera there: it takes
 //   a still photo per frame (compressed, then decoded again), which halves the frame rate and
@@ -15,12 +22,11 @@ public:
     // Called with each frame on the camera's own thread, never after the source is destroyed.
     using FrameCallback = std::function<void (const juce::Image&)>;
 
-    // The computer's cameras, by name, in the system's order.
-    static juce::StringArray availableCameras();
+    // The computer's cameras in the system's order. Names are for display.
+    static std::vector<CameraDeviceInfo> availableCameras();
 
-    // Opens the camera of that name and starts it; nothing when it isn't there (any more) or
-    // can't be opened. By name, not by place in the list: cameras come and go. Message thread.
-    static std::unique_ptr<CameraSource> open (const juce::String& cameraName, FrameCallback);
+    // Opens the camera with that ID, or returns null if it is unavailable. Message thread.
+    static std::unique_ptr<CameraSource> open (const juce::String& deviceId, FrameCallback);
 
     virtual ~CameraSource() = default;
 };

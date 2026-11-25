@@ -41,7 +41,7 @@ private:
     ListenerPoseOutput listenerPoseOutput;
     TrackerPage page;
     CameraFeed camera;
-    juce::StringArray camerasInMenu; // as listed when the Camera menu was last built
+    std::vector<CameraDeviceInfo> camerasInMenu; // as listed when the Camera menu was last built
     TrackingLoop trackingLoop;
     juce::ScopedLowPowerModeDisabler noAppNap; // tracking must keep running in the background
 };

@@ -21,8 +21,9 @@ public:
     void setDebugView (bool on)           { file.setValue ("debug", on); }
 
     // The camera chosen in the Camera menu; empty = no choice (the first that gives a picture).
-    juce::String cameraName() const       { return file.getValue ("camera"); }
-    void setCameraName (const juce::String& name) { file.setValue ("camera", name); }
+    juce::String cameraId() const         { return file.getValue ("cameraId"); }
+    juce::String legacyCameraName() const { return file.getValue ("camera"); }
+    void setCameraId (const juce::String& id) { file.setValue ("cameraId", id); }
 
     // JUCE's window state string (position, size); empty until the window has been shown once.
     juce::String windowState() const      { return file.getValue ("windowState"); }

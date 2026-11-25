@@ -37,7 +37,7 @@ TrackerWindow::TrackerWindow()
                 if (! isDebugView)
                     fitCompactViewToPage (pageHeightPixels);
             }),
-      camera (settings.cameraName()),
+      camera (settings.cameraId(), settings.legacyCameraName()),
       trackingLoop (appResourcesFolder().getChildFile ("models"), camera, listenerPoseOutput, page)
 {
     listenerPoseOutput.setInverted (settings.inverted());
@@ -163,10 +163,11 @@ juce::PopupMenu TrackerWindow::cameraMenu()
 {
     juce::PopupMenu menu;
     camerasInMenu = CameraFeed::availableCameras();
-    const auto inUse = camera.cameraName();
-    for (int index = 0; index < camerasInMenu.size(); ++index)
-        menu.addItem (firstCameraItem + index, camerasInMenu[index], true, camerasInMenu[index] == inUse);
-    if (camerasInMenu.isEmpty())
+    const auto& inUse = camera.cameraId();
+    int itemId = firstCameraItem;
+    for (const auto& device : camerasInMenu)
+        menu.addItem (itemId++, device.name, true, device.id == inUse);
+    if (camerasInMenu.empty())
         menu.addItem (firstCameraItem, "No camera found", false);
     return menu;
 }
@@ -184,10 +185,10 @@ void TrackerWindow::menuItemSelected (int itemId, int)
         setDebugView (! isDebugView);
     else if (itemId == aboutItem)
         page.showAbout();
-    else if (juce::isPositiveAndBelow (itemId - firstCameraItem, camerasInMenu.size()))
+    else if (juce::isPositiveAndBelow (itemId - firstCameraItem, static_cast<int> (camerasInMenu.size())))
     {
         const auto chosen = camerasInMenu[itemId - firstCameraItem]; // the list the user clicked in
-        settings.setCameraName (chosen);
+        settings.setCameraId (chosen.id);
         camera.choose (chosen);
         menuItemsChanged();
     }

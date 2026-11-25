@@ -10,7 +10,7 @@ constexpr int noPictureTimeoutMs = 10000;
 constexpr int developmentFramesPerSecond = 30;
 } // namespace
 
-CameraFeed::CameraFeed (const juce::String& chosenCamera)
+CameraFeed::CameraFeed (const juce::String& chosenId, const juce::String& legacyName)
     : developmentFrame (juce::ImageFileFormat::loadFrom (juce::File (juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_STILL_FRAME", {}))))
 {
     if (developmentFrame.isValid())
@@ -21,8 +21,13 @@ CameraFeed::CameraFeed (const juce::String& chosenCamera)
     }
 
     const auto cameras = availableCameras();
-    const bool isChosenThere = cameras.contains (chosenCamera);
-    startTrying (isChosenThere ? chosenCamera : cameras[0], isChosenThere);
+    const auto chosen = std::find_if (cameras.begin(), cameras.end(), [&] (const auto& device)
+    {
+        return chosenId.isNotEmpty() ? device.id == chosenId
+                                    : legacyName.isNotEmpty() && device.name == legacyName;
+    });
+    const bool isChosenThere = chosen != cameras.end();
+    startTrying (isChosenThere ? *chosen : (cameras.empty() ? CameraDeviceInfo{} : cameras.front()), isChosenThere);
 }
 
 CameraFeed::~CameraFeed()
@@ -31,30 +36,34 @@ CameraFeed::~CameraFeed()
     close();
 }
 
-void CameraFeed::choose (const juce::String& cameraName)
+void CameraFeed::choose (const CameraDeviceInfo& device)
 {
     if (! developmentFrame.isValid())
-        startTrying (cameraName, true);
+        startTrying (device, true);
 }
 
-void CameraFeed::startTrying (const juce::String& cameraToOpen, bool usersChoice)
+void CameraFeed::startTrying (const CameraDeviceInfo& device, bool usersChoice)
 {
     isUsersChoice = usersChoice;
-    camerasTried = 1;
+    attemptedIds.clear();
     gaveUp = false;
-    open (cameraToOpen);
+    open (device);
     startTimer (noPictureTimeoutMs);
 }
 
-void CameraFeed::open (const juce::String& cameraToOpen)
+void CameraFeed::open (const CameraDeviceInfo& device)
 {
     close();
+    currentId = device.id;
+    if (currentId.isNotEmpty())
+        attemptedIds.add (currentId);
     receivedAtLastLook = framesReceived();
     {
         const juce::ScopedLock sl (frameLock);
-        name = cameraToOpen;
+        name = device.name;
     }
-    camera = CameraSource::open (cameraToOpen, [this] (const juce::Image& frame) { frameArrivedFromCamera (frame); });
+    if (currentId.isNotEmpty())
+        camera = CameraSource::open (currentId, [this] (const juce::Image& frame) { frameArrivedFromCamera (frame); });
 }
 
 // The camera is let go; its name stays, for the status.
@@ -85,16 +94,23 @@ void CameraFeed::moveOnIfNoPicture()
     const auto receivedNow = framesReceived();
     if (receivedNow != std::exchange (receivedAtLastLook, receivedNow))
     {
-        camerasTried = 1;
+        attemptedIds.clear();
+        attemptedIds.add (currentId);
         return;
     }
 
-    const auto cameras = availableCameras();
-    if (isUsersChoice || camerasTried >= cameras.size())
+    if (isUsersChoice)
         return giveUp();
 
-    ++camerasTried;
-    open (cameras[(cameras.indexOf (cameraName()) + 1) % cameras.size()]); // the one after the last tried
+    const auto cameras = availableCameras();
+    const auto next = std::find_if (cameras.begin(), cameras.end(), [this] (const auto& device)
+    {
+        return ! attemptedIds.contains (device.id);
+    });
+    if (next == cameras.end())
+        return giveUp();
+
+    open (*next);
 }
 
 juce::String CameraFeed::cameraName() const

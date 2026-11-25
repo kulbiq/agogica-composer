@@ -157,24 +157,25 @@ private:
 };
 } // namespace
 
-juce::StringArray CameraSource::availableCameras()
+std::vector<CameraDeviceInfo> CameraSource::availableCameras()
 {
-    juce::StringArray names;
+    std::vector<CameraDeviceInfo> cameras;
     @autoreleasepool
     {
         for (AVCaptureDevice* device in captureDevices())
-            names.add (juce::String::fromUTF8 ([[device localizedName] UTF8String]));
+            cameras.push_back ({ juce::String::fromUTF8 ([[device uniqueID] UTF8String]),
+                                 juce::String::fromUTF8 ([[device localizedName] UTF8String]) });
     }
-    return names;
+    return cameras;
 }
 
-std::unique_ptr<CameraSource> CameraSource::open (const juce::String& cameraName, FrameCallback onFrame)
+std::unique_ptr<CameraSource> CameraSource::open (const juce::String& deviceId, FrameCallback onFrame)
 {
     @autoreleasepool
     {
         for (AVCaptureDevice* device in captureDevices())
         {
-            if (juce::String::fromUTF8 ([[device localizedName] UTF8String]) != cameraName)
+            if (juce::String::fromUTF8 ([[device uniqueID] UTF8String]) != deviceId)
                 continue;
 
             NSError* error = nil;

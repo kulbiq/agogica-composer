@@ -16,15 +16,17 @@ namespace tracker
 class CameraFeed final : private juce::Timer
 {
 public:
-    // `chosenCamera`: a name from `availableCameras()`; empty, or a camera that isn't there = no choice.
-    explicit CameraFeed (const juce::String& chosenCamera); // message thread
+    // A saved ID that isn't present falls back to automatic selection. A legacy name
+    // is used only for settings saved before camera IDs were stored.
+    CameraFeed (const juce::String& chosenId, const juce::String& legacyName); // message thread
     ~CameraFeed() override;
 
-    static juce::StringArray availableCameras() { return CameraSource::availableCameras(); }
+    static std::vector<CameraDeviceInfo> availableCameras() { return CameraSource::availableCameras(); }
 
     // The user's choice: opened now, and tried afresh. A camera that has gone since it was
     // listed is never replaced by another: it ends as "no picture". Message thread.
-    void choose (const juce::String& cameraName);
+    void choose (const CameraDeviceInfo&);
+    const juce::String& cameraId() const { return currentId; } // message thread
 
     // Waits for a frame nobody has taken yet; an invalid image when none came in time. Any thread.
     juce::Image waitForFrame (int timeoutMs);
@@ -42,8 +44,8 @@ private:
     void frameArrivedFromCamera (const juce::Image&);
     void timerCallback() override;
     void moveOnIfNoPicture();
-    void startTrying (const juce::String& cameraName, bool isUsersChoice);
-    void open (const juce::String& cameraName);
+    void startTrying (const CameraDeviceInfo&, bool isUsersChoice);
+    void open (const CameraDeviceInfo&);
     void close();
     void giveUp();
 
@@ -53,7 +55,8 @@ private:
 
     std::unique_ptr<CameraSource> camera;
     bool isUsersChoice = false;
-    int camerasTried = 0; // since the last picture or choice
+    juce::String currentId;
+    juce::StringArray attemptedIds; // since the last picture or choice
     int receivedAtLastLook = 0;
     std::atomic<int> received { 0 };
     std::atomic<bool> gaveUp { false };
