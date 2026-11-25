@@ -214,6 +214,32 @@ TEST_CASE ("scenes store and recall every instance's layout", "[integration]")
     CHECK (a.getScene() == "B");
 }
 
+TEST_CASE ("a track added in a later scene shares the room and listener of every scene", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+    drag (a, a.id, "roomSize", 25.0f);
+    drag (a, a.id, "listenerX", 1.0f);
+
+    stage::setScene (a, "B");
+    drag (a, a.id, "roomSize", 40.0f);
+    drag (a, a.id, "listenerX", -3.0f);
+
+    ComposerProcessor late; // inserted while B is active: it has never been in A
+    stage::join (late, true);
+    const auto seatInB = late.getParam ("playerX");
+
+    stage::setScene (a, "A");
+    CHECK (late.getScene() == "A");
+    CHECK_THAT (late.getParam ("roomSize"), WithinAbs (25.0, 1e-4));
+    CHECK_THAT (late.getParam ("listenerX"), WithinAbs (1.0, 1e-4));
+    CHECK_THAT (late.getParam ("playerX"), WithinAbs (seatInB, 1e-4)); // its place is its own: kept
+
+    stage::setScene (a, "B");
+    CHECK_THAT (late.getParam ("roomSize"), WithinAbs (40.0, 1e-4));
+    CHECK_THAT (late.getParam ("listenerX"), WithinAbs (-3.0, 1e-4));
+}
+
 TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room is per scene", "[integration]")
 {
     // first: set in scene A; second: set in scene B; shown: how the snapshot reports `first`.

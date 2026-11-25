@@ -229,15 +229,32 @@ void setScene (ComposerProcessor& self, const juce::String& scene)
 
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
+        // The scene's room and listener are the same for everyone; a place is each track's own.
+        // A track that has never been in this scene (added later) keeps its place and takes
+        // the room and listener from a track that has.
+        ComposerProcessor* hasBeenThere = nullptr;
+        juce::Array<ComposerProcessor*> newToScene;
+
         for (auto* p : members)
         {
             if (p->getScene() == scene)
                 continue;
 
             p->storeScene();
-            p->recallScene (scene);
+
+            if (p->recallScene (scene))
+                hasBeenThere = p;
+            else
+                newToScene.add (p);
+
             p->setActiveScene (scene);
         }
+
+        if (hasBeenThere != nullptr)
+            for (auto* p : newToScene)
+                for (const auto& paramId : ComposerProcessor::sceneParams)
+                    if (sharedParams.contains (paramId))
+                        p->writeParam (paramId, hasBeenThere->getParam (paramId));
     });
 }
 
