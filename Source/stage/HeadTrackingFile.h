@@ -79,10 +79,11 @@ public:
 
     // The latest consistent pose (the previous one while a write is in progress), or nothing
     // if there's no valid file.
-    std::optional<Pose> read();
+    std::optional<Pose> read()   { return read (juce::Time::getMillisecondCounter()); }
+    std::optional<Pose> read (juce::uint32 nowMs); // the clock handed in (tests)
 
 private:
-    void remapIfNeeded();
+    void remapIfNeeded (juce::uint32 nowMs);
 
     juce::File file;
     std::unique_ptr<juce::MemoryMappedFile> map;

@@ -93,9 +93,8 @@ void Writer::write (const Pose& pose) noexcept
 
 Reader::Reader (juce::File f, juce::uint32 checkEvery) : file (std::move (f)), checkEveryMs (checkEvery) {}
 
-void Reader::remapIfNeeded()
+void Reader::remapIfNeeded (juce::uint32 now)
 {
-    const auto now = juce::Time::getMillisecondCounter();
     if (checked && now - checkedAt < checkEveryMs)
         return;
     checked = true;
@@ -129,9 +128,9 @@ void Reader::remapIfNeeded()
         record = static_cast<const Record*> (map->getData());
 }
 
-std::optional<Pose> Reader::read()
+std::optional<Pose> Reader::read (juce::uint32 nowMs)
 {
-    remapIfNeeded();
+    remapIfNeeded (nowMs);
 
     // Checked on every read: a new file gets its magic just after it appears.
     if (record == nullptr || std::memcmp (record->magic, "AGHT", 4) != 0 || record->version.load() != version)

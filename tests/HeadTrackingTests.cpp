@@ -117,14 +117,13 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
     {
         const auto file = tempFile ("throttled");
         Reader reader (file, 50);
-        CHECK_FALSE (reader.read().has_value()); // missing: looked at now
+        CHECK_FALSE (reader.read (1000).has_value()); // missing: looked at now
 
         Writer writer (file);
         writer.write (pose (7.0f));
-        CHECK_FALSE (reader.read().has_value()); // not looked at again yet
+        CHECK_FALSE (reader.read (1049).has_value()); // not looked at again yet
 
-        juce::Thread::sleep (60);
-        const auto read = reader.read();
+        const auto read = reader.read (1050);
         REQUIRE (read.has_value());
         CHECK_THAT (read->yaw, WithinAbs (7.0, 0.0));
     }
