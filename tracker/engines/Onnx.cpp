@@ -23,6 +23,22 @@ std::basic_string<ORTCHAR_T> modelPath (const juce::File& file)
    #endif
 }
 
+// Development: AGOGICA_TRACKER_PROFILE=<folder> makes ONNX Runtime time every node of every run;
+// each model writes <folder>/<model>_<date>.json (Chrome trace format) when its session closes,
+// i.e. on quitting the app or switching engines.
+Ort::SessionOptions sessionOptions (const juce::File& file)
+{
+    Ort::SessionOptions options;
+    const auto folder = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_PROFILE", {});
+    if (folder.isNotEmpty())
+    {
+        const juce::File dir (folder);
+        dir.createDirectory();
+        options.EnableProfiling (modelPath (dir.getChildFile (file.getFileNameWithoutExtension())).c_str());
+    }
+    return options;
+}
+
 Ort::Session openSession (const juce::File& file, juce::String& provider)
 {
     // Development: AGOGICA_TRACKER_EP=cpu compares against ONNX Runtime's own CPU kernels.
@@ -38,7 +54,7 @@ Ort::Session openSession (const juce::File& file, juce::String& provider)
     {
         try
         {
-            Ort::SessionOptions options;
+            auto options = sessionOptions (file);
             // Static shapes only: the head detector's post-processing returns N detections, and
             // CoreML fails on N = 0 (no head in view) - those nodes run on the CPU instead.
             // Compiled models are cached, so only the first launch compiles.
@@ -61,7 +77,7 @@ Ort::Session openSession (const juce::File& file, juce::String& provider)
         try
         {
             // DirectML needs these two (ONNX Runtime's DirectML notes).
-            Ort::SessionOptions options;
+            auto options = sessionOptions (file);
             options.DisableMemPattern();
             options.SetExecutionMode (ExecutionMode::ORT_SEQUENTIAL);
             options.SetGraphOptimizationLevel (GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -73,7 +89,7 @@ Ort::Session openSession (const juce::File& file, juce::String& provider)
     }
    #endif
 
-    Ort::SessionOptions options;
+    auto options = sessionOptions (file);
     // Measured on an i5-10210U with the former 6DRepNet360 (a ResNet-50): denormals in the activations made
     // pose 4x slower (404 -> 97 ms), and the detector's and the pose model's thread pools
     // spinning against each other cost another 40 % (-> 57 ms). Two threads (79 ms) leave
