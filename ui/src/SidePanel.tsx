@@ -5,7 +5,7 @@ import ProPanel from "./ProPanel";
 import type { NodeKey } from "./StageMap";
 import styles from "./App.module.css";
 import LevelMeter from "./LevelMeter";
-import { committedMetres } from "./metres";
+import { committedMetres, typedMetres } from "./metres";
 
 type Props = {
   stage: Stage;
@@ -210,8 +210,10 @@ function NumberField({
   const commit = () => {
     const metres = cancelled.current || draft === undefined ? undefined : committedMetres(draft, room, value.toFixed(2));
     if (metres !== undefined) onCommit(metres);
+    // Text that isn't a number stays in the field, marked, until it is corrected or Escape.
+    const notANumber = !cancelled.current && draft !== undefined && draft.trim() !== "" && typedMetres(draft) === undefined;
     cancelled.current = false;
-    setDraft(undefined);
+    if (!notANumber) setDraft(undefined);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -227,8 +229,9 @@ function NumberField({
         type="text"
         inputMode="decimal"
         value={draft ?? value.toFixed(2)}
+        aria-invalid={draft !== undefined && draft.trim() !== "" && typedMetres(draft) === undefined}
         onFocus={(e) => {
-          setDraft(value.toFixed(2));
+          setDraft((d) => d ?? value.toFixed(2));
           e.currentTarget.select();
         }}
         onChange={(e) => setDraft(e.target.value)}

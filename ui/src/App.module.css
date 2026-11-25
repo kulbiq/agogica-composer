@@ -298,6 +298,12 @@ button.status:focus-visible {
   transition: border-color 0.2s;
 }
 
+/* Text that isn't a number: the dashed "not yet" outline until it is corrected. */
+.input[aria-invalid="true"] {
+  border-style: dashed;
+  border-color: var(--ink);
+}
+
 .input:focus {
   border-color: var(--ink);
 }
