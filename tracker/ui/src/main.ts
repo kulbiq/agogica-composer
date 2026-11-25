@@ -248,10 +248,10 @@ async function main() {
     if (e.found && e.yaw !== undefined)
       plotPoints.push({ t: performance.now(), yaw: wrap(sign * e.yaw - centre), confidence: e.confidence ?? 1 });
 
-    // Monitoring, once a second: the app's CPU (all threads) and where camera frames went.
-    const perf = (e as { perf?: { cpu: number; models: number; reused: number; dropped: number } }).perf;
+    // Monitoring, once a second: the camera, the app's CPU (all threads) and where camera frames went.
+    const perf = (e as { perf?: { camera: string; fps: number; cpu: number; models: number; reused: number; dropped: number } }).perf;
     if (perf)
-      $("perf").textContent = `CPU ${perf.cpu.toFixed(2)} cores · models ${perf.models.toFixed(0)}/s · reused ${perf.reused.toFixed(0)}/s · dropped ${perf.dropped.toFixed(0)}/s`;
+      $("perf").textContent = `Camera ${perf.camera} at ${perf.fps.toFixed(0)}/s · CPU ${perf.cpu.toFixed(2)} cores · models ${perf.models.toFixed(0)}/s · reused ${perf.reused.toFixed(0)}/s · dropped ${perf.dropped.toFixed(0)}/s`;
   });
 
   setStatus("Loading", false);

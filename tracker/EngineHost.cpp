@@ -31,7 +31,16 @@ void EngineHost::setEngine (const juce::String& name)
 
     if (camera == nullptr)
     {
-        camera.reset (juce::CameraDevice::openDevice (0, 640, 480, 1280, 720, false));
+        // VGA first: the models need no more (the detector sees 320x192, HFHPE a 128 px head),
+        // and webcams send uncompressed frames, so larger sizes are what USB 2 caps (the
+        // integrated camera of an i5-10210U laptop: 1280x720 at 10 fps, 640x480 at 30 in good
+        // light, 10 in a dim room) and cost Windows more to convert (0.2 cores at 1280x720).
+        // On Windows JUCE takes the largest size in the range.
+        for (auto [w, h, maxW, maxH] : { std::array { 640, 480, 640, 480 },
+                                         std::array { 640, 360, 640, 360 },
+                                         std::array { 320, 240, 1280, 720 } })
+            if (camera.reset (juce::CameraDevice::openDevice (0, w, h, maxW, maxH, false)); camera != nullptr)
+                break;
         if (camera != nullptr)
             camera->addListener (this);
     }
@@ -138,8 +147,9 @@ void EngineHost::run()
     const auto started = juce::Time::getMillisecondCounterHiRes();
 
     // Development monitoring, once a second in the "estimate" payload ("perf") and the log:
-    // the whole process's CPU (in cores), frames the models ran on, frames a still head
-    // reused, and camera frames the engine never got to (it was busy).
+    // the camera's frame size and frames a second, the whole process's CPU (in cores), frames
+    // the models ran on, frames a still head reused, and camera frames the engine never got
+    // to (it was busy).
     struct
     {
         double time = 0, cpu = 0;
@@ -211,6 +221,8 @@ void EngineHost::run()
                 const auto cpu = processCpuSeconds();
                 const auto received = framesReceived.load (std::memory_order_relaxed);
                 auto p = std::make_unique<juce::DynamicObject>();
+                p->setProperty ("camera", juce::String (frame.getWidth()) + "x" + juce::String (frame.getHeight()));
+                p->setProperty ("fps", (received - perf.received) / seconds);
                 p->setProperty ("cpu", (cpu - perf.cpu) / seconds);
                 p->setProperty ("models", perf.full / seconds);
                 p->setProperty ("reused", perf.reused / seconds);
