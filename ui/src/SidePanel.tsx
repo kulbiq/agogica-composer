@@ -5,6 +5,7 @@ import ProPanel from "./ProPanel";
 import type { NodeKey } from "./StageMap";
 import styles from "./App.module.css";
 import LevelMeter from "./LevelMeter";
+import { committedMetres } from "./metres";
 
 type Props = {
   stage: Stage;
@@ -207,11 +208,8 @@ function NumberField({
   const cancelled = useRef(false);
 
   const commit = () => {
-    const v = Number(draft);
-    if (!cancelled.current && draft !== undefined && draft.trim() !== "" && Number.isFinite(v)) {
-      const half = room / 2;
-      onCommit(Math.round(Math.min(half, Math.max(-half, v)) * 100) / 100);
-    }
+    const metres = cancelled.current || draft === undefined ? undefined : committedMetres(draft, room);
+    if (metres !== undefined) onCommit(metres);
     cancelled.current = false;
     setDraft(undefined);
   };
