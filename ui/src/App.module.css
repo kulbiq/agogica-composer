@@ -564,6 +564,7 @@ button.status:focus-visible {
   background: var(--ink);
   transform: scaleX(var(--level));
   transform-origin: left;
+  will-change: transform; /* its own layer: 30 changes a second must not repaint the panel */
 }
 
 .grip {
