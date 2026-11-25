@@ -208,7 +208,7 @@ function NumberField({
   const cancelled = useRef(false);
 
   const commit = () => {
-    const metres = cancelled.current || draft === undefined ? undefined : committedMetres(draft, room);
+    const metres = cancelled.current || draft === undefined ? undefined : committedMetres(draft, room, value.toFixed(2));
     if (metres !== undefined) onCommit(metres);
     cancelled.current = false;
     setDraft(undefined);
