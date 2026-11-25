@@ -184,7 +184,7 @@ void EngineHost::run()
                     still.clear();
             }
             const auto& e = last;
-            output (e.has_value(), e ? e->yaw : 0.0f, e ? e->pitch : 0.0f, e ? e->roll : 0.0f);
+            output (e ? std::optional (tracker::HeadOrientation { e->yaw, e->pitch, e->roll }) : std::nullopt);
 
             o->setProperty ("found", e.has_value());
 

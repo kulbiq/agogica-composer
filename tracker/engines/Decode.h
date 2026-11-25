@@ -12,7 +12,6 @@
 namespace engines
 {
 inline float toDegrees (float radians) { return radians * 180.0f / 3.14159265358979f; }
-inline float wrap (float d) { return std::remainder (d, 360.0f); } // (-180, 180]
 
 struct Box { float x1 = 0, y1 = 0, x2 = 0, y2 = 0; };
 inline float centreX (const Box& b) { return (b.x1 + b.x2) * 0.5f; }

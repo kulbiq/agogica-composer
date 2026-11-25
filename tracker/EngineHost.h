@@ -2,6 +2,7 @@
 
 #include <juce_video/juce_video.h>
 #include "engines/Engines.h"
+#include "ListenerPose.h"
 
 // Runs head tracking: the camera (juce::CameraDevice, frames on its capture thread) feeds the
 // latest frame to a worker thread that runs the head-pose estimator; each frame's reading goes
@@ -14,9 +15,9 @@ class EngineHost final : private juce::CameraDevice::Listener,
 public:
     // `emit` is called on the message thread with each event (name, payload): "estimate" per
     // camera frame, "frame" (a JPEG data URL) for the preview; `output` on the engine thread
-    // with each frame's reading (found, yaw, pitch, roll), for Composer.
+    // with each frame's reading (nothing = no head), for Composer.
     using Emit = std::function<void (const juce::Identifier& event, const juce::var& payload)>;
-    using Output = std::function<void (bool found, float yaw, float pitch, float roll)>;
+    using Output = std::function<void (std::optional<tracker::HeadOrientation>)>;
     EngineHost (juce::File modelsDir, Emit emit, Output output);
     ~EngineHost() override;
 

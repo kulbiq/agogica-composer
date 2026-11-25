@@ -86,7 +86,7 @@ public:
                 if (args.size() == 1)
                 {
                     settings().setValue ("invert", (bool) args[0]);
-                    output.setInvert ((bool) args[0]);
+                    output.setInverted ((bool) args[0]);
                 }
                 complete ({});
             })
@@ -126,7 +126,7 @@ public:
             })
             .withResourceProvider (serve));
 
-        output.setInvert (settings().getBoolValue ("invert", false));
+        output.setInverted (settings().getBoolValue ("invert", false));
         setContentNonOwned (browser.get(), false);
         browser->setSize (380, 680);
         browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
@@ -273,10 +273,10 @@ private:
     // The dial: what Composer hears (60 Hz while the page shows).
     void timerCallback() override
     {
-        const auto [yaw, live] = output.current();
+        const auto heard = output.current();
         juce::DynamicObject::Ptr o = new juce::DynamicObject();
-        o->setProperty ("yaw", yaw);
-        o->setProperty ("live", live);
+        o->setProperty ("yaw", heard.listenerHead.yawDegrees);
+        o->setProperty ("live", heard.live);
         browser->emitEventIfBrowserIsVisible ("pose", juce::var (o.get()));
     }
 
@@ -288,7 +288,7 @@ private:
     {
         if (browser != nullptr && pageReady)
             browser->emitEventIfBrowserIsVisible (event, v);
-    }, [this] (bool found, float yaw, float pitch, float roll) { output.frame (found, yaw, pitch, roll); } };
+    }, [this] (std::optional<tracker::HeadOrientation> head) { output.observe (head); } };
     juce::ScopedLowPowerModeDisabler noAppNap; // tracking must keep running in the background
     std::unique_ptr<juce::WebBrowserComponent> browser;
 };
