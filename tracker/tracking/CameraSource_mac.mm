@@ -77,9 +77,8 @@ NSArray<AVCaptureDevice*>* captureDevices()
 class MacCameraSource final : public CameraSource
 {
 public:
-    MacCameraSource (AVCaptureDevice* device, AVCaptureDeviceInput* input, FrameCallback callback)
+    MacCameraSource (AVCaptureDeviceInput* input, FrameCallback callback)
     {
-        juce::ignoreUnused (device);
         receiver = [[AgogicaTrackerFrameReceiver alloc] init];
         receiver->onFrame = std::move (callback);
         captureQueue = dispatch_queue_create ("com.agogica.tracker.camera", DISPATCH_QUEUE_SERIAL);
@@ -123,7 +122,8 @@ public:
 
 private:
     // startRunning blocks while the camera starts (a phone: seconds), so it runs on the capture
-    // queue, not the message thread. The first time, macOS asks the user for the camera.
+    // queue, not the message thread. The first time, macOS asks the user for the camera: the
+    // answer can come after this source is gone, and must not start the camera then.
     void startOnceAllowed()
     {
         AVCaptureSession* starting = [session retain];
@@ -165,21 +165,20 @@ juce::StringArray CameraSource::availableCameras()
     return names;
 }
 
-std::unique_ptr<CameraSource> CameraSource::open (int index, FrameCallback onFrame)
+std::unique_ptr<CameraSource> CameraSource::open (const juce::String& cameraName, FrameCallback onFrame)
 {
     @autoreleasepool
     {
-        NSArray<AVCaptureDevice*>* devices = captureDevices();
-        if (index < 0 || index >= (int) [devices count])
-            return nullptr;
+        for (AVCaptureDevice* device in captureDevices())
+        {
+            if (juce::String::fromUTF8 ([[device localizedName] UTF8String]) != cameraName)
+                continue;
 
-        AVCaptureDevice* device = devices[(NSUInteger) index];
-        NSError* error = nil;
-        AVCaptureDeviceInput* input = [AVCaptureDeviceInput deviceInputWithDevice: device error: &error];
-        if (input == nil)
-            return nullptr;
-
-        return std::make_unique<MacCameraSource> (device, input, std::move (onFrame));
+            NSError* error = nil;
+            AVCaptureDeviceInput* input = [AVCaptureDeviceInput deviceInputWithDevice: device error: &error];
+            return input != nil ? std::make_unique<MacCameraSource> (input, std::move (onFrame)) : nullptr;
+        }
+        return nullptr;
     }
 }
 } // namespace tracker

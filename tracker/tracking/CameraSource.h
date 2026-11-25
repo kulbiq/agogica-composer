@@ -18,9 +18,9 @@ public:
     // The computer's cameras, by name, in the system's order.
     static juce::StringArray availableCameras();
 
-    // Opens camera `index` of `availableCameras()` and starts it; nothing when it can't be opened.
-    // Message thread.
-    static std::unique_ptr<CameraSource> open (int index, FrameCallback);
+    // Opens the camera of that name and starts it; nothing when it isn't there (any more) or
+    // can't be opened. By name, not by place in the list: cameras come and go. Message thread.
+    static std::unique_ptr<CameraSource> open (const juce::String& cameraName, FrameCallback);
 
     virtual ~CameraSource() = default;
 };

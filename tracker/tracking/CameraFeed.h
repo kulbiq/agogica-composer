@@ -22,7 +22,8 @@ public:
 
     static juce::StringArray availableCameras() { return CameraSource::availableCameras(); }
 
-    // The user's choice: opened now, and tried afresh. Message thread.
+    // The user's choice: opened now, and tried afresh. A camera that has gone since it was
+    // listed is never replaced by another: it ends as "no picture". Message thread.
     void choose (const juce::String& cameraName);
 
     // Waits for a frame nobody has taken yet; an invalid image when none came in time. Any thread.
@@ -41,8 +42,8 @@ private:
     void frameArrivedFromCamera (const juce::Image&);
     void timerCallback() override;
     void moveOnIfNoPicture();
-    void startTrying (int cameraIndex, bool isUsersChoice);
-    void open (int cameraIndex);
+    void startTrying (const juce::String& cameraName, bool isUsersChoice);
+    void open (const juce::String& cameraName);
     void close();
     void giveUp();
 
@@ -51,7 +52,6 @@ private:
     const juce::Image developmentFrame;
 
     std::unique_ptr<CameraSource> camera;
-    int cameraIndex = 0;
     bool isUsersChoice = false;
     int camerasTried = 0; // since the last picture or choice
     int receivedAtLastLook = 0;

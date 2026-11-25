@@ -20,8 +20,9 @@ CameraFeed::CameraFeed (const juce::String& chosenCamera)
         return;
     }
 
-    const auto chosenIndex = availableCameras().indexOf (chosenCamera);
-    startTrying (juce::jmax (0, chosenIndex), chosenIndex >= 0);
+    const auto cameras = availableCameras();
+    const bool isChosenThere = cameras.contains (chosenCamera);
+    startTrying (isChosenThere ? chosenCamera : cameras[0], isChosenThere);
 }
 
 CameraFeed::~CameraFeed()
@@ -32,37 +33,28 @@ CameraFeed::~CameraFeed()
 
 void CameraFeed::choose (const juce::String& cameraName)
 {
-    if (developmentFrame.isValid())
-        return;
-
-    if (const auto index = availableCameras().indexOf (cameraName); index >= 0)
-        startTrying (index, true);
+    if (! developmentFrame.isValid())
+        startTrying (cameraName, true);
 }
 
-void CameraFeed::startTrying (int index, bool usersChoice)
+void CameraFeed::startTrying (const juce::String& cameraToOpen, bool usersChoice)
 {
     isUsersChoice = usersChoice;
     camerasTried = 1;
     gaveUp = false;
-    open (index);
+    open (cameraToOpen);
     startTimer (noPictureTimeoutMs);
 }
 
-void CameraFeed::open (int index)
+void CameraFeed::open (const juce::String& cameraToOpen)
 {
     close();
     receivedAtLastLook = framesReceived();
-
-    const auto cameras = availableCameras();
-    if (cameras.isEmpty())
-        return;
-
-    cameraIndex = index % cameras.size();
     {
         const juce::ScopedLock sl (frameLock);
-        name = cameras[cameraIndex];
+        name = cameraToOpen;
     }
-    camera = CameraSource::open (cameraIndex, [this] (const juce::Image& frame) { frameArrivedFromCamera (frame); });
+    camera = CameraSource::open (cameraToOpen, [this] (const juce::Image& frame) { frameArrivedFromCamera (frame); });
 }
 
 // The camera is let go; its name stays, for the status.
@@ -97,11 +89,12 @@ void CameraFeed::moveOnIfNoPicture()
         return;
     }
 
-    if (isUsersChoice || camerasTried >= availableCameras().size())
+    const auto cameras = availableCameras();
+    if (isUsersChoice || camerasTried >= cameras.size())
         return giveUp();
 
     ++camerasTried;
-    open (cameraIndex + 1);
+    open (cameras[(cameras.indexOf (cameraName()) + 1) % cameras.size()]); // the one after the last tried
 }
 
 juce::String CameraFeed::cameraName() const

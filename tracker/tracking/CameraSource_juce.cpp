@@ -36,8 +36,12 @@ private:
 
 juce::StringArray CameraSource::availableCameras() { return juce::CameraDevice::getAvailableDevices(); }
 
-std::unique_ptr<CameraSource> CameraSource::open (int index, FrameCallback onFrame)
+std::unique_ptr<CameraSource> CameraSource::open (const juce::String& cameraName, FrameCallback onFrame)
 {
+    const auto index = availableCameras().indexOf (cameraName); // JUCE opens by index only
+    if (index < 0)
+        return nullptr;
+
     for (const auto& size : preferredSizes)
     {
         const bool highQuality = false;
