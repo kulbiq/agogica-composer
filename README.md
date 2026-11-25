@@ -24,11 +24,9 @@ The DSP is a chain of independent stages (`Source/dsp`), each reading the player
 
 ### Head tracking
 - The **Agogica Tracker** app (`tracker/`) watches the listener through the camera and shares the head's rotation with every Composer instance through a small memory-mapped file (no network).
-- Engine: **6DRepNet360** on a head crop from a YOLOX head detector, running natively with ONNX Runtime + CoreML (~18 ms per frame on an M4 Pro).
-  It was chosen after comparing MediaPipe, WHENet, DEIMv2 and YOLOv8n-Pose.
-- A **temporal gate** stops the model's occasional front/back mistakes from swinging the ensemble:
-  a hidden Markov model over the head's direction accepts a new direction only after it has been confirmed for several frames, and the output then moves towards it at a limited speed.
-  Its parameters adapt to the last seconds of tracking and can be pinned in the tracker's Stability panel.
+- It finds the head with a YOLOX head detector and reads its direction with **HFHPE** (a full 360° of yaw), both run natively by ONNX Runtime (CoreML on macOS).
+  Each camera frame's reading goes to Composer as it is: there is no filter and no smoothing.
+- `tracker/README.md` describes the app.
 - In Composer, head rotation turns the scene in Binaural mode during live playback only; exports never depend on the camera.
 
 ### UI
@@ -50,7 +48,7 @@ Builds install per user, without admin rights: the plugins into `~/Library/Audio
 After rebuilding, quit the DAW completely (Dorico's audio engine keeps the old plugin loaded) and quit a running tracker before starting the new one.
 
 ## Licences to resolve before a release
-- **6DRepNet360** (MIT code) was trained on CMU Panoptic and 300W-LP, which are for non-commercial research only: a legal check is needed before shipping the tracker.
+- **HFHPE** (the tracker's head-pose model; code MIT): its weights carry no stated licence, so the author must confirm the terms before the tracker ships (`tracker/models/MODELS.md`).
 - The YOLOX head detector and the SADIE II HRTFs are Apache-2.0 (attribution shown in the UI).
 - The repository may later be published under AGPLv3; all dependencies are chosen to be compatible.
 
@@ -79,8 +77,8 @@ Ideas and decisions collected during development, so none of them get lost.
 - **AirPods head tracking** (AirPods Pro, AirPods Max, AirPods 3rd gen and later): Core Motion's `CMHeadphoneMotionManager` (macOS 14+) gives the head's rotation from the headphones' own sensors, with no camera, full 360° and no front/back ambiguity.
   The tracker app would read it and write the same shared file, so Composer itself doesn't change; the camera stays as the fallback for other headphones.
   Needs the motion permission (`NSMotionUsageDescription`) and a recenter on start, because the headphones report rotation relative to where they started.
-- Mirror consistency check (run 6DRepNet360 on the mirrored crop too and compare) as an extra confidence signal; it fits the frame budget.
-- Record button and replay-based tuning of the gate's default parameters on more real sessions (`tests/data/tracker-session-*.jsonl`).
+- A camera chooser, and a capture path of the tracker's own on macOS (JUCE delivers frames as still captures, which some cameras refuse).
+- Smoothing between camera frames on slow computers, if the steps are audible.
 - Measure the full motion-to-sound latency.
 - Windows (and Intel Mac) builds of the tracker; bundling it with the planned Agogica hub app.
 
