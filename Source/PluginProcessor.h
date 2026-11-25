@@ -1,5 +1,8 @@
 #pragma once
 
+#include <map>
+#include <set>
+
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Parameters.h"
 #include "stage/StageRegistry.h"
@@ -75,9 +78,9 @@ public:
     juce::SharedResourcePointer<HeadTracking> headTracking;
 
     // Gestures (message thread). Hosts record automation only for writes inside one, and want
-    // every begin ended exactly once: a second begin, or an end without a begin, does nothing.
-    void beginGesture (const juce::String& paramId);
-    void endGesture (const juce::String& paramId);
+    // one begin and one end per parameter, spanning all owners. Each owner can open it once.
+    void beginGesture (const juce::String& paramId, const void* owner);
+    void endGesture (const juce::String& paramId, const void* owner);
     // Writes one parameter, in its real units: inside the gesture that is open on it, else as
     // a complete gesture of its own.
     void writeParam (const juce::String& paramId, float value);
@@ -90,7 +93,7 @@ public:
     LoadMeter load;
 
 private:
-    juce::StringArray gesturesOpen; // parameter ids, message thread only
+    std::map<juce::String, std::set<const void*>> gesturesOpen; // parameter ids and their owners, message thread only
 
     // The state tree is written on the message thread, but a host may save (copy it) from
     // any thread: every write and the copy hold this. Never taken on the audio thread.

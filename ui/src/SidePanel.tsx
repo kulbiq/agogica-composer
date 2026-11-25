@@ -207,8 +207,10 @@ function NumberField({
   const [draft, setDraft] = useState<string>();
   const cancelled = useRef(false);
 
+  const shownOnFocus = useRef<string | undefined>(undefined);
+
   const commit = () => {
-    const metres = cancelled.current || draft === undefined ? undefined : committedMetres(draft, room, value.toFixed(2));
+    const metres = cancelled.current || draft === undefined ? undefined : committedMetres(draft, room, shownOnFocus.current);
     if (metres !== undefined) onCommit(metres);
     // Text that isn't a number stays in the field, marked, until it is corrected or Escape.
     const notANumber = !cancelled.current && draft !== undefined && draft.trim() !== "" && typedMetres(draft) === undefined;
@@ -231,7 +233,8 @@ function NumberField({
         value={draft ?? value.toFixed(2)}
         aria-invalid={draft !== undefined && draft.trim() !== "" && typedMetres(draft) === undefined}
         onFocus={(e) => {
-          setDraft((d) => d ?? value.toFixed(2));
+          shownOnFocus.current = e.currentTarget.value;
+          setDraft(shownOnFocus.current);
           e.currentTarget.select();
         }}
         onChange={(e) => setDraft(e.target.value)}

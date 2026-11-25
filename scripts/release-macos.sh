@@ -111,7 +111,12 @@ echo "  version $VERSION  size $(stat -f %z "$ZIP")  sha256 $(cut -d' ' -f1 "$ZI
 
 if [ $PUBLISH = 1 ]; then
   # The Windows workflow may have made the release for this tag already.
-  gh release view "v$VERSION" > /dev/null 2>&1 || gh release create "v$VERSION" --title "Composer $VERSION" --generate-notes
+  if ! gh release view "v$VERSION" > /dev/null 2>&1; then
+    gh release create "v$VERSION" --title "Composer $VERSION" --generate-notes || {
+      status=$?
+      gh release view "v$VERSION" > /dev/null 2>&1 || exit "$status"
+    }
+  fi
   gh release upload "v$VERSION" "$ZIP" "$ZIP.sha256"
   echo "  attached to the GitHub release v$VERSION"
 else

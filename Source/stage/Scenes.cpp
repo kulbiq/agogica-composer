@@ -18,7 +18,11 @@ void setScene (ComposerProcessor& self, const juce::String& scene)
         for (auto* p : members)
         {
             if (p->getScene() == scene)
+            {
+                if (hasBeenThere == nullptr)
+                    hasBeenThere = p;
                 continue;
+            }
 
             p->storeScene();
 

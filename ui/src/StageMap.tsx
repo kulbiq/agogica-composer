@@ -2,7 +2,7 @@ import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react"
 import { beginGesture, useEvent, type Gesture, type Point, type Stage } from "./bridge";
 import styles from "./App.module.css";
 import type { Levels } from "./level";
-import { nodesOf, StagePainter, type NodeKey } from "./stagePainter";
+import { nodesOf, StagePainter, type NodeKey, type View } from "./stagePainter";
 
 export type { NodeKey };
 
@@ -36,7 +36,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   const overrides = useRef(new Map<NodeKey, Point>());
   const drag = useRef<{ key: NodeKey; gesture: Gesture; pointerId: number } | null>(null);
   const keyGesture = useRef<{ key: NodeKey; gesture: Gesture } | null>(null);
-  const view = useRef({ cx: 0, cy: 0, scale: 1 });
+  const view = useRef<View>({ cx: 0, cy: 0, scale: 1, drawn: new Map() });
   const levels = useRef<Levels>({});
   useEvent("levels", (l) => (levels.current = l));
   const headYaw = useRef(0); // degrees clockwise; its own event, so the stage doesn't change every frame
@@ -129,10 +129,10 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
 
   const hitTest = (e: PointerEvent): NodeKey | null => {
     const r = canvasRef.current!.getBoundingClientRect();
-    const { cx, cy, scale } = view.current;
+    const { cx, cy, scale, drawn } = view.current;
     let best: NodeKey | null = null;
     let bestDistance = hitRadius;
-    for (const [key, p] of nodesOf(stage)) {
+    for (const [key, p] of drawn) {
       const d = Math.hypot(cx + p.x * scale - (e.clientX - r.left), cy - p.y * scale - (e.clientY - r.top));
       if (d <= bestDistance) {
         best = key;

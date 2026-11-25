@@ -160,7 +160,8 @@ def main():
         parser.error("--host is needed, e.g. --host mscore")
 
     wanted = [h.lower() for h in args.host]
-    host_pids = {p.pid for p in psutil.process_iter(["name"]) if any(w in (p.info["name"] or "").lower() for w in wanted)}
+    hosts = {p.pid: p for p in psutil.process_iter(["name"]) if any(w in (p.info["name"] or "").lower() for w in wanted)}
+    host_pids = set(hosts)
     if not host_pids:
         sys.exit(f"no running process has {' or '.join(args.host)} in its name")
 
@@ -203,11 +204,21 @@ def main():
         while args.seconds is None or time.monotonic() - started < args.seconds:
             # Editors and the Tracker open and close while we watch, so the process list is read every time.
             processes = list(psutil.process_iter())
+            # A host we haven't been able to prime may still quit or have its PID reused.
+            for pid in host_pids - watched.keys():
+                if not hosts[pid].is_running():
+                    host_pids.discard(pid)
             tracker_pids = {p.pid for p in processes if is_tracker(p)}
             for process in processes:
                 if process.pid not in watched and (group := group_of(process, host_pids, tracker_pids, responsible)):
+                    try:
+                        process.cpu_percent(None)  # the first call only starts the measurement
+                    except (psutil.NoSuchProcess, psutil.ZombieProcess):
+                        host_pids.discard(process.pid)
+                        continue
+                    except psutil.AccessDenied:
+                        continue  # retry on the next pass
                     watched[process.pid] = (process, group)
-                    process.cpu_percent(None)  # the first call only starts the measurement
 
             time.sleep(args.interval)
 
@@ -215,12 +226,16 @@ def main():
             memory_now = {g: 0.0 for g in GROUPS}
             for pid, (process, group) in list(watched.items()):
                 try:
-                    cpu_now[group] += process.cpu_percent(None)
+                    if not process.is_running():
+                        raise psutil.NoSuchProcess(pid)
+                    usage = process.cpu_percent(None)
                     memory_now[group] += process.memory_info().rss / 1e6
+                    cpu_now[group] += usage
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     del watched[pid]
+                    host_pids.discard(pid)
             running = {group for _, group in watched.values()}
-            if "host" not in running:
+            if not host_pids:
                 print("the host has quit")
                 break
 

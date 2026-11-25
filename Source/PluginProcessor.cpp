@@ -35,8 +35,8 @@ ComposerProcessor::~ComposerProcessor()
     registry->remove (*this);
 
     // A track removed in the middle of someone's drag: the host still gets its ends.
-    for (const auto& paramId : juce::StringArray (gesturesOpen))
-        endGesture (paramId);
+    for (const auto& entry : std::exchange (gesturesOpen, {}))
+        state.getParameter (entry.first)->endChangeGesture();
 }
 
 juce::String ComposerProcessor::getDisplayName() const
@@ -47,20 +47,19 @@ juce::String ComposerProcessor::getDisplayName() const
     return trackName;
 }
 
-void ComposerProcessor::beginGesture (const juce::String& paramId)
+void ComposerProcessor::beginGesture (const juce::String& paramId, const void* owner)
 {
-    if (! gesturesOpen.contains (paramId))
-    {
-        gesturesOpen.add (paramId);
+    auto& owners = gesturesOpen[paramId];
+    if (owners.insert (owner).second && owners.size() == 1)
         state.getParameter (paramId)->beginChangeGesture();
-    }
 }
 
-void ComposerProcessor::endGesture (const juce::String& paramId)
+void ComposerProcessor::endGesture (const juce::String& paramId, const void* owner)
 {
-    if (gesturesOpen.contains (paramId))
+    const auto it = gesturesOpen.find (paramId);
+    if (it != gesturesOpen.end() && it->second.erase (owner) != 0 && it->second.empty())
     {
-        gesturesOpen.removeString (paramId);
+        gesturesOpen.erase (it);
         state.getParameter (paramId)->endChangeGesture();
     }
 }

@@ -103,6 +103,42 @@ TEST_CASE ("gestures reach the host balanced, whatever the page and the stage do
         CHECK_THAT (b.getParam ("listenerX"), WithinAbs (2.0, 1e-4));
     }
 
+    SECTION ("two windows share one host gesture until both have ended")
+    {
+        stage::OpenGestures first, second;
+        first.applyEdit (a, edit ("begin", a.id, "listenerX"));
+        first.applyEdit (a, edit ("begin", b.id, "listenerX")); // same shared parameter
+        second.applyEdit (b, edit ("end", b.id, "listenerX")); // no ownership yet
+        REQUIRE (hostOfA.open.size() == 1);
+        second.applyEdit (b, edit ("begin", b.id, "listenerX"));
+
+        first.endAll (a);
+        REQUIRE (hostOfA.open.size() == 1);
+        REQUIRE (hostOfB.open.size() == 1);
+        second.applyEdit (b, edit ("change", b.id, "listenerX", 2.0f));
+        CHECK_THAT (a.getParam ("listenerX"), WithinAbs (2.0, 1e-4));
+        second.applyEdit (b, edit ("end", b.id, "listenerX"));
+    }
+
+    SECTION ("invalid begins and ends do not change the window ledger")
+    {
+        stage::OpenGestures window;
+        const auto malformed = [&] (const char* phase)
+        {
+            auto e = edit (phase, 0, "listenerX");
+            e.getDynamicObject()->removeProperty ("target");
+            window.applyEdit (a, e);
+        };
+
+        malformed ("begin");
+        CHECK (hostOfA.open.isEmpty());
+        window.applyEdit (a, edit ("begin", 0, "listenerX"));
+        REQUIRE (hostOfA.open.size() == 1);
+        malformed ("end");
+        CHECK (hostOfA.open.size() == 1);
+        window.endAll (a);
+    }
+
     CHECK (hostOfA.balanced());
     CHECK (hostOfB.balanced());
 }
@@ -348,6 +384,24 @@ TEST_CASE ("a track added in a later scene shares the room and listener of every
     stage::setScene (a, "B");
     CHECK_THAT (late.getParam ("roomSize"), WithinAbs (40.0, 1e-4));
     CHECK_THAT (late.getParam ("listenerX"), WithinAbs (-3.0, 1e-4));
+}
+
+TEST_CASE ("an active member can supply the room and listener for a scene", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor donor, newcomer;
+    donor.setActiveScene ("B");
+    donor.writeParam ("roomSize", 35.0f);
+    donor.writeParam ("listenerX", -3.0f);
+    newcomer.writeParam ("playerX", 4.0f);
+
+    stage::setScene (newcomer, "B");
+
+    CHECK (newcomer.getScene() == "B");
+    CHECK (donor.getStoredScenes().isEmpty());
+    CHECK_THAT (newcomer.getParam ("roomSize"), WithinAbs (35.0, 1e-4));
+    CHECK_THAT (newcomer.getParam ("listenerX"), WithinAbs (-3.0, 1e-4));
+    CHECK_THAT (newcomer.getParam ("playerX"), WithinAbs (4.0, 1e-4));
 }
 
 TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room is per scene", "[integration]")

@@ -4,8 +4,8 @@ import { levelOf, type Levels } from "./level";
 
 export type NodeKey = "listener" | number;
 
-// Where the room sits on the canvas: its centre in CSS pixels, and pixels per metre.
-export type View = { cx: number; cy: number; scale: number };
+// Where the room sits in CSS pixels, and where its markers were drawn in metres.
+export type View = { cx: number; cy: number; scale: number; drawn: ReadonlyMap<NodeKey, Point> };
 
 export type MapFrame = {
   width: number; // CSS pixels
@@ -178,7 +178,7 @@ export class StagePainter {
     ctx.fill();
     ctx.restore();
 
-    for (const player of stage.players) {
+    for (const player of byPriority) {
       const p = drawn.get(player.id)!;
       ctx.beginPath();
       ctx.arc(sx(p.x), sy(p.y), 6, 0, Math.PI * 2);
@@ -196,7 +196,7 @@ export class StagePainter {
       }
     }
 
-    return { cx, cy, scale };
+    return { cx, cy, scale, drawn };
   }
 
   // Copies the map's text from `copy`, drawing it there first if any of it changed.

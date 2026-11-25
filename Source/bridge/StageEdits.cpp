@@ -1,71 +1,89 @@
 #include "StageEdits.h"
 
+#include <limits>
+#include <optional>
+
 namespace stage
 {
 namespace
 {
-void apply (ComposerProcessor& p, const juce::String& phase, const juce::String& paramId, float value)
-{
-    if (phase == "begin")
-        p.beginGesture (paramId);
-    else if (phase == "change")
-        p.writeParam (paramId, value);
-    else if (phase == "end")
-        p.endGesture (paramId);
-}
-} // namespace
+enum class Phase { begin, change, end };
 
-void applyEdit (ComposerProcessor& self, const juce::var& edit)
+struct Edit
 {
-    // The page is the other side of a trust boundary: anything but a whole, well-formed edit
-    // is dropped. (A missing target would read as 0, the first track; a NaN arrives as null.)
+    Phase phase;
+    juce::String paramId;
+    int target;
+    float value;
+};
+
+std::optional<Edit> validateEdit (const juce::var& edit)
+{
+    // The page is the other side of a trust boundary. A missing target would read as 0,
+    // the first track; a NaN arrives as null.
     const auto isNumber = [] (const juce::var& v) { return (v.isInt() || v.isInt64() || v.isDouble()) && std::isfinite ((double) v); };
-    const auto paramId = edit["param"].toString();
     const auto phase = edit["phase"].toString();
+    const auto& target = edit["target"];
+    const auto& value = edit["value"];
+    if (! (phase == "begin" || phase == "change" || phase == "end")
+        || ! isNumber (target) || (double) target < std::numeric_limits<int>::min()
+        || (double) target > std::numeric_limits<int>::max()
+        || (phase == "change" && (! isNumber (value) || std::abs ((double) value) > std::numeric_limits<float>::max())))
+        return std::nullopt;
 
-    if (! (phase == "begin" || phase == "change" || phase == "end") || ! isNumber (edit["target"])
-        || (phase == "change" && ! isNumber (edit["value"])))
-        return;
+    return Edit { phase == "begin" ? Phase::begin : phase == "change" ? Phase::change : Phase::end,
+                  edit["param"].toString(), (int) target, phase == "change" ? (float) value : 0.0f };
+}
 
-    const auto value = (float) edit["value"];
-    const auto target = (int) edit["target"];
-
+void dispatch (ComposerProcessor& self, const Edit& edit, const void* owner)
+{
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
         for (auto* p : members)
         {
-            if (params::ofStage.contains (paramId) || (params::ofPlayer.contains (paramId) && p->id == target))
+            if (params::ofStage.contains (edit.paramId) || (params::ofPlayer.contains (edit.paramId) && p->id == edit.target))
             {
-                apply (*p, phase, paramId, value);
+                switch (edit.phase)
+                {
+                    case Phase::begin:  p->beginGesture (edit.paramId, owner); break;
+                    case Phase::change: p->writeParam (edit.paramId, edit.value); break;
+                    case Phase::end:    p->endGesture (edit.paramId, owner); break;
+                }
                 p->markPlaced();
             }
         }
     });
 }
+} // namespace
+
+void applyEdit (ComposerProcessor& self, const juce::var& edit)
+{
+    if (const auto validated = validateEdit (edit))
+        dispatch (self, *validated, &self);
+}
 
 void OpenGestures::applyEdit (ComposerProcessor& self, const juce::var& edit)
 {
-    const Begun gesture { (int) edit["target"], edit["param"].toString() };
+    const auto validated = validateEdit (edit);
+    if (! validated)
+        return;
+
+    // A stage parameter has the same recipients regardless of the target in the message.
+    const Begun gesture { params::ofStage.contains (validated->paramId) ? 0 : validated->target, validated->paramId };
     const auto same = [&] (const Begun& other) { return other.target == gesture.target && other.paramId == gesture.paramId; };
 
-    if (edit["phase"] == "begin" && std::none_of (begun.begin(), begun.end(), same))
+    if (validated->phase == Phase::begin && std::none_of (begun.begin(), begun.end(), same))
         begun.push_back (gesture);
-    else if (edit["phase"] == "end")
+    else if (validated->phase == Phase::end)
         std::erase_if (begun, same);
 
-    stage::applyEdit (self, edit);
+    dispatch (self, *validated, this);
 }
 
 void OpenGestures::endAll (ComposerProcessor& self)
 {
     for (const auto& gesture : std::exchange (begun, {}))
-    {
-        auto end = std::make_unique<juce::DynamicObject>();
-        end->setProperty ("phase", "end");
-        end->setProperty ("target", gesture.target);
-        end->setProperty ("param", gesture.paramId);
-        stage::applyEdit (self, end.release());
-    }
+        dispatch (self, Edit { Phase::end, gesture.paramId, gesture.target, 0.0f }, this);
 }
 
 void setName (ComposerProcessor& self, int id, const juce::String& name)

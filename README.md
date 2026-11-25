@@ -50,7 +50,7 @@ After rebuilding, quit the DAW completely (Dorico's audio engine keeps the old p
 ## Licences to resolve before a release
 - **HFHPE** (the tracker's head-pose model; code MIT): its weights carry no stated licence, so the author must confirm the terms before the tracker ships (`tracker/models/MODELS.md`).
 - The YOLOX head detector and the SADIE II HRTFs are Apache-2.0 (attribution shown in the UI).
-- Composer is free and open source under AGPLv3 (JUCE's open-source licence); all dependencies are compatible with it.
+- Composer is free and open source under AGPLv3 (JUCE's open-source licence). The dependencies are compatible with AGPLv3, excluding the HFHPE weights, whose licence terms remain unconfirmed.
 
 ## Roadmap
 
