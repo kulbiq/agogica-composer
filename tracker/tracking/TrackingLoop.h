@@ -1,14 +1,14 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
-#include "../engines/StillGate.h"
+#include "../vision/StillHeadGate.h"
 #include "CameraFeed.h"
 #include "TrackingReports.h"
 
-namespace engines { class HeadPoseEstimator; }
-
 namespace tracker
 {
+class HeadPoseEstimator;
+
 // Head tracking, on its own thread: takes the camera's latest frame, finds the head in it
 // (HeadPoseEstimator, or the last observation again while the head is still) and passes its
 // orientation on; reports what it did. Starts when constructed, stops when destroyed.
@@ -49,8 +49,8 @@ private:
     std::atomic<bool> cameraPreviewEnabled { false };
 
     // Tracking thread only.
-    std::unique_ptr<engines::HeadPoseEstimator> estimator;
-    engines::StillGate stillHead;
+    std::unique_ptr<HeadPoseEstimator> estimator;
+    StillHeadGate stillHead;
     std::optional<HeadObservation> lastHead;
     std::optional<TrackerStatus> status;
     double lastPreviewSeconds = 0;

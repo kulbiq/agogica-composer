@@ -158,7 +158,8 @@ FetchContent_MakeAvailable(Catch2)
 
 # Tests link the plugin's shared code (which already contains the JUCE modules)
 # and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp tests/LicenseTests.cpp tests/AppsTests.cpp)
+add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp tests/LicenseTests.cpp tests/AppsTests.cpp
+    tracker/vision/ImageTensor.cpp) # the tracker's pure code, tested here (the app itself needs ONNX Runtime)
 target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
 target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
 target_compile_definitions(ComposerTests PRIVATE COMPOSER_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
@@ -173,7 +174,6 @@ catch_discover_tests(ComposerTests TEST_SPEC "[slow]" PROPERTIES LABELS slow)
 # --- Agogica Tracker (head tracking companion app) ---------------------------
 # macOS: an app bundle. Windows (Hub plan phase 7b): a folder with the exe, onnxruntime.dll,
 # ui\ and models\ next to each other.
-option(COMPOSER_TRACKER_DIRECTML "Windows, development: the Tracker runs its models on the GPU through DirectML" OFF)
 if(APPLE OR WIN32)
     # ONNX Runtime (MIT) for the tracker's head-pose models; never linked into the plugin.
     # ponytail: arm64 only - 1.30 ships no universal macOS build; Intel Macs need a source build.
@@ -183,18 +183,6 @@ if(APPLE OR WIN32)
             URL https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-osx-arm64-1.30.0.tgz
             URL_HASH SHA256=6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
             DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-    elseif(COMPOSER_TRACKER_DIRECTML)
-        # Development, to measure the GPU (Hub plan 7b): ONNX Runtime's last DirectML build
-        # (1.24.4; Microsoft ships none after it) and DirectML itself, as NuGet packages.
-        FetchContent_Declare(onnxruntime
-            URL https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/1.24.4/microsoft.ml.onnxruntime.directml.1.24.4.nupkg
-            URL_HASH SHA256=57e9f11b73437bef7a309496135d4c1f96b1a8e9ddba60013fa27bfc1d788681
-            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-        FetchContent_Declare(directml
-            URL https://api.nuget.org/v3-flatcontainer/microsoft.ai.directml/1.15.4/microsoft.ai.directml.1.15.4.nupkg
-            URL_HASH SHA256=4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9
-            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-        FetchContent_MakeAvailable(directml)
     else()
         FetchContent_Declare(onnxruntime
             URL https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-x64-1.30.0.zip
@@ -202,15 +190,8 @@ if(APPLE OR WIN32)
             DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
     endif()
     FetchContent_MakeAvailable(onnxruntime)
-    # The two archives differ: the release zip has include/ and lib/, the NuGet package
-    # build/native/include and runtimes/win-x64/native.
-    if(WIN32 AND COMPOSER_TRACKER_DIRECTML)
-        set(ONNXRUNTIME_INCLUDE ${onnxruntime_SOURCE_DIR}/build/native/include)
-        set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/runtimes/win-x64/native)
-    else()
-        set(ONNXRUNTIME_INCLUDE ${onnxruntime_SOURCE_DIR}/include)
-        set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/lib)
-    endif()
+    set(ONNXRUNTIME_INCLUDE ${onnxruntime_SOURCE_DIR}/include)
+    set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/lib)
 
     juce_add_gui_app(ComposerTracker
         COMPANY_NAME Agogica
@@ -230,8 +211,10 @@ if(APPLE OR WIN32)
         tracker/tracking/CameraFeed.cpp
         tracker/tracking/ProcessCpu.cpp
         tracker/tracking/TrackingLoop.cpp
-        tracker/engines/Engines.cpp
-        tracker/engines/Onnx.cpp
+        tracker/vision/HeadDetector.cpp
+        tracker/vision/HeadPoseEstimator.cpp
+        tracker/vision/ImageTensor.cpp
+        tracker/vision/OnnxModel.cpp
         Source/stage/HeadTrackingFile.cpp)
     target_include_directories(ComposerTracker SYSTEM PRIVATE ${ONNXRUNTIME_INCLUDE}) # third-party warnings off
     if(APPLE)
@@ -242,7 +225,6 @@ if(APPLE OR WIN32)
         target_link_libraries(ComposerTracker PRIVATE ${ONNXRUNTIME_LIB}/onnxruntime.lib)
     endif()
     target_compile_definitions(ComposerTracker PRIVATE
-        $<$<BOOL:${COMPOSER_TRACKER_DIRECTML}>:COMPOSER_TRACKER_DIRECTML=1>
         JUCE_USE_CAMERA=1
         JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0
@@ -340,9 +322,6 @@ if(APPLE OR WIN32)
         # ponytail: runs from the build folder; the install folder (%LOCALAPPDATA%\Programs\Agogica
         # Tracker) and Composer's startTracker come with phase 7b proper.
         set(TRACKER_DLLS ${ONNXRUNTIME_LIB}/onnxruntime.dll ${ONNXRUNTIME_LIB}/onnxruntime_providers_shared.dll)
-        if(COMPOSER_TRACKER_DIRECTML)
-            list(APPEND TRACKER_DLLS ${directml_SOURCE_DIR}/bin/x64-win/DirectML.dll)
-        endif()
         add_custom_command(TARGET ComposerTracker POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy ${TRACKER_DLLS} "$<TARGET_FILE_DIR:ComposerTracker>"
             VERBATIM)

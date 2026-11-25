@@ -1,6 +1,6 @@
 #include "TrackingLoop.h"
 #include "../../Source/stage/HeadTrackingFile.h"
-#include "../engines/Engines.h"
+#include "../vision/HeadPoseEstimator.h"
 #include "ProcessCpu.h"
 
 namespace tracker
@@ -141,7 +141,7 @@ bool TrackingLoop::loadEstimator()
     setStatus ({ TrackerPhase::loadingModels, {} });
     try
     {
-        estimator = std::make_unique<engines::HeadPoseEstimator> (modelsFolder);
+        estimator = std::make_unique<HeadPoseEstimator> (modelsFolder);
         return true;
     }
     catch (const std::exception& e)

@@ -34,7 +34,7 @@ struct FrameReport
     std::optional<HeadObservation> head;  // as the camera sees it; nothing = no head in the frame
     ListenerPose::Reading heard;          // what Composer hears after this frame
     bool reusedStillHead = false;         // the head hadn't moved: the last observation again, the models didn't run
-    float changeSinceLastEstimate = 0;    // StillGate's measure for this frame
+    float changeSinceLastEstimate = 0;    // StillHeadGate's measure for this frame
     juce::String warning;                 // the models failed on this frame
 };
 

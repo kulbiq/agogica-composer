@@ -1,80 +1,71 @@
-#include "Engines.h"
-#include "Onnx.h"
+#include "HeadPoseEstimator.h"
+#include "ImageTensor.h"
 
-namespace engines
+namespace tracker
 {
 namespace
 {
 using Clock = std::chrono::steady_clock;
-float msSince (Clock::time_point t) { return std::chrono::duration<float, std::milli> (Clock::now() - t).count(); }
+float msSince (Clock::time_point start) { return std::chrono::duration<float, std::milli> (Clock::now() - start).count(); }
 
-constexpr std::array<float, 3> zero { 0, 0, 0 }, one { 1, 1, 1 };
+constexpr size_t anglesOutput = 0, kappaOutput = 1; // the pose model's two outputs
+constexpr size_t angleValues = 6;                   // cos, sin of yaw, pitch, roll
+constexpr float minimumHeadSidePixels = 1.0f;
 
-juce::Rectangle<float> normalised (const Box& b, const juce::Image& frame)
+juce::Rectangle<float> normalised (const Box& box, const juce::Image& frame)
 {
-    return { b.x1 / (float) frame.getWidth(), b.y1 / (float) frame.getHeight(),
-             (b.x2 - b.x1) / (float) frame.getWidth(), (b.y2 - b.y1) / (float) frame.getHeight() };
+    const auto width = (float) frame.getWidth(), height = (float) frame.getHeight();
+    return { box.x1 / width, box.y1 / height, (box.x2 - box.x1) / width, (box.y2 - box.y1) / height };
 }
 
+// The output's values, after checking it holds at least `count` of them.
+const float* valuesOf (const std::vector<Ort::Value>& outputs, size_t index, size_t count)
+{
+    if (index >= outputs.size() || outputs[index].GetTensorTypeAndShapeInfo().GetElementCount() < count)
+        throw std::runtime_error ("unexpected head pose output");
+    return outputs[index].GetTensorData<float>();
+}
+
+bool allFinite (const float* values, size_t count)
+{
+    return std::all_of (values, values + count, [] (float v) { return std::isfinite (v); });
+}
 } // namespace
 
-HeadDetector::HeadDetector (const juce::File& dir) : model (dir.getChildFile ("yolox_n_body_head_hand_192x320.onnx")) {}
-
-std::optional<Box> HeadDetector::find (const juce::Image& frame, float& ms)
-{
-    const auto start = Clock::now();
-    constexpr int w = 320, h = 192;
-    input.resize (3 * w * h);
-    toTensor (frame, frame.getBounds().toFloat(), w, h, ColourOrder::bgr, 1.0f, zero, one, input.data());
-
-    const auto outputs = model.run (input, { 1, 3, h, w });
-    const auto shape = outputs[0].GetTensorTypeAndShapeInfo().GetShape();
-    if (shape.size() != 2 || shape[1] != 7)
-        throw std::runtime_error ("unexpected head detector output");
-    const auto count = shape[0];
-    const auto* rows = outputs[0].GetTensorData<float>();
-
-    std::vector<Detection> heads;
-    const auto kx = (float) frame.getWidth() / w, ky = (float) frame.getHeight() / h;
-    for (int64_t i = 0; i < count; ++i)
-    {
-        const auto* r = rows + i * 7;
-        if ((int) r[1] == 1 && r[2] >= 0.35f)
-            heads.push_back ({ { r[3] * kx, r[4] * ky, r[5] * kx, r[6] * ky }, r[2] });
-    }
-
-    ms = msSince (start);
-    const auto head = pickHead (heads, previous);
-    previous = head ? std::optional<Box> (head->box) : std::nullopt;
-    return previous;
-}
-
-HeadPoseEstimator::HeadPoseEstimator (const juce::File& dir)
-    : heads (dir), model (dir.getChildFile ("hfhpe_vitt_ypr_kappa_1x3x128x128.onnx"))
+HeadPoseEstimator::HeadPoseEstimator (const juce::File& modelsFolder)
+    : headDetector (modelsFolder), poseModel (modelsFolder.getChildFile ("hfhpe_vitt_ypr_kappa_1x3x128x128.onnx"))
 {
 }
 
-std::optional<tracker::HeadObservation> HeadPoseEstimator::estimate (const juce::Image& frame)
+std::optional<HeadObservation> HeadPoseEstimator::estimate (const juce::Image& frame)
 {
-    tracker::HeadObservation observation;
-    const auto head = heads.find (frame, observation.detectMs);
-    if (! head || ! (head->x2 - head->x1 >= 1.0f && head->y2 - head->y1 >= 1.0f)) // NaN included
+    HeadObservation observation;
+
+    const auto detectStart = Clock::now();
+    const auto head = headDetector.find (frame);
+    observation.detectMs = msSince (detectStart);
+
+    // Written so that a box with NaN in it also counts as no head.
+    const bool isHeadUsable = head && head->x2 - head->x1 >= minimumHeadSidePixels && head->y2 - head->y1 >= minimumHeadSidePixels;
+    if (! isHeadUsable)
         return std::nullopt;
 
-    const auto start = Clock::now();
-    input.resize (3 * inputSize * inputSize);
-    squareTensor (frame, hfhpeCrop (*head), inputSize, input.data());
-    const auto outputs = model.run (input, { 1, 3, inputSize, inputSize });
-    const auto* cosSin = outputs[0].GetTensorData<float>(); // cos/sin of yaw, pitch, roll
-    const auto* kappa = outputs[1].GetTensorData<float>();
-    for (int i = 0; i < 6; ++i)
-        if (! std::isfinite (cosSin[i]))
-            return std::nullopt;
+    const auto poseStart = Clock::now();
+    input.resize ((size_t) 3 * inputSize * inputSize);
+    headCropToTensor (frame, squareCropAroundHead (*head), inputSize, input.data());
+    const auto outputs = poseModel.run (input, { 1, 3, inputSize, inputSize });
+    observation.poseMs = msSince (poseStart);
 
-    observation.orientation = { angleOf (cosSin[0], cosSin[1]), angleOf (cosSin[2], cosSin[3]), angleOf (cosSin[4], cosSin[5]) };
-    observation.confidence = kappaConfidence (kappa[0]);
+    const auto* cosSin = valuesOf (outputs, anglesOutput, angleValues);
+    const auto* kappa = valuesOf (outputs, kappaOutput, 1);
+    if (! allFinite (cosSin, angleValues) || ! std::isfinite (kappa[0]))
+        return std::nullopt;
+
+    observation.orientation = { angleFromCosSinDegrees (cosSin[0], cosSin[1]),
+                                angleFromCosSinDegrees (cosSin[2], cosSin[3]),
+                                angleFromCosSinDegrees (cosSin[4], cosSin[5]) };
+    observation.confidence = confidenceFromKappa (kappa[0]); // the yaw's
     observation.headBoxNormalised = normalised (*head, frame);
-    observation.poseMs = msSince (start);
     return observation;
 }
-} // namespace engines
+} // namespace tracker
