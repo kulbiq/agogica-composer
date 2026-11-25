@@ -4,7 +4,7 @@ sweeping the head slowly left and right (or holding one angle).
     python3 tools/fake_tracker.py            # sweep ±60° every 10 s
     python3 tools/fake_tracker.py --yaw 90   # hold the head turned right
 
-Protocol: Source/stage/HeadTracking.h (64 bytes, seqlock, yaw clockwise = head turned right).
+Protocol: Source/stage/HeadTrackingFile.h (64 bytes, seqlock, yaw clockwise = head turned right).
 The file is created once at its final size by an atomic rename and then only written in place.
 """
 

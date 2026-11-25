@@ -5,14 +5,18 @@
 #include <algorithm>
 
 // The player's mono input, written by the processor up to `maxBlock` samples at a time before
-// the stages process those samples as one block. Every stage reads it at any (fractional)
-// delay - there is no read pointer, so stages don't depend on each other or on their order.
+// those samples are processed as one block. It is read at any (fractional) delay: there is no
+// read pointer, so several readers wouldn't depend on each other or on their order.
 class History
 {
 public:
     // The most samples written at once (a block fits the L1 cache, and one HRIR coefficient
     // serves every output of it).
     static constexpr int maxBlock = 32;
+
+    // The longest delay anyone asks for: the longest direct path (opposite corners of the
+    // largest room, 70.7 m: 0.21 s), with margin.
+    static constexpr double maxDelaySeconds = 0.5;
 
     // Allocates. Not on the audio thread.
     void prepare (int maxDelaySamples)
@@ -24,6 +28,9 @@ public:
         buffer.assign ((size_t) size, 0.0f);
         pos = 0;
     }
+
+    // Silence, as if nothing had been written yet. Doesn't allocate.
+    void clear() noexcept { std::fill (buffer.begin(), buffer.end(), 0.0f); }
 
     // Reads within a block reach up to maxBlock - 1 samples further back than their delay.
     int maxDelay() const noexcept { return size - 8 - maxBlock; }
@@ -65,9 +72,6 @@ public:
         return tap.weights[0] * at (base) + tap.weights[1] * at (base + 1)
              + tap.weights[2] * at (base + 2) + tap.weights[3] * at (base + 3);
     }
-
-    // The sample written `delay` samples before the newest one (0 = newest), interpolated.
-    float readAt (float delay) const noexcept { return read (tapAt (delay)); }
 
 private:
     float at (int age) const noexcept { return buffer[(size_t) ((pos - age) & (size - 1))]; }

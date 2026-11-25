@@ -1,7 +1,7 @@
 #pragma once
 
 #include <juce_audio_basics/juce_audio_basics.h>
-#include "Acoustics.h"
+#include "OutputMode.h"
 #include "Fir.h"
 #include "History.h"
 #include "Hrtf.h"
@@ -34,7 +34,10 @@ public:
     // Azimuth in degrees (0 = ahead, +90 = right, ±180 = behind). Stereo folds rear
     // angles to the front; binaural doesn't. `snap` jumps without a fade.
     void setDirection (float azimuthDegrees, bool snap) noexcept;
-    void setMode (OutputMode) noexcept;
+    void setMode (OutputMode, bool snap = false) noexcept;
+
+    // Forgets the sound heard so far (the HRIR's input). Doesn't allocate.
+    void clear() noexcept;
 
     // Adds the placed block (n <= History::maxBlock) to `left` / `right`.
     void process (const float* in, float* left, float* right, int n) noexcept;

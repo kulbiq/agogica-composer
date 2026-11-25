@@ -8,7 +8,7 @@
 
 // Per process: polls the file every 10 ms while some Composer instance is in Binaural
 // (checked on the registry every tick; otherwise it idles at 2 Hz),
-// and gives the audio threads a smoothed yaw. Data older than 0.5 s or no face: not live,
+// and gives the audio threads the yaw. Data older than 0.5 s or no face: not live,
 // and the yaw eases back to straight ahead.
 class HeadTracking : private juce::Timer
 {
@@ -21,10 +21,6 @@ public:
 
     // One poll (the timer calls this; tests too, having no message loop).
     void pollNow();
-
-    // Starts the per-user install of the Agogica Tracker app (~/Applications) if there is one;
-    // false otherwise (the editor then asks LaunchServices, without waiting on the message thread).
-    static bool startInstalledTracker();
 
 private:
     void timerCallback() override;

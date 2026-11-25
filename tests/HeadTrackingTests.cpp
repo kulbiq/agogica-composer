@@ -82,7 +82,7 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         {
             juce::MemoryMappedFile map (file, juce::MemoryMappedFile::readWrite, false);
             REQUIRE (map.getData() != nullptr);
-            auto* sequence = static_cast<std::uint32_t*> (map.getData()) + 2; // offset 8
+            auto* sequence = reinterpret_cast<std::uint32_t*> (static_cast<char*> (map.getData()) + offsetof (Record, sequence));
             *sequence |= 1u;
         }
 
@@ -94,18 +94,36 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         CHECK_THAT (read->yaw, WithinAbs (20.0, 0.0));
     }
 
+    SECTION ("a read that meets a write in progress keeps the pose it had")
+    {
+        const auto file = tempFile ("busy");
+        Writer writer (file);
+        writer.write (pose (30.0f));
+        Reader reader (file);
+        REQUIRE (reader.read().has_value());
+
+        {
+            juce::MemoryMappedFile map (file, juce::MemoryMappedFile::readWrite);
+            auto* sequence = reinterpret_cast<std::uint32_t*> (static_cast<char*> (map.getData()) + offsetof (Record, sequence));
+            *sequence |= 1u; // as if the writer were between its two stores
+        }
+
+        const auto kept = reader.read();
+        REQUIRE (kept.has_value());
+        CHECK_THAT (kept->yaw, WithinAbs (30.0, 1e-4));
+    }
+
     SECTION ("the file is looked at only every so often (not on every 10 ms poll)")
     {
         const auto file = tempFile ("throttled");
         Reader reader (file, 50);
-        CHECK_FALSE (reader.read().has_value()); // missing: looked at now
+        CHECK_FALSE (reader.read (1000).has_value()); // missing: looked at now
 
         Writer writer (file);
         writer.write (pose (7.0f));
-        CHECK_FALSE (reader.read().has_value()); // not looked at again yet
+        CHECK_FALSE (reader.read (1049).has_value()); // not looked at again yet
 
-        juce::Thread::sleep (60);
-        const auto read = reader.read();
+        const auto read = reader.read (1050);
         REQUIRE (read.has_value());
         CHECK_THAT (read->yaw, WithinAbs (7.0, 0.0));
     }
@@ -166,7 +184,7 @@ TEST_CASE ("turning the head rotates the scene (binaural)")
     auto render = [] (geometry::Point player, float headYaw)
     {
         History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * 48000.0));
         DirectPath path;
         path.prepare (48000.0);
 
@@ -243,7 +261,7 @@ TEST_CASE ("head yaw: any angle is the same direction modulo 360 degrees")
     auto render = [] (float headYaw)
     {
         History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * 48000.0));
         DirectPath path;
         path.prepare (48000.0);
 
@@ -360,6 +378,15 @@ TEST_CASE ("head tracking: stale or faceless data is not live, the scene eases b
 
     SECTION ("no face: the listener left")
     {
+        writer.write (pose (60.0f, false));
+    }
+
+    SECTION ("a yaw that isn't a number")
+    {
+        writer.write (pose (std::numeric_limits<float>::quiet_NaN()));
+        tracking.pollNow();
+        CHECK_FALSE (tracking.isLive());
+        CHECK (std::isfinite (tracking.yaw()));
         writer.write (pose (60.0f, false));
     }
 

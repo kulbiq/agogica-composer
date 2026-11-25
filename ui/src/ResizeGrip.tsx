@@ -1,7 +1,5 @@
 import { useRef, type PointerEvent } from "react";
-import { getNativeFunction } from "@juce-framework/webview";
-
-const setEditorSize = getNativeFunction("setEditorSize");
+import { setEditorSize } from "./bridge";
 
 // Bottom-right resize handle. Hosts that don't resize plugin windows themselves
 // (e.g. Ableton Live) rely on it; C++ applies the editor's size limits.

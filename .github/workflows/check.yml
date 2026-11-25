@@ -1,8 +1,9 @@
 # Pull request and branch checks: the fast test set (`ctest --preset debug -LE slow`; everything
 # nightly) and pluginval, built the way a developer builds it, on macOS and on Windows. The
-# Tracker (onnxruntime, 125 MB of models) is not built. The Windows job also uploads the Debug VST3 (it accepts licences from a
-# local dev site) for trying on a Windows machine.
-# No secrets, no signing: releases are built from the owner's Mac (scripts/release-macos.sh).
+# Tracker is compiled and linked on both, without its models (it can't track here; its pure
+# code is in the test set). The Windows job also uploads the Debug VST3 for trying on a Windows
+# machine.
+# No secrets, no signing: the macOS release is signed on a Mac (scripts/release-macos.sh).
 name: Check
 
 on:
@@ -10,7 +11,7 @@ on:
     branches: [master]
   pull_request:
   schedule:
-    - cron: "0 3 * * *" # nightly: the [slow] tests too (fuzz, silence skip, recorded tracker sessions)
+    - cron: "0 3 * * *" # nightly: the [slow] tests too (fuzz, silence skip)
 
 concurrency:
   group: check-${{ github.ref }}-${{ github.event_name }} # a push never cancels the nightly run
@@ -34,16 +35,16 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: build/debug/_deps
-          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'tracker/CMakeLists.txt') }}
       # JUCE links WebView2 statically on Windows and looks for the NuGet package.
       - if: runner.os == 'Windows'
         run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
-      - run: cmake --preset debug
+      - run: cmake --preset debug -DCOMPOSER_TRACKER_SKIP_MODELS=ON
       - run: cmake --build --preset debug --target ComposerTests
       - run: ctest --preset debug ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
-      # pluginval (strictness 10), as CLAUDE.md asks. CI has no licence for its machine, so the
-      # plugin passes audio through here: this covers loading, state, parameters, bus layouts and
-      # threading; the DSP is covered by ctest. Run scripts/pluginval.sh locally (licensed) too.
+      # The Tracker has no other check on Windows: the owner builds on a Mac.
+      - run: cmake --build --preset debug --target ComposerTracker
+      # pluginval (strictness 10): loading, state, parameters, bus layouts, threading and the DSP.
       - if: runner.os == 'macOS'
         run: cmake --build --preset debug --target Composer_VST3 Composer_AU && scripts/pluginval.sh
       - if: runner.os == 'Windows'

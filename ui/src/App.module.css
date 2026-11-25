@@ -298,6 +298,12 @@ button.status:focus-visible {
   transition: border-color 0.2s;
 }
 
+/* Text that isn't a number: the dashed "not yet" outline until it is corrected. */
+.input[aria-invalid="true"] {
+  border-style: dashed;
+  border-color: var(--ink);
+}
+
 .input:focus {
   border-color: var(--ink);
 }
@@ -558,6 +564,7 @@ button.status:focus-visible {
   background: var(--ink);
   transform: scaleX(var(--level));
   transform-origin: left;
+  will-change: transform; /* its own layer: 30 changes a second must not repaint the panel */
 }
 
 .grip {
@@ -580,9 +587,4 @@ button.status:focus-visible {
 
 .grip:hover path {
   stroke: var(--ink-lighter);
-}
-
-.licenceActions {
-  display: flex;
-  gap: 10px;
 }

@@ -1,5 +1,6 @@
 #include "Placer.h"
 #include "DspUtil.h"
+#include "Geometry.h"
 
 namespace
 {
@@ -16,9 +17,7 @@ void Placer::prepare (double sampleRate)
     convolve = dsp::bestConvolveTwo();
 
     window.assign ((size_t) (taps + spareWindow), 0.0f);
-    end = taps - 1; // silence before the first sample
-    filled = taps;
-    live = true;
+    clear();
     blended.assign ((size_t) taps * 2, 0.0f);
 
     pan.reset (sampleRate, 0.02);
@@ -29,11 +28,19 @@ void Placer::prepare (double sampleRate)
     lastPan = 2.0f;
 }
 
+void Placer::clear() noexcept
+{
+    std::fill (window.begin(), window.end(), 0.0f);
+    end = taps - 1; // silence before the first sample
+    filled = taps;
+    live = true;
+}
+
 void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
 {
     // Callers subtract the head's yaw, so any angle can arrive; the stereo fold needs -180..180.
     azimuthDegrees = std::remainder (azimuthDegrees, 360.0f);
-    const auto newPan = juce::jlimit (-1.0f, 1.0f, geometry::foldedAzimuth (azimuthDegrees) / 90.0f);
+    const auto newPan = geometry::pan (azimuthDegrees);
 
     // Hysteresis: keep the current HRIR until the angle is clearly nearer another one.
     if (const auto off = std::abs (std::remainder (azimuthDegrees - (float) targetDirection, 360.0f));
@@ -52,10 +59,17 @@ void Placer::setDirection (float azimuthDegrees, bool snap) noexcept
     pan.setTargetValue (newPan);
 }
 
-void Placer::setMode (OutputMode newMode) noexcept
+void Placer::setMode (OutputMode newMode, bool snap) noexcept
 {
     if (newMode == mode)
         return;
+
+    if (snap)
+    {
+        mode = newMode;
+        modeFade = 1.0f;
+        return;
+    }
 
     // Switching back mid-fade starts from where the fade has got to.
     fadingFrom = mode;

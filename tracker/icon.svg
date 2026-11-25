@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- Agogica Tracker app icon: the Agogica Hub tile and ictus ring (agogica-platform
-       desktop/src-tauri/app-icon.svg), with the app's own dial inside - the "front" tick and
+  <!-- Agogica Tracker app icon: the Agogica tile and ictus ring, with the app's own dial inside - the "front" tick and
        the head's heading, turned a little - instead of the point of strike. Ink only: the
        accent is kept for the live pulse. -->
   <rect x="100" y="100" width="824" height="824" rx="185" fill="#0f172a" />

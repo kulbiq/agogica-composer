@@ -2,6 +2,8 @@
 // Inside the plugin, JUCE injects window.__JUCE__ before any script runs, so this stays inert.
 // Must be imported before anything that imports @juce-framework/webview.
 
+import { GestureLedger } from "./gestureLedger";
+
 type Invoke = { name: string; params: unknown[]; resultId: number };
 type Edit = { phase: string; target: number; param: string; value: number };
 
@@ -19,10 +21,6 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     alone: false,
     // ?elsewhere: another track's window is open (the "open here anyway" screen).
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
-    // ?unlicensed: the "not active" screen.
-    licence: location.search.includes("unlicensed")
-      ? { ok: false, message: "Composer isn't activated on this computer yet." }
-      : { ok: true, message: "Activated on this computer." },
     room: 20,
     listener: { x: 0, y: -4 },
     players: names.map((name, i) => ({ id: i, name, colour: colours[i], self: i === 2, x: (i - 2.5) * 2.4, y: 3 + (i % 2) * 2 })),
@@ -56,11 +54,15 @@ if (import.meta.env.DEV && !window.__JUCE__) {
 
   const emit = (id: string, payload: unknown) =>
     (window.__JUCE__.backend as unknown as { listeners: { emitEvent(id: string, p: unknown): void } }).listeners.emitEvent(id, payload);
+  // The plugin sends the stage from a timer, after the call that changed it has returned.
+  const emitStageSoon = () => setTimeout(() => emit("stage", snapshot()), 33);
+  const gestures = new GestureLedger();
 
   const handlers: Record<string, (...args: never[]) => unknown> = {
     getStage: () => snapshot(),
     getBuildInfo: () => ({ version: "0.1.0", format: "Browser", host: "Mock", credits: "Binaural HRTF: SADIE II" }),
     edit: (e: Edit) => {
+      gestures.record(e.phase, e.target, e.param);
       if (e.phase !== "change") return;
       const p = scene.players.find((pl) => pl.id === e.target);
       if (e.param === "roomSize") scene.room = e.value;
@@ -70,20 +72,18 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (e.param === "listenerY") scene.listener.y = e.value;
       if (p && e.param === "playerX") p.x = e.value;
       if (p && e.param === "playerY") p.y = e.value;
-      emit("stage", snapshot());
+      emitStageSoon();
     },
     startTracker: () => true,
-    openHub: () => true,
-    checkLicence: () => scene.licence.ok,
     setScene: (name: string) => {
       scene.scene = name;
       if (!scene.scenes.includes(name)) scene.scenes = [...scene.scenes, name].sort();
-      emit("stage", snapshot());
+      emitStageSoon();
     },
     setName: (id: number, name: string) => {
       const p = scene.players.find((pl) => pl.id === id);
       if (p) p.name = name || names[id];
-      emit("stage", snapshot());
+      emitStageSoon();
     },
   };
 

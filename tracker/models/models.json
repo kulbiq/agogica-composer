@@ -1,0 +1,14 @@
+[
+  {
+    "name": "yolox_n_body_head_hand_192x320.onnx",
+    "sha256": "3455b3aaafae74869d873ec5107142f704c8fedba7bf9b7154e1e4c6b9be5371",
+    "url": "https://s3.ap-northeast-2.wasabisys.com/pinto-model-zoo/426_YOLOX-Body-Head-Hand/resources_n.tar.gz",
+    "archiveMember": "yolox_n_body_head_hand_post_0461_0.4428_1x3x192x320.onnx"
+  },
+  {
+    "name": "hfhpe_vitt_ypr_kappa_1x3x128x128.onnx",
+    "sha256": "6dc06f19d1cc89a2a72e8663bc246eeb5aaa4888dce914695794d79af00ceb66",
+    "url": "https://github.com/PINTO0309/High-Angle_Robust_Fast_Head_Pose_Estimation/releases/download/weights/vitt_distill_128_ypr_unified_v19_r180_lr2e4.tar.gz",
+    "archiveMember": "hfhpe_vitt_ypr_kappa_1x3x128x128.onnx"
+  }
+]

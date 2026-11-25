@@ -67,9 +67,6 @@ public:
     // The next target is taken as-is (after silence, when there's nothing to fade).
     void jumpToTarget() noexcept { snap = true; }
 
-    // The delay currently heard (the one being faded from, during a fade).
-    float current() const noexcept { return from; }
-
 private:
     // One sample, `age` samples before the newest one written.
     float readOne (const History& history, int age) noexcept

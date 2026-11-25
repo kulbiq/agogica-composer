@@ -23,7 +23,7 @@ struct Record
     std::atomic<std::uint32_t> sequence;
     std::atomic<std::uint32_t> flags;     // bit 0: a face is being tracked
     std::atomic<float> yaw, pitch, roll;  // degrees
-    std::atomic<std::uint64_t> timestampMs; // juce::Time::currentTimeMillis() of the frame
+    std::atomic<std::uint64_t> timestampMs; // juce::Time::currentTimeMillis() when the pose was written
 };
 
 static_assert (std::atomic<std::uint32_t>::is_always_lock_free && std::atomic<float>::is_always_lock_free
@@ -38,6 +38,11 @@ static_assert (offsetof (Record, version) == 4 && offsetof (Record, sequence) ==
                && offsetof (Record, timestampMs) == 32, "head-tracking file layout changed");
 constexpr std::uint32_t version = 1;
 constexpr std::uint32_t faceFound = 1;
+
+// A pose written longer ago than this is stale: the tracker has stopped or stalled, and Composer
+// eases back to straight ahead. The tracker treats a camera silent for this long the same way.
+// Shipped plugins have this value built in: a tracker must write at least this often.
+constexpr std::uint64_t staleAfterMs = 500;
 
 // ~/Library/Application Support/Agogica/head-tracking, %LOCALAPPDATA%\Agogica\head-tracking.
 // The AGOGICA_HEAD_TRACKING_FILE environment variable overrides it (tests, development).
@@ -72,15 +77,18 @@ class Reader
 public:
     explicit Reader (juce::File, juce::uint32 checkEveryMs = 500);
 
-    // The latest consistent pose, or nothing if there's no valid file.
-    std::optional<Pose> read();
+    // The latest consistent pose (the previous one while a write is in progress), or nothing
+    // if there's no valid file.
+    std::optional<Pose> read()   { return read (juce::Time::getMillisecondCounter()); }
+    std::optional<Pose> read (juce::uint32 nowMs); // the clock handed in (tests)
 
 private:
-    void remapIfNeeded();
+    void remapIfNeeded (juce::uint32 nowMs);
 
     juce::File file;
     std::unique_ptr<juce::MemoryMappedFile> map;
     const Record* record = nullptr;
+    std::optional<Pose> lastRead;
     juce::uint64 identity = 0;
     juce::int64 size = 0;
     juce::uint32 checkEveryMs, checkedAt = 0;

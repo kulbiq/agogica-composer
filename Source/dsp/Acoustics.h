@@ -1,8 +1,7 @@
 #pragma once
 
 #include "Geometry.h"
-
-enum class OutputMode { stereo, binaural };
+#include "OutputMode.h"
 
 // The Pro panel: project-wide adjustments, in natural units. The defaults are neutral.
 struct Adjustments
@@ -10,19 +9,14 @@ struct Adjustments
     float distanceExponent = geometry::distanceLawExponent; // 1 = free field (-6 dB per doubling)
 };
 
-// Everything a processing stage needs to know about the scene, set once per block.
+// Everything the sound's path needs to know about the scene, set once per block.
 struct Acoustics
 {
     geometry::Point player, listener; // metres, already clamped to the room
-    float roomSize = 20.0f;
     OutputMode mode = OutputMode::stereo;
     Adjustments adjust;
 
     // Listener's head rotation, degrees clockwise (head turned right). Binaural only and
     // realtime only - the processor sets 0 otherwise.
     float headYaw = 0.0f;
-
-    // Longest delay any stage asks the History for: the longest direct path (opposite corners
-    // of the largest room, 70.7 m: 0.21 s), with margin.
-    static constexpr double maxDelaySeconds = 0.5;
 };
