@@ -98,7 +98,7 @@ TEST_CASE ("pose model input: matches the reference (OpenCV area resize, border 
             for (int x = 0; x < size; ++x)
             {
                 const auto level = (tensor[(size_t) (channel * size * size + y * size + x)] + 1.0f) * 127.5f;
-                levelsOff += std::abs (level - (float) expected[channel][y][x]) > 1.01f;
+                levelsOff += ! (std::abs (level - (float) expected[channel][y][x]) <= 1.01f); // NaN counts as off
             }
     CHECK (levelsOff == 0);
 }
