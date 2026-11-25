@@ -1,7 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react";
 import { beginGesture, useJuceEvent, type Gesture, type Point, type Stage } from "./juce";
 import styles from "./App.module.css";
-import { levelOf, type Levels } from "./LevelMeter";
+import { levelOf, type Levels } from "./level";
 
 export type NodeKey = "listener" | number;
 
