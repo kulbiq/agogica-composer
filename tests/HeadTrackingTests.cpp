@@ -82,7 +82,7 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         {
             juce::MemoryMappedFile map (file, juce::MemoryMappedFile::readWrite, false);
             REQUIRE (map.getData() != nullptr);
-            auto* sequence = static_cast<std::uint32_t*> (map.getData()) + 2; // offset 8
+            auto* sequence = reinterpret_cast<std::uint32_t*> (static_cast<char*> (map.getData()) + offsetof (Record, sequence));
             *sequence |= 1u;
         }
 

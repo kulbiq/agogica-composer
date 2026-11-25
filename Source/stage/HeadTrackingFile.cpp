@@ -104,7 +104,8 @@ void Reader::remapIfNeeded()
     const auto newIdentity = fileIdentity (file);
     const auto newSize = file.getSize();
 
-    if (map != nullptr && newIdentity == identity && newSize == size)
+    // Nothing new to look at - unless the last mapping failed: that one is tried again.
+    if (record != nullptr && newIdentity == identity && newSize == size)
         return;
 
     record = nullptr;
