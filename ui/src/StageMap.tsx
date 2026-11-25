@@ -25,7 +25,7 @@ const round = (v: number) => Math.round(v * 100) / 100;
 
 export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const labelsRef = useRef<HTMLCanvasElement>(null);
+  const textCopyRef = useRef<HTMLCanvasElement>(null);
 
   // The rAF loop reads the latest props through refs instead of restarting.
   const latest = useRef({ stage, selected });
@@ -82,7 +82,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
-    const painter = new StagePainter(labelsRef.current!);
+    const painter = new StagePainter(textCopyRef.current!);
     const draw = (now: number) => {
       // The window moved to a screen with another pixel ratio: no resize event tells us.
       if ((window.devicePixelRatio || 1) !== dpr) resize();
@@ -195,7 +195,7 @@ export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
 
   return (
     <>
-      <canvas ref={labelsRef} hidden aria-hidden />
+      <canvas ref={textCopyRef} hidden aria-hidden />
       <canvas
         ref={canvasRef}
         className={styles.map}
