@@ -8,7 +8,7 @@
 
 // Per process: polls the file every 10 ms while some Composer instance is in Binaural
 // (checked on the registry every tick; otherwise it idles at 2 Hz),
-// and gives the audio threads a smoothed yaw. Data older than 0.5 s or no face: not live,
+// and gives the audio threads the yaw. Data older than 0.5 s or no face: not live,
 // and the yaw eases back to straight ahead.
 class HeadTracking : private juce::Timer
 {

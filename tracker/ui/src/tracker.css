@@ -141,18 +141,6 @@
   cursor: pointer;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
 .small {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -212,9 +200,4 @@ body:not([data-debug]) .debug {
 body:not([data-debug]) .app {
   height: auto;
   overflow: visible;
-}
-
-/* The window follows the page here, so a cap relative to the window would feed back. */
-body:not([data-debug]) .more .frame {
-  max-height: none;
 }

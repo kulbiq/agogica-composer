@@ -35,7 +35,7 @@ void HeadTracking::pollNow()
 
     live.store (isLive, std::memory_order_relaxed);
 
-    // Live: follow the tracker (it already filters). Otherwise ease back to straight ahead.
+    // Live: follow the tracker as it is. Otherwise ease back to straight ahead.
     const auto current = yawDegrees.load (std::memory_order_relaxed);
     yawDegrees.store (isLive ? pose->yaw : current * 0.9f, std::memory_order_relaxed);
 }

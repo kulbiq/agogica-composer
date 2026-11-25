@@ -175,7 +175,7 @@ catch_discover_tests(ComposerTests TEST_SPEC "[slow]" PROPERTIES LABELS slow)
 # ui\ and models\ next to each other.
 option(COMPOSER_TRACKER_DIRECTML "Windows, development: the Tracker runs its models on the GPU through DirectML" OFF)
 if(APPLE OR WIN32)
-    # ONNX Runtime (MIT) for the tracker's native head-pose engines; never linked into the plugin.
+    # ONNX Runtime (MIT) for the tracker's head-pose models; never linked into the plugin.
     # ponytail: arm64 only - 1.30 ships no universal macOS build; Intel Macs need a source build.
     include(FetchContent)
     if(APPLE)
@@ -249,11 +249,10 @@ if(APPLE OR WIN32)
         PRIVATE juce::juce_gui_extra juce::juce_video
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 
-    # The tracker page (MediaPipe + model, ~25 MB) ships as files in the app bundle, not as
-    # BinaryData. The model is downloaded once by tracker/ui/scripts/copy-assets.mjs.
+    # The tracker page ships as files in the app bundle, not as BinaryData.
     set(TRACKER_UI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tracker/ui)
     set(TRACKER_UI_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-ui.stamp)
-    file(GLOB_RECURSE TRACKER_UI_SOURCES CONFIGURE_DEPENDS ${TRACKER_UI_DIR}/src/* ${TRACKER_UI_DIR}/scripts/*)
+    file(GLOB_RECURSE TRACKER_UI_SOURCES CONFIGURE_DEPENDS ${TRACKER_UI_DIR}/src/*)
 
     composer_npm_ci(${TRACKER_UI_DIR})
     add_custom_command(
@@ -271,7 +270,7 @@ if(APPLE OR WIN32)
     add_dependencies(ComposerTrackerUI ComposerData)
     add_dependencies(ComposerTracker ComposerTrackerUI)
 
-    # The native engines' models (downloaded, not committed: tracker/models/MODELS.md).
+    # The tracker's models (downloaded, not committed: tracker/models/MODELS.md).
     set(TRACKER_MODELS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tracker/models)
     set(TRACKER_MODELS_STAMP ${CMAKE_CURRENT_BINARY_DIR}/tracker-models.stamp)
     set(TRACKER_MODEL_FILES ${TRACKER_MODELS_DIR}/yolox_n_body_head_hand_192x320.onnx

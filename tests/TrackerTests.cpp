@@ -8,7 +8,7 @@ using namespace engines;
 
 TEST_CASE ("head continuity: the head nearest to the previous one")
 {
-    const std::vector<Detection> heads { { 1, { 0, 0, 10, 10 }, 0.9f }, { 1, { 100, 0, 110, 10 }, 0.5f } };
+    const std::vector<Detection> heads { { { 0, 0, 10, 10 }, 0.9f }, { { 100, 0, 110, 10 }, 0.5f } };
 
     CHECK (pickHead (heads, std::nullopt)->score > 0.8f);                    // first frame: the strongest
     CHECK (pickHead (heads, Box { 98, 0, 108, 10 })->box.x1 > 50.0f);         // then: the same person
@@ -116,24 +116,4 @@ TEST_CASE ("still gate: a still head reuses the estimate, a moving one or an old
 
     gate.clear();                                      // head lost
     CHECK_FALSE (gate.unchanged (frame (70, 5), 0.3));
-}
-
-TEST_CASE ("hfhpe: input tensor cost on a camera-sized frame", "[.perf]")
-{
-    // Release: build/release/ComposerTests "[perf]" -s. A 640 x 480 frame, a typical head box.
-    juce::Image image (juce::Image::RGB, 640, 480, true);
-    const juce::Image::BitmapData pixels (image, juce::Image::BitmapData::readOnly);
-    std::vector<float> out (3 * 128 * 128);
-    const auto crop = hfhpeCrop (Box { 230, 120, 410, 400 });
-    const auto start = juce::Time::getMillisecondCounterHiRes();
-    constexpr int runs = 50;
-    for (int i = 0; i < runs; ++i)
-        squareToTensor ([&] (int x, int y, float* c)
-        {
-            const auto* px = reinterpret_cast<const juce::PixelRGB*> (pixels.getPixelPointer (x, y));
-            c[0] = px->getRed(), c[1] = px->getGreen(), c[2] = px->getBlue();
-        }, 640, 480, crop, 128, out.data());
-    const auto ms = (juce::Time::getMillisecondCounterHiRes() - start) / runs;
-    WARN ("squareToTensor, crop " << crop.side << " px -> 128: " << ms << " ms");
-    CHECK (ms < 1000.0);
 }

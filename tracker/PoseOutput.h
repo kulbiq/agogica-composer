@@ -4,7 +4,7 @@
 #include "../Source/stage/HeadTrackingFile.h"
 #include "engines/Decode.h" // wrap
 
-// The tracker's output to Composer, on its own timer thread (60 Hz): Invert, Recenter and Pause
+// The tracker's output to Composer, on its own timer thread (every 16 ms): Invert, Recenter and Pause
 // on each frame's reading as it is (no smoothing for now), and the head-tracking file.
 // Nothing here waits for the page, so Composer keeps hearing the head while the window is
 // hidden or the page is busy; the page only shows `current()`.

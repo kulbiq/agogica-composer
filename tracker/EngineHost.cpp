@@ -9,25 +9,16 @@ EngineHost::EngineHost (juce::File dir, Emit e, Output o)
 
 EngineHost::~EngineHost()
 {
-    setEngine ("mediapipe"); // stops the worker and the camera
+    stopThread (5000); // the estimator finishes its current frame first
+    if (camera != nullptr)
+        camera->removeListener (this);
     cancelPendingUpdate();
 }
 
-void EngineHost::setEngine (const juce::String& name)
+void EngineHost::start()
 {
-    if (name == engineName)
+    if (std::exchange (hasStarted, true))
         return;
-
-    stopThread (5000); // an engine finishes its current frame first
-    engineName = name;
-
-    if (name == "mediapipe")
-    {
-        if (camera != nullptr)
-            camera->removeListener (this);
-        camera.reset();
-        return;
-    }
 
     if (camera == nullptr)
     {
@@ -60,8 +51,6 @@ void EngineHost::imageReceived (const juce::Image& image)
 
 void EngineHost::post (juce::DynamicObject::Ptr payload)
 {
-    payload->setProperty ("engine", engineName);
-
     // Development: AGOGICA_TRACKER_LOG=/path logs every estimate, after the time in ms (to 0.1 ms:
     // with 0 decimal places JUCE writes 1.81068e+08, a resolution of a second).
     static const juce::File log (juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_LOG", {}));
@@ -127,11 +116,11 @@ void EngineHost::run()
     if (camera == nullptr)
         return status ("error", "No camera");
 
-    std::unique_ptr<engines::Engine> engine;
+    std::unique_ptr<engines::HeadPoseEstimator> engine;
     try
     {
         status ("loading");
-        engine = engines::makeEngine (engineName, modelsDir);
+        engine = std::make_unique<engines::HeadPoseEstimator> (modelsDir);
     }
     catch (const std::exception& e)
     {

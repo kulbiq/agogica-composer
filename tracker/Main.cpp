@@ -1,4 +1,4 @@
-// Agogica Tracker: follows the head with the camera (native HFHPE engine, EngineHost)
+// Agogica Tracker: follows the head with the camera (HFHPE, run natively by EngineHost)
 // and shares its orientation with every Composer instance through the head-tracking file
 // (Source/stage/HeadTrackingFile.h, written by PoseOutput on its own thread); the page
 // (tracker/ui) shows the status and the dial and sends the buttons. No network: the page and
@@ -69,8 +69,8 @@ public:
     {
         browser = std::make_unique<juce::WebBrowserComponent> (juce::WebBrowserComponent::Options{}
            #if JUCE_WINDOWS
-            // The page keeps its settings (Invert, camera section) in localStorage: a lasting
-            // profile folder, per PC like the licence.
+            // The page remembers the camera section in localStorage: a lasting profile folder,
+            // per PC like the licence.
             .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
             .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
                 .withUserDataFolder (juce::File::getSpecialLocation (juce::File::windowsLocalAppData)
@@ -119,10 +119,9 @@ public:
                     fitCompact ((int) args[0]);
                 complete ({});
             })
-            .withNativeFunction ("setEngine", [this] (const juce::Array<juce::var>& args, auto complete)
+            .withNativeFunction ("start", [this] (const auto&, auto complete)
             {
-                if (args.size() == 1)
-                    engines.setEngine (args[0].toString());
+                engines.start(); // once the page listens: the first status events are not repeated
                 complete ({});
             })
             .withResourceProvider (serve));
@@ -130,9 +129,7 @@ public:
         output.setInvert (settings().getBoolValue ("invert", false));
         setContentNonOwned (browser.get(), false);
         browser->setSize (380, 680);
-        // Development: AGOGICA_TRACKER_ENGINE=<name> starts on that engine (engines::makeEngine).
-        const auto engine = juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_ENGINE", {});
-        browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + (engine.isNotEmpty() ? "?engine=" + engine : juce::String()));
+        browser->goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
         setUsingNativeTitleBar (true);
         // Resizable once, here: switching it later recreates the native window, and WebView2
         // goes on drawing into the old one (a frozen page - measured on Windows). The compact

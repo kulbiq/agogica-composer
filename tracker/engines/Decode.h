@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure decoding maths for the tracker's head-pose engines (no ONNX, no camera): unit-tested
+// Pure decoding maths for the tracker's head-pose estimator (no ONNX, no camera): unit-tested
 // in tests/TrackerTests.cpp. Angles in degrees.
 
 #include <algorithm>
@@ -11,25 +11,14 @@
 
 namespace engines
 {
-constexpr float pi = 3.14159265358979f;
-inline float toRadians (float d) { return d * pi / 180.0f; }
-inline float toDegrees (float r) { return r * 180.0f / pi; }
+inline float toDegrees (float radians) { return radians * 180.0f / 3.14159265358979f; }
 inline float wrap (float d) { return std::remainder (d, 360.0f); } // (-180, 180]
 
 struct Box { float x1 = 0, y1 = 0, x2 = 0, y2 = 0; };
 inline float centreX (const Box& b) { return (b.x1 + b.x2) * 0.5f; }
 inline float centreY (const Box& b) { return (b.y1 + b.y2) * 0.5f; }
 
-inline float iou (const Box& a, const Box& b)
-{
-    const auto w = std::max (0.0f, std::min (a.x2, b.x2) - std::max (a.x1, b.x1));
-    const auto h = std::max (0.0f, std::min (a.y2, b.y2) - std::max (a.y1, b.y1));
-    const auto inter = w * h;
-    const auto uni = (a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - inter;
-    return uni > 0.0f ? inter / uni : 0.0f;
-}
-
-struct Detection { int label = 0; Box box; float score = 0; };
+struct Detection { Box box; float score = 0; };
 
 // ---- HFHPE: crop contract and outputs ----------------------------------------------------------
 // HFHPE (PINTO0309/High-Angle_Robust_Fast_Head_Pose_Estimation, demo/demo_hfhpe_onnx.py): the head

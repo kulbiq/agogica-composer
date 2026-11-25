@@ -12,11 +12,10 @@ const setInvert = getNativeFunction("setInvert") as (on: boolean) => Promise<voi
 const recenter = getNativeFunction("recenter") as () => Promise<void>;
 const setPaused = getNativeFunction("setPaused") as (on: boolean) => Promise<void>;
 const setPreview = getNativeFunction("setPreview") as (on: boolean) => Promise<void>;
-const setEngine = getNativeFunction("setEngine") as (id: string) => Promise<void>;
+const start = getNativeFunction("start") as () => Promise<void>;
 const getDebug = getNativeFunction("getDebug") as () => Promise<boolean>;
 const fitHeight = getNativeFunction("fitHeight") as (height: number) => Promise<void>;
 
-const engine = "hfhpe";
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = $("status");
 const frame = $<HTMLImageElement>("frame");
@@ -182,12 +181,6 @@ async function main() {
   });
   $("aboutBack").onclick = () => document.body.toggleAttribute("data-about", false);
 
-  // Invert lives in the app's settings now; an older page kept it here (one-off move).
-  const legacyInvert = localStorage.getItem("invert:6drepnet360");
-  if (legacyInvert !== null) {
-    if (legacyInvert === "1") await setInvert(true);
-    localStorage.removeItem("invert:6drepnet360");
-  }
   settings.invert = await getInvert();
 
   $("recenter").onclick = () => {
@@ -255,7 +248,7 @@ async function main() {
   });
 
   setStatus("Loading", false);
-  void setEngine(engine);
+  void start();
 
   setInterval(() => {
     $("stats").textContent = output.frames

@@ -3,10 +3,10 @@
 #include <juce_video/juce_video.h>
 #include "engines/Engines.h"
 
-// Runs the native head-pose engine: the camera (juce::CameraDevice, frames on the message
-// thread) feeds the latest frame to a worker thread that runs the active engine; each frame's
-// reading goes straight to `output` (PoseOutput, for Composer) and the details to the page as
-// "estimate" events (status, readouts, plot). "mediapipe" means: no native engine.
+// Runs head tracking: the camera (juce::CameraDevice, frames on its capture thread) feeds the
+// latest frame to a worker thread that runs the head-pose estimator; each frame's reading goes
+// straight to `output` (PoseOutput, for Composer) and the details to the page as "estimate"
+// events (status, readouts, plot).
 class EngineHost final : private juce::CameraDevice::Listener,
                          private juce::Thread,
                          private juce::AsyncUpdater
@@ -20,7 +20,8 @@ public:
     EngineHost (juce::File modelsDir, Emit emit, Output output);
     ~EngineHost() override;
 
-    void setEngine (const juce::String& name); // message thread
+    // Opens the camera and starts the worker; further calls do nothing. Message thread.
+    void start();
 
     // The page's preview: while on, ~10 small frames a second. Any thread.
     void setPreview (bool on) { previewWanted = on; }
@@ -38,7 +39,7 @@ private:
     std::atomic<bool> previewWanted { false };
     std::atomic<int> framesReceived { 0 }; // from the camera (monitoring)
     double lastPreview = 0; // engine thread
-    juce::String engineName;
+    bool hasStarted = false;
     std::unique_ptr<juce::CameraDevice> camera;
 
     juce::CriticalSection frameLock;
