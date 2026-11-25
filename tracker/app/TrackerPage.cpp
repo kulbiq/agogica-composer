@@ -83,12 +83,14 @@ juce::var toJson (const PerformanceReport& p)
 
 // Development: AGOGICA_TRACKER_LOG=/path records every status, frame and performance report,
 // after the time in ms (to 0.1 ms: with 0 decimal places JUCE writes 1.81068e+08).
-void logForDevelopment (const juce::Identifier& event, const juce::var& json)
+// The JSON is made only when the log is on: reports come from the tracking thread.
+template <typename Report>
+void logForDevelopment (const juce::Identifier& event, const Report& report)
 {
     static const juce::File log (juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_LOG", {}));
     if (log != juce::File())
         log.appendText (juce::String (juce::Time::getMillisecondCounterHiRes(), 1) + " " + event.toString() + " "
-                        + juce::JSON::toString (json, true) + "\n");
+                        + juce::JSON::toString (toJson (report), true) + "\n");
 }
 
 std::optional<bool> boolArgument (const juce::Array<juce::var>& arguments)
@@ -193,7 +195,7 @@ juce::WebBrowserComponent::Options TrackerPage::options (Actions actions)
 
 void TrackerPage::report (const TrackerStatus& status)
 {
-    logForDevelopment (event::status, toJson (status));
+    logForDevelopment (event::status, status);
     {
         const juce::ScopedLock sl (pendingLock);
         latestStatus = status;
@@ -204,7 +206,7 @@ void TrackerPage::report (const TrackerStatus& status)
 
 void TrackerPage::report (const FrameReport& frame)
 {
-    logForDevelopment (event::trackingFrame, toJson (frame));
+    logForDevelopment (event::trackingFrame, frame);
     {
         const juce::ScopedLock sl (pendingLock);
         pendingFrame = frame;
@@ -214,7 +216,7 @@ void TrackerPage::report (const FrameReport& frame)
 
 void TrackerPage::report (const PerformanceReport& performance)
 {
-    logForDevelopment (event::performance, toJson (performance));
+    logForDevelopment (event::performance, performance);
     {
         const juce::ScopedLock sl (pendingLock);
         pendingPerformance = performance;

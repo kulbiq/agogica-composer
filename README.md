@@ -41,10 +41,10 @@ Requirements: CMake ≥ 3.22, Xcode (macOS), Node.js, Python 3; the JUCE submodu
 cmake --preset debug && cmake --build --preset debug      # plugin (VST3, AU, Standalone), UI, tests
 ctest --preset debug                                      # unit tests
 scripts/pluginval.sh                                      # auval + pluginval (strictness 10)
-cmake --preset release && cmake --build --preset release --target ComposerTracker   # tracker app
+cmake --preset release && cmake --build --preset release --target ComposerTracker   # tracker app alone (not installed)
 ```
 
-Builds install per user, without admin rights: the plugins into `~/Library/Audio/Plug-Ins`, the tracker into `~/Applications`.
+A full build installs per user, without admin rights: the plugins into `~/Library/Audio/Plug-Ins`, the tracker into `~/Applications` (target `ComposerTrackerInstall`).
 After rebuilding, quit the DAW completely (Dorico's audio engine keeps the old plugin loaded) and quit a running tracker before starting the new one.
 
 ## Licences to resolve before a release
