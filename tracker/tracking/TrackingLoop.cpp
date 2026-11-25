@@ -8,6 +8,7 @@ namespace
 {
 constexpr int frameWaitMs = 200;            // how often the loop looks whether it should stop
 constexpr int stopTimeoutMs = 5000;         // the estimator finishes its current frame first
+constexpr double cameraSilentAfterSeconds = 1.0; // no frame for this long: the camera isn't delivering
 constexpr double previewIntervalSeconds = 0.1;
 constexpr int previewWidthPixels = 480;     // sharp at 2x in the compact window's ~320 px
 constexpr float previewJpegQuality = 0.7f;
@@ -73,30 +74,32 @@ TrackingLoop::~TrackingLoop()
 
 void TrackingLoop::run()
 {
-    if (! camera.isOpen())
-        return reports.status ({ TrackerPhase::failed, "No camera" });
-
     if (! loadEstimator())
         return;
 
-    reports.status ({ TrackerPhase::startingCamera, {} });
     PerformanceMeter performance (camera.framesReceived());
     bool isFirstFrame = true;
+    double lastFrameSeconds = 0;
 
     while (! threadShouldExit())
     {
         const auto frame = camera.waitForFrame (frameWaitMs);
         if (! frame.isValid())
+        {
+            if (secondsNow() - lastFrameSeconds > cameraSilentAfterSeconds)
+                setStatus ({ TrackerPhase::waitingForCamera, camera.cameraName() });
             continue;
+        }
+        lastFrameSeconds = secondsNow();
 
         if (isFirstFrame)
-            reports.status ({ TrackerPhase::compilingModels, estimator->provider() });
+            setStatus ({ TrackerPhase::compilingModels, estimator->provider() });
 
         publishCameraPreviewIfDue (frame);
         const auto report = trackHead (frame);
 
-        if (std::exchange (isFirstFrame, false))
-            reports.status ({ TrackerPhase::tracking, estimator->provider() });
+        isFirstFrame = false;
+        setStatus ({ TrackerPhase::tracking, estimator->provider() });
         reports.frame (report);
 
         if (report.warning.isEmpty())
@@ -106,9 +109,18 @@ void TrackingLoop::run()
     }
 }
 
+// Reported when it changes.
+void TrackingLoop::setStatus (TrackerStatus newStatus)
+{
+    if (status == newStatus)
+        return;
+    status = newStatus;
+    reports.status (newStatus);
+}
+
 bool TrackingLoop::loadEstimator()
 {
-    reports.status ({ TrackerPhase::loadingModels, {} });
+    setStatus ({ TrackerPhase::loadingModels, {} });
     try
     {
         estimator = std::make_unique<engines::HeadPoseEstimator> (modelsFolder);
@@ -116,7 +128,7 @@ bool TrackingLoop::loadEstimator()
     }
     catch (const std::exception& e)
     {
-        reports.status ({ TrackerPhase::failed, e.what() });
+        setStatus ({ TrackerPhase::failed, e.what() });
         return false;
     }
 }

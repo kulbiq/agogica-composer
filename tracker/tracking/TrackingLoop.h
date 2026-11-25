@@ -36,6 +36,7 @@ public:
 private:
     void run() override;
     bool loadEstimator();
+    void setStatus (TrackerStatus);
     FrameReport trackHead (const juce::Image& frame);
     void publishCameraPreviewIfDue (const juce::Image& frame);
 
@@ -49,6 +50,7 @@ private:
     std::unique_ptr<engines::HeadPoseEstimator> estimator;
     engines::StillGate stillHead;
     std::optional<HeadObservation> lastHead;
+    std::optional<TrackerStatus> status;
     double lastPreviewSeconds = 0;
 };
 } // namespace tracker

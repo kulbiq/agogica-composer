@@ -14,7 +14,7 @@ import { SessionStats } from "./sessionStats";
 
 const STATUS_TEXT: Record<TrackerStatus["phase"], (detail: string) => string> = {
   loadingModels: () => "Loading model",
-  startingCamera: () => "Starting camera",
+  waitingForCamera: (cameraName) => (cameraName ? "Starting camera" : "No camera"),
   compilingModels: (provider) => `Compiling for ${provider}`,
   tracking: () => "Tracking",
   failed: (reason) => `Error: ${reason}`,
@@ -24,6 +24,7 @@ function showStatus(text: string, isLive: boolean) {
   const chip = elementById("status");
   chip.textContent = text;
   chip.dataset.status = isLive ? "live" : "soon";
+  return chip;
 }
 
 // Debugging (the app's View menu) shows the readouts and the plot; off, the window is fixed and
@@ -63,8 +64,9 @@ async function main() {
 
   onEvent("status", (status) => {
     if (controls.isPaused) return;
-    providerName = status.detail;
-    showStatus(STATUS_TEXT[status.phase](status.detail), status.phase === "tracking");
+    if (status.phase === "tracking") providerName = status.detail;
+    const chip = showStatus(STATUS_TEXT[status.phase](status.detail), status.phase === "tracking");
+    chip.title = status.phase === "waitingForCamera" ? status.detail : ""; // which camera
   });
 
   onEvent("trackingFrame", (frame) => {

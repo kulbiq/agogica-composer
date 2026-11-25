@@ -31,7 +31,7 @@ const char* name (TrackerPhase phase)
     switch (phase)
     {
         case TrackerPhase::loadingModels:   return "loadingModels";
-        case TrackerPhase::startingCamera:  return "startingCamera";
+        case TrackerPhase::waitingForCamera: return "waitingForCamera";
         case TrackerPhase::compilingModels: return "compilingModels";
         case TrackerPhase::tracking:        return "tracking";
         case TrackerPhase::failed:          return "failed";

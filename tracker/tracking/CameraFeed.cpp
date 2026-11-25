@@ -12,27 +12,86 @@ struct SizeRange { int minWidth, minHeight, maxWidth, maxHeight; };
 // room) and cost Windows more to convert (0.2 cores at 1280x720).
 // On Windows JUCE takes the largest size in the range.
 constexpr SizeRange preferredSizes[] { { 640, 480, 640, 480 }, { 640, 360, 640, 360 }, { 320, 240, 1280, 720 } };
-constexpr int firstCamera = 0;
+
+// Long enough for a camera to start (a phone connects first), short enough not to feel dead.
+constexpr int noPictureTimeoutMs = 4000;
+constexpr int developmentFramesPerSecond = 30;
 } // namespace
 
 CameraFeed::CameraFeed()
+    : developmentFrame (juce::ImageFileFormat::loadFrom (juce::File (juce::SystemStats::getEnvironmentVariable ("AGOGICA_TRACKER_STILL_FRAME", {}))))
 {
-    for (const auto& size : preferredSizes)
+    if (developmentFrame.isValid())
     {
-        const bool highQuality = false;
-        camera.reset (juce::CameraDevice::openDevice (firstCamera, size.minWidth, size.minHeight, size.maxWidth, size.maxHeight, highQuality));
-        if (camera != nullptr)
-            break;
+        name = "Still frame (development)";
+        startTimerHz (developmentFramesPerSecond);
+        return;
     }
 
-    if (camera != nullptr)
-        camera->addListener (this);
+    open (0);
+    startTimer (noPictureTimeoutMs);
 }
 
 CameraFeed::~CameraFeed()
 {
+    stopTimer();
+    close();
+}
+
+void CameraFeed::open (int index)
+{
+    close();
+
+    const auto cameras = juce::CameraDevice::getAvailableDevices();
+    if (cameras.isEmpty())
+        return;
+
+    cameraIndex = index % cameras.size();
+    for (const auto& size : preferredSizes)
+    {
+        const bool highQuality = false;
+        camera.reset (juce::CameraDevice::openDevice (cameraIndex, size.minWidth, size.minHeight, size.maxWidth, size.maxHeight, highQuality));
+        if (camera != nullptr)
+            break;
+    }
+
+    {
+        const juce::ScopedLock sl (frameLock);
+        name = cameras[cameraIndex];
+    }
+    if (camera != nullptr)
+        camera->addListener (this);
+}
+
+void CameraFeed::close()
+{
     if (camera != nullptr)
         camera->removeListener (this);
+    camera.reset();
+
+    const juce::ScopedLock sl (frameLock);
+    name.clear();
+}
+
+void CameraFeed::timerCallback()
+{
+    if (developmentFrame.isValid())
+        imageReceived (developmentFrame);
+    else
+        retryIfNoPicture();
+}
+
+void CameraFeed::retryIfNoPicture()
+{
+    const auto receivedNow = framesReceived();
+    if (receivedNow == std::exchange (receivedAtLastLook, receivedNow))
+        open (cameraIndex + 1); // the next camera, or the only one again
+}
+
+juce::String CameraFeed::cameraName() const
+{
+    const juce::ScopedLock sl (frameLock);
+    return name;
 }
 
 void CameraFeed::imageReceived (const juce::Image& image)

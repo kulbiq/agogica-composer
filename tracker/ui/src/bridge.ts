@@ -5,8 +5,10 @@ import { getNativeFunction } from "@juce-framework/webview";
 export type InitialState = { inverted: boolean; debugView: boolean; version: string };
 
 export type TrackerStatus = {
-  phase: "loadingModels" | "startingCamera" | "compilingModels" | "tracking" | "failed";
-  detail: string; // failed: the reason; compilingModels, tracking: what runs the models ("CoreML", "CPU")
+  phase: "loadingModels" | "waitingForCamera" | "compilingModels" | "tracking" | "failed";
+  // failed: the reason; compilingModels, tracking: what runs the models ("CoreML", "CPU");
+  // waitingForCamera: the camera's name, empty when the computer has none.
+  detail: string;
 };
 
 // One camera frame the app got to. Angles as the camera sees the head (before Invert and Recenter).
