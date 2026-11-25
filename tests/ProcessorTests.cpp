@@ -216,7 +216,7 @@ TEST_CASE ("DSP load: average, worst block and overruns per period; offline rend
 
         p.setNonRealtime (true);
         p.processBlock (buffer, midi);
-        CHECK (p.load.read().average == 0.0f);
+        CHECK_THAT (p.load.read().average, WithinAbs (0.0, 0.0)); // exactly: exports aren't measured
     }
 }
 
