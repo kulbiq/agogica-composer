@@ -1,9 +1,9 @@
 # Pull request and branch checks: the fast test set (`ctest --preset debug -LE slow`; everything
 # nightly) and pluginval, built the way a developer builds it, on macOS and on Windows. The
 # Tracker is compiled and linked on both, without its models (it can't track here; its pure
-# code is in the test set). The Windows job also uploads the Debug VST3 (it accepts licences
-# from a local dev site) for trying on a Windows machine.
-# No secrets, no signing: releases are built from the owner's Mac (scripts/release-macos.sh).
+# code is in the test set). The Windows job also uploads the Debug VST3 for trying on a Windows
+# machine.
+# No secrets, no signing: the macOS release is signed on a Mac (scripts/release-macos.sh).
 name: Check
 
 on:
@@ -44,9 +44,7 @@ jobs:
       - run: ctest --preset debug ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
       # The Tracker has no other check on Windows: the owner builds on a Mac.
       - run: cmake --build --preset debug --target ComposerTracker
-      # pluginval (strictness 10), as CLAUDE.md asks. CI has no licence for its machine, so the
-      # plugin passes audio through here: this covers loading, state, parameters, bus layouts and
-      # threading; the DSP is covered by ctest. Run scripts/pluginval.sh locally (licensed) too.
+      # pluginval (strictness 10): loading, state, parameters, bus layouts, threading and the DSP.
       - if: runner.os == 'macOS'
         run: cmake --build --preset debug --target Composer_VST3 Composer_AU && scripts/pluginval.sh
       - if: runner.os == 'Windows'

@@ -17,7 +17,7 @@ struct Rig
 
     void prepare (double sampleRate)
     {
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
         path.prepare (sampleRate);
     }
 
@@ -300,6 +300,31 @@ TEST_CASE ("HRTF tables: every rate, 1-degree grid, right ear louder at +90")
         CHECK (Hrtf::nearestIndex (180.0f) == 180);
         CHECK (Hrtf::nearestIndex (-180.0f) == 180);
         CHECK (Hrtf::nearestIndex (359.6f) == 0);
+    }
+
+    SECTION ("a rate without a table hears the same head: same delay between the ears, same level")
+    {
+        // Seconds between the two ears' peaks, and the left ear's gain at DC, for a sound from the right.
+        struct Head { double earDelaySeconds, leftDcGain; };
+        auto head = [] (double rate)
+        {
+            const auto& hrtf = Hrtf::forSampleRate (rate);
+            auto peak = [&] (int ear)
+            {
+                const auto* ir = hrtf.reversedIr (90, ear);
+                return (int) std::distance (ir, std::max_element (ir, ir + hrtf.taps(), [] (float a, float b) { return std::abs (a) < std::abs (b); }));
+            };
+            const auto* left = hrtf.reversedIr (90, 0);
+            // Stored time-reversed: a later arrival has the smaller index.
+            return Head { (peak (1) - peak (0)) / rate, (double) std::accumulate (left, left + hrtf.taps(), 0.0f) };
+        };
+
+        // { a rate without a table, the measured table it is resampled from }
+        const auto [rate, measuredRate] = GENERATE (table<double, double> ({ { 22050.0, 44100.0 }, { 32000.0, 44100.0 }, { 384000.0, 192000.0 } }));
+        const auto measured = head (measuredRate), resampled = head (rate);
+
+        CHECK_THAT (resampled.earDelaySeconds, WithinAbs (measured.earDelaySeconds, 1.5 / std::min (rate, measuredRate)));
+        CHECK_THAT (resampled.leftDcGain, WithinAbs (measured.leftDcGain, 0.05 * std::abs (measured.leftDcGain)));
     }
 
     SECTION ("a rate without a table falls back to the nearest one and still works")

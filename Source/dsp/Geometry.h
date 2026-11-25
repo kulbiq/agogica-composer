@@ -42,10 +42,15 @@ inline float foldedAzimuth (float azimuth)
                                       : azimuth;
 }
 
-// -1 = hard left, +1 = hard right.
+// Stereo pan for a direction: -1 = hard left, +1 = hard right.
+inline float pan (float azimuth)
+{
+    return foldedAzimuth (azimuth) / 90.0f;
+}
+
 inline float pan (Point player, Point listener)
 {
-    return foldedAzimuth (azimuthDegrees (player, listener)) / 90.0f;
+    return pan (azimuthDegrees (player, listener));
 }
 
 inline float delayMs (Point player, Point listener)

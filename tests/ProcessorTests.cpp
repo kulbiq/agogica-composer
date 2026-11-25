@@ -5,7 +5,10 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "../Source/PluginProcessor.h"
-#include "../Source/bridge/Stage.h"
+#include "../Source/bridge/StageSnapshot.h"
+#include "../Source/bridge/StageEdits.h"
+#include "../Source/stage/Scenes.h"
+#include "../Source/stage/Seating.h"
 #include "TrackingFileOverride.h"
 
 #if JUCE_MAC
@@ -191,12 +194,16 @@ TEST_CASE ("DSP load: average, worst block and overruns per period; offline rend
         LoadMeter meter;
         meter.add (0.001, 0.010); // 10 % of its block
         meter.add (0.020, 0.010); // twice its block: an overrun
-        const auto r = meter.read();
+        const auto r = meter.read (1000);
         CHECK_THAT (r.average, WithinAbs (1.05, 1e-6)); // 21 ms of work in 20 ms of audio
         CHECK_THAT (r.peak, WithinAbs (2.0, 1e-6));
         CHECK (r.overruns == 1);
 
-        const auto next = meter.read(); // each read starts a new period
+        const auto secondWindow = meter.read (1100); // another editor, a moment later: the same period
+        CHECK_THAT (secondWindow.average, WithinAbs (1.05, 1e-6));
+        CHECK (secondWindow.overruns == 1);
+
+        const auto next = meter.read (1000 + LoadMeter::periodMs); // a new period
         CHECK_THAT (next.average, WithinAbs (0.0, 0.0)); // exactly: nothing was measured
         CHECK_THAT (next.peak, WithinAbs (0.0, 0.0));
         CHECK (next.overruns == 0);
@@ -212,11 +219,11 @@ TEST_CASE ("DSP load: average, worst block and overruns per period; offline rend
 
         buffer.clear();
         p.processBlock (buffer, midi);
-        CHECK (p.load.read().average > 0.0f);
+        CHECK (p.load.read (1000).average > 0.0f);
 
         p.setNonRealtime (true);
         p.processBlock (buffer, midi);
-        CHECK_THAT (p.load.read().average, WithinAbs (0.0, 0.0)); // exactly: exports aren't measured
+        CHECK_THAT (p.load.read (2000).average, WithinAbs (0.0, 0.0)); // exactly: exports aren't measured
     }
 }
 
@@ -524,6 +531,82 @@ TEST_CASE ("channels: stereo input is summed to mono, mono input is used as is",
     }
 }
 
+TEST_CASE ("a project saved in Binaural starts in Binaural: no fade from the stereo pan", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+
+    // An impulse after `silentBlocks` of silence (a mode fade would be over after 20 ms of them).
+    auto impulseResponse = [] (int silentBlocks)
+    {
+        ComposerProcessor p;
+        set (p, "outputMode", 1.0f);
+        set (p, "playerX", 0.0f);
+        set (p, "playerY", 0.5f); // 0.5 m: the sound arrives within the first block
+        p.prepareToPlay (48000.0, 256);
+
+        juce::MidiBuffer midi;
+        juce::AudioBuffer<float> buffer (2, 256);
+        for (int block = 0; block < silentBlocks; ++block)
+        {
+            buffer.clear();
+            p.processBlock (buffer, midi);
+        }
+
+        std::vector<float> out;
+        for (int block = 0; block < 8; ++block)
+        {
+            buffer.clear();
+            if (block == 0)
+                buffer.setSample (0, 0, 1.0f), buffer.setSample (1, 0, 1.0f);
+            p.processBlock (buffer, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                out.insert (out.end(), buffer.getReadPointer (ch), buffer.getReadPointer (ch) + 256);
+        }
+        return out;
+    };
+
+    const auto atOnce = impulseResponse (0), later = impulseResponse (20);
+    for (size_t i = 0; i < atOnce.size(); ++i)
+        REQUIRE_THAT (atOnce[i], WithinAbs (later[i], 1e-6));
+}
+
+TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const auto mode = GENERATE (0.0f, 1.0f);
+    ComposerProcessor p;
+    set (p, "outputMode", mode);
+    p.setPlayConfigDetails (1, 2, 48000.0, 256); // a mono track
+    p.prepareToPlay (48000.0, 256);
+
+    juce::Random rng (11);
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> buffer (2, 256);
+
+    for (int block = 0; block < 100; ++block) // sound on its way through the delay
+    {
+        fillNoise (buffer, rng);
+        p.processBlock (buffer, midi);
+    }
+
+    fillNoise (buffer, rng);
+    const juce::AudioBuffer<float> dry (buffer);
+    p.processBlockBypassed (buffer, midi);
+    for (int i = 0; i < 256; ++i)
+    {
+        REQUIRE (buffer.getSample (0, i) == dry.getSample (0, i));
+        REQUIRE (buffer.getSample (1, i) == dry.getSample (0, i)); // not left-only
+    }
+
+    // Back on, with a silent input: what was in the delay before the bypass is not heard now.
+    for (int block = 0; block < 60; ++block)
+    {
+        buffer.clear();
+        p.processBlock (buffer, midi);
+        REQUIRE (buffer.getMagnitude (0, 256) == 0.0f);
+    }
+}
+
 TEST_CASE ("bus layouts: mono or stereo in, stereo out only", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -624,6 +707,36 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK_THAT (p.getParam ("roomSize"), WithinAbs (15.0, 1e-4));
         CHECK (p.getDisplayName() == "Cello");
     }
+}
+
+TEST_CASE ("state: a host may save from another thread while the stage is being edited", "[integration]")
+{
+    // Under the tsan preset this fails on a data race; elsewhere it at least must not crash.
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor p;
+    std::atomic<bool> done { false };
+
+    std::thread host ([&]
+    {
+        juce::MemoryBlock saved;
+        while (! done)
+        {
+            saved.reset();
+            p.getStateInformation (saved);
+        }
+    });
+
+    for (int i = 0; i < 2000; ++i)
+    {
+        p.setNameOverride ("Viola " + juce::String (i));
+        p.setActiveScene (i % 2 == 0 ? "A" : "B");
+        p.storeScene();
+        p.markPlaced();
+    }
+
+    done = true;
+    host.join();
+    SUCCEED();
 }
 
 TEST_CASE ("parameters: IDs, ranges, defaults and choices never change silently", "[integration]")

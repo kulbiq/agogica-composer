@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { beginGesture, type Gesture, type Param } from "./juce";
+import { beginGesture, type Gesture, type Param } from "./bridge";
 import styles from "./App.module.css";
 
 const gestureKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"]);

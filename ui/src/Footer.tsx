@@ -1,19 +1,8 @@
 import { useEffect, useState, type MouseEvent } from "react";
-import { getNativeFunction } from "@juce-framework/webview";
 import styles from "./App.module.css";
 import LevelMeter from "./LevelMeter";
-import { useJuceEvent } from "./juce";
+import { getBuildInfo, useEvent, type BuildInfo, type Load } from "./bridge";
 
-type BuildInfo = { version: string; format: string; host: string; credits?: string; debug?: boolean };
-
-// Development monitoring (Source/dsp/LoadMeter.h): processBlock's share of one core, this
-// track and all Composer tracks in this host process, ~4 times a second.
-type Load = {
-  self: { average: number; peak: number; overruns: number };
-  all: { average: number; peak: number; overruns: number; tracks: number };
-};
-
-const getBuildInfo = getNativeFunction("getBuildInfo") as () => Promise<BuildInfo>;
 const percent = (v: number) => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
 const loadKey = "showLoad";
 
@@ -27,7 +16,7 @@ export default function Footer({ player }: { player?: { id: number; name: string
   useEffect(() => {
     void getBuildInfo().then(setInfo);
   }, []);
-  useJuceEvent<Load>("load", setLoad);
+  useEvent("load", setLoad);
 
   const toggleLoad = (e: MouseEvent) => {
     if (!e.altKey) return;

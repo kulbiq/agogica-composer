@@ -1,6 +1,5 @@
-# The Windows release build of the plug-in, on every vX.Y.Z tag and by hand. No secrets: the zip
-# it uploads is checked, signed (minisign), uploaded and registered from the owner's Mac by
-# scripts/release-windows.sh.
+# The Windows release build of the plug-in, on every vX.Y.Z tag and by hand. A tag attaches the
+# zip (unsigned) to that tag's GitHub release; scripts/release-macos.sh adds the macOS zip there.
 name: Windows build
 
 on:
@@ -12,6 +11,8 @@ jobs:
   vst3:
     runs-on: windows-latest
     timeout-minutes: 60
+    permissions:
+      contents: write # attaches the zip to the release
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,8 +25,7 @@ jobs:
       - run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       - run: cmake --preset release
       - run: cmake --build --preset release --target Composer_VST3 ComposerTests
-      # The build that ships is tested too: the fast set and pluginval (strictness 10; no licence
-      # in CI, so audio passes through - see check.yml).
+      # The build that ships is tested too: the fast set and pluginval (strictness 10).
       - run: ctest --preset release -LE slow
       - shell: pwsh
         run: |
@@ -34,9 +34,17 @@ jobs:
           $p = Start-Process pluginval/pluginval.exe -Wait -NoNewWindow -PassThru -ArgumentList `
             '--strictness-level', '10', '--timeout-ms', '120000', '--validate', 'build/release/Composer_artefacts/Release/VST3/Composer.vst3'
           exit $p.ExitCode
-      # Composer.vst3 at the zip root, as Agogica Hub expects.
+      # Composer.vst3 at the zip root: copy it to %LOCALAPPDATA%\Programs\Common\VST3.
       - run: tar -a -c -f Composer-windows-x64.zip -C build/release/Composer_artefacts/Release/VST3 Composer.vst3
       - uses: actions/upload-artifact@v4
         with:
           name: composer-windows-x64
           path: Composer-windows-x64.zip
+      # The macOS script may have made the release for this tag already.
+      - if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Composer ${GITHUB_REF_NAME#v}" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" Composer-windows-x64.zip

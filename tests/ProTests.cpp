@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include "../Source/PluginProcessor.h"
-#include "../Source/bridge/Stage.h"
+#include "../Source/bridge/StageSnapshot.h"
+#include "../Source/bridge/StageEdits.h"
+#include "../Source/stage/Scenes.h"
+#include "../Source/stage/Seating.h"
 #include "LegacyDirectPath.h"
 
 using Catch::Matchers::WithinAbs;
@@ -56,11 +59,10 @@ TEST_CASE ("Pro panel at its defaults: the direct sound exactly as before", "[in
         const auto out = render (p, 25);
 
         History history;
-        history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * 48000.0));
+        history.prepare ((int) std::ceil (History::maxDelaySeconds * 48000.0));
         legacy::DirectPath path;
         path.prepare (48000.0);
         Acoustics a;
-        a.roomSize = 25.0f;
         a.player = { -4.0f, 7.0f };
         a.mode = mode == 1 ? OutputMode::binaural : OutputMode::stereo;
 

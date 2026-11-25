@@ -1,22 +1,11 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include "bridge/Stage.h"
+#include "stage/Seating.h"
 #include "dsp/Geometry.h"
 
 namespace
 {
 std::atomic<int> nextId { 0 };
-
-const float dbPerDoublingFreeField = 20.0f * std::log10 (2.0f); // 6.02 dB
-
-auto metres (const juce::String& id, const juce::String& name, float defaultValue)
-{
-    return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 },
-                                                        name,
-                                                        juce::NormalisableRange<float> { -25.0f, 25.0f, 0.01f },
-                                                        defaultValue,
-                                                        juce::AudioParameterFloatAttributes{}.withLabel ("m"));
-}
 } // namespace
 
 ComposerProcessor::ComposerProcessor()
@@ -35,7 +24,7 @@ ComposerProcessor::ComposerProcessor()
                                          reg->withMember (instance, [] (ComposerProcessor& p)
                                          {
                                              if (! p.isPlaced())
-                                                 stage::join (p, true);
+                                                 stage::join (p);
                                          });
                                      });
 }
@@ -44,32 +33,10 @@ ComposerProcessor::~ComposerProcessor()
 {
     // First, before any member goes away: other editors may be reading this instance.
     registry->remove (*this);
-}
 
-juce::AudioProcessorValueTreeState::ParameterLayout ComposerProcessor::createParameterLayout()
-{
-    return {
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "roomSize", 1 },
-                                                     "Room size",
-                                                     juce::NormalisableRange<float> { 5.0f, 50.0f, 5.0f },
-                                                     20.0f,
-                                                     juce::AudioParameterFloatAttributes{}.withLabel ("m")),
-        metres ("listenerX", "Listener X", 0.0f),
-        metres ("listenerY", "Listener Y", 0.0f),
-        metres ("playerX", "Player X", 0.0f),
-        metres ("playerY", "Player Y", 5.0f),
-        std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "outputMode", 1 },
-                                                      "Output",
-                                                      juce::StringArray { "Stereo", "Binaural" },
-                                                      0),
-
-        // Pro panel: project-wide, not part of scenes; neutral defaults.
-        // No step: the default must be exactly today's -20·log10(2)/3 dB per doubling.
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "proDistanceLaw", 1 }, "Distance law",
-                                                     juce::NormalisableRange<float> { 0.0f, dbPerDoublingFreeField },
-                                                     dbPerDoublingFreeField * geometry::distanceLawExponent,
-                                                     juce::AudioParameterFloatAttributes{}.withLabel ("dB/doubling")),
-    };
+    // A track removed in the middle of someone's drag: the host still gets its ends.
+    for (const auto& paramId : juce::StringArray (gesturesOpen))
+        endGesture (paramId);
 }
 
 juce::String ComposerProcessor::getDisplayName() const
@@ -80,20 +47,45 @@ juce::String ComposerProcessor::getDisplayName() const
     return trackName;
 }
 
+void ComposerProcessor::beginGesture (const juce::String& paramId)
+{
+    if (! gesturesOpen.contains (paramId))
+    {
+        gesturesOpen.add (paramId);
+        state.getParameter (paramId)->beginChangeGesture();
+    }
+}
+
+void ComposerProcessor::endGesture (const juce::String& paramId)
+{
+    if (gesturesOpen.contains (paramId))
+    {
+        gesturesOpen.removeString (paramId);
+        state.getParameter (paramId)->endChangeGesture();
+    }
+}
+
 void ComposerProcessor::writeParam (const juce::String& paramId, float value)
 {
     auto* param = state.getParameter (paramId);
-    param->beginChangeGesture();
+    const auto insideGesture = gesturesOpen.contains (paramId);
+
+    if (! insideGesture)
+        param->beginChangeGesture();
+
     param->setValueNotifyingHost (param->convertTo0to1 (value));
-    param->endChangeGesture();
+
+    if (! insideGesture)
+        param->endChangeGesture();
 }
 
 void ComposerProcessor::storeScene()
 {
+    const juce::ScopedLock lock (stateTreeLock);
     auto scenes = state.state.getOrCreateChildWithName ("scenes", nullptr);
     auto slot = scenes.getOrCreateChildWithName (getScene(), nullptr);
 
-    for (const auto& paramId : sceneParams)
+    for (const auto& paramId : params::ofScene)
         slot.setProperty (paramId, getParam (paramId), nullptr);
 }
 
@@ -104,7 +96,7 @@ bool ComposerProcessor::recallScene (const juce::String& scene)
     if (! slot.isValid())
         return false;
 
-    for (const auto& paramId : sceneParams)
+    for (const auto& paramId : params::ofScene)
         if (slot.hasProperty (paramId))
             writeParam (paramId, slot[paramId]);
 
@@ -145,6 +137,16 @@ float ComposerProcessor::readInputLevel (juce::uint32 nowMs)
     return meterLevel;
 }
 
+void ComposerProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+{
+    // The dry sound in the middle: a mono track's input on both channels (JUCE's own bypass
+    // would leave the right one silent). A stereo input passes through as it is.
+    if (getTotalNumInputChannels() == 1 && buffer.getNumChannels() > 1)
+        buffer.copyFrom (1, 0, buffer, 0, 0, buffer.getNumSamples());
+
+    bypassedSinceLastBlock = true;
+}
+
 void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -169,17 +171,6 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
          prev < peak && ! inputPeak.compare_exchange_weak (prev, peak, std::memory_order_relaxed);)
         ;
 
-    // Not activated on this computer (or the licence ran out): pass the input through untouched.
-    if (! licence->isValid())
-    {
-        for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
-            if (getTotalNumInputChannels() > 0)
-                buffer.copyFrom (ch, 0, buffer, 0, 0, buffer.getNumSamples());
-            else
-                buffer.clear (ch, 0, buffer.getNumSamples());
-        return;
-    }
-
     // A host calling before prepareToPlay, or with no input bus: silence, never a read past
     // an empty history or a channel that isn't there.
     if (! history.isPrepared() || getTotalNumInputChannels() == 0 || buffer.getNumChannels() < 2)
@@ -188,12 +179,20 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         return;
     }
 
+    // Back from bypass: the sound that was on its way before it would come out now.
+    if (std::exchange (bypassedSinceLastBlock, false))
+    {
+        history.clear();
+        directPath.clear();
+        silentFor = 0;
+    }
+
     // Audio depends only on this instance's own parameters (never on UI pushes or other
     // instances), so offline bounces and ahead-of-time rendering stay correct.
     Acoustics acoustics;
-    acoustics.roomSize = audioParams.roomSize->load();
-    acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, acoustics.roomSize);
-    acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, acoustics.roomSize);
+    const auto roomSize = audioParams.roomSize->load();
+    acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, roomSize);
+    acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, roomSize);
     acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
 
     // Head tracking is a live monitoring aid: never in exports, never in stereo.
@@ -201,10 +200,10 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         acoustics.headYaw = headTracking->yaw();
 
     auto& adjust = acoustics.adjust;
-    adjust.distanceExponent = audioParams.proDistanceLaw->load() / dbPerDoublingFreeField;
+    adjust.distanceExponent = audioParams.proDistanceLaw->load() / params::dbPerDoublingFreeField;
 
     // A track silent for longer than the tail produces silence: skip all the work. When
-    // sound returns, everything inside is silent too, so stages jump straight to the
+    // sound returns, everything inside is silent too, so the path jumps straight to the
     // current position instead of fading from where they were.
     if (peak <= 0.0f)
     {
@@ -219,12 +218,12 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     else
     {
         if (silentFor >= skipAfter)
-            std::apply ([] (auto&... stage) { (stage.jumpToTargets(), ...); }, stages);
+            directPath.jumpToTargets();
 
         silentFor = 0;
     }
 
-    std::apply ([&] (auto&... stage) { (stage.setAcoustics (acoustics), ...); }, stages);
+    directPath.setAcoustics (acoustics);
 
     const auto numInputs = getTotalNumInputChannels();
     const auto* inL = buffer.getReadPointer (0);
@@ -242,7 +241,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             history.write (numInputs > 1 ? 0.5f * (inL[i] + inR[i]) : inL[i]);
 
         alignas (32) float left[History::maxBlock] {}, right[History::maxBlock] {};
-        std::apply ([&] (auto&... stage) { (stage.process (history, left, right, n), ...); }, stages);
+        directPath.process (history, left, right, n);
 
         std::copy (left, left + n, outL + start);
         std::copy (right, right + n, outR + start);
@@ -252,8 +251,8 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 void ComposerProcessor::prepareToPlay (double sampleRate, int)
 {
     preparedRate = sampleRate;
-    history.prepare ((int) std::ceil (Acoustics::maxDelaySeconds * sampleRate));
-    std::apply ([&] (auto&... stage) { (stage.prepare (sampleRate), ...); }, stages);
+    history.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
+    directPath.prepare (sampleRate);
     skipAfter = (int) (tailSeconds * sampleRate);
     silentFor = 0;
 }
@@ -265,14 +264,23 @@ juce::AudioProcessorEditor* ComposerProcessor::createEditor()
 
 void ComposerProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = state.copyState().createXml())
+    const auto copy = [this]
+    {
+        const juce::ScopedLock lock (stateTreeLock);
+        return state.copyState();
+    }();
+
+    if (auto xml = copy.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
 void ComposerProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (state.state.getType()))
+    {
+        const juce::ScopedLock lock (stateTreeLock);
         state.replaceState (juce::ValueTree::fromXml (*xml));
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

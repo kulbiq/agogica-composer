@@ -1,10 +1,11 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { setName, setParams, setScene, startTracker, type Stage } from "./juce";
+import { setName, setParams, setScene, startTracker, type Stage } from "./bridge";
 import ParamSlider from "./ParamSlider";
 import ProPanel from "./ProPanel";
 import type { NodeKey } from "./StageMap";
 import styles from "./App.module.css";
 import LevelMeter from "./LevelMeter";
+import { committedMetres, typedMetres } from "./metres";
 
 type Props = {
   stage: Stage;
@@ -207,13 +208,12 @@ function NumberField({
   const cancelled = useRef(false);
 
   const commit = () => {
-    const v = Number(draft);
-    if (!cancelled.current && draft !== undefined && draft.trim() !== "" && Number.isFinite(v)) {
-      const half = room / 2;
-      onCommit(Math.round(Math.min(half, Math.max(-half, v)) * 100) / 100);
-    }
+    const metres = cancelled.current || draft === undefined ? undefined : committedMetres(draft, room, value.toFixed(2));
+    if (metres !== undefined) onCommit(metres);
+    // Text that isn't a number stays in the field, marked, until it is corrected or Escape.
+    const notANumber = !cancelled.current && draft !== undefined && draft.trim() !== "" && typedMetres(draft) === undefined;
     cancelled.current = false;
-    setDraft(undefined);
+    if (!notANumber) setDraft(undefined);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -229,8 +229,9 @@ function NumberField({
         type="text"
         inputMode="decimal"
         value={draft ?? value.toFixed(2)}
+        aria-invalid={draft !== undefined && draft.trim() !== "" && typedMetres(draft) === undefined}
         onFocus={(e) => {
-          setDraft(value.toFixed(2));
+          setDraft((d) => d ?? value.toFixed(2));
           e.currentTarget.select();
         }}
         onChange={(e) => setDraft(e.target.value)}

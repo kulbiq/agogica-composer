@@ -35,7 +35,7 @@ Measurements name the model and machine they were taken with: several predate th
 - Invert is in the app's settings (an old page's localStorage value moves over once).
 - The preview is frames from the engine (`EngineHost::setPreview`, ~10 JPEGs a second while the Camera section is open): Windows lets only one client open the camera (getUserMedia: "Device in use", measured), so the page never opens it, on either platform.
 - About (Help menu; the app menu on macOS) is a view of the page.
-  Icon: `tracker/icon.svg` (the Hub tile and ictus ring with the dial inside).
+  Icon: `tracker/icon.svg` (the Agogica tile and ictus ring with the dial inside).
 - **Engine: HFHPE** (PINTO0309/High-Angle_Robust_Fast_Head_Pose_Estimation, 2026; the joint ViT-T 128 graph `hfhpe_vitt_ypr_kappa_1x3x128x128.onnx`: yaw/pitch/roll as (cos, sin) + a von Mises kappa per angle; full 360° yaw; code MIT, trained without non-commercial data, **weights' licence not stated - confirm with the author before shipping**) on PINTO's YOLOX Body-Head-Hand head box put through HFHPE's crop contract (`Decode.h` `hfhpeCrop` + `squareToTensor`: +5 % per side, long-side square, border repeated, area resize to 128, RGB, x/127.5-1; matches the reference's OpenCV output, tested).
   HFHPE's own DEIMv2 detector gives readings within ~0.6° but costs ~250 ms/frame on the i5.
   Yaw sign as before (+ = turned to the person's right), so Invert settings carry over.
@@ -59,6 +59,6 @@ Measurements name the model and machine they were taken with: several predate th
   No longer always on top: with the output native, a paused page doesn't stop tracking (macOS not re-checked since).
 - View > Debugging (menu bar, saved): off = a fixed 380 px window with status, dial, buttons and camera, its height fitted to the page (native `fitHeight`); on = readouts and plot in a resizable window (size remembered separately, kept on screen).
 - The window is made resizable once: `setResizable` later recreates the native window and WebView2 stops drawing into it; the compact view is fixed by size limits, which JUCE applies to the window with its frame (`fitCompact` adds it).
-- Windows build: a folder (`Agogica Tracker.exe`, `onnxruntime.dll`, `ui\`, `models\`), WebView2 profile in `%LOCALAPPDATA%\Agogica\Tracker\WebView2`; it runs from the build folder - install folder, Hub entry and `startTracker` on Windows are still to do (Hub plan 7b).
+- Windows build: a folder (`Agogica Tracker.exe`, `onnxruntime.dll`, `ui\`, `models\`), WebView2 profile in `%LOCALAPPDATA%\Agogica\Tracker\WebView2`; it runs from the build folder - install folder and `startTracker` on Windows are still to do.
 - Every build installs it per user to `~/Applications/Agogica Tracker.app`; Composer's panel (Binaural, not live) shows a "Start head tracking" chip (`HeadTracking::startTracker`: the installed copy first, then `open -b com.agogica.tracker`).
   After rebuilding, quit a running tracker first: `open` only re-activates a running instance.

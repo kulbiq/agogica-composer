@@ -1,7 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
-#include "../Source/bridge/Stage.h"
+#include "../Source/bridge/StageSnapshot.h"
+#include "../Source/bridge/StageEdits.h"
+#include "../Source/stage/Scenes.h"
+#include "../Source/stage/Seating.h"
 
 using Catch::Matchers::WithinAbs;
 
@@ -23,7 +26,86 @@ void drag (ComposerProcessor& p, int target, const juce::String& param, float va
     stage::applyEdit (p, edit ("change", target, param, value));
     stage::applyEdit (p, edit ("end", target, param));
 }
+
+// What the host hears about gestures on one instance: every begin needs its end, and a
+// parameter is never begun twice (hosts latch automation, or stop recording, otherwise).
+struct HostGestureLog final : juce::AudioProcessorListener
+{
+    explicit HostGestureLog (ComposerProcessor& p) : processor (p)   { processor.addListener (this); }
+    ~HostGestureLog() override                                       { processor.removeListener (this); }
+
+    void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
+    void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+    void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index) override
+    {
+        begunTwice = begunTwice || open.contains (index);
+        open.addIfNotAlreadyThere (index);
+    }
+    void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int index) override
+    {
+        endedUnbegun = endedUnbegun || ! open.contains (index);
+        open.removeAllInstancesOf (index);
+    }
+
+    bool balanced() const   { return open.isEmpty() && ! begunTwice && ! endedUnbegun; }
+
+    ComposerProcessor& processor;
+    juce::Array<int> open;
+    bool begunTwice = false, endedUnbegun = false;
+};
 } // namespace
+
+TEST_CASE ("gestures reach the host balanced, whatever the page and the stage do", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+    HostGestureLog hostOfA (a), hostOfB (b);
+
+    SECTION ("a gesture begun twice, or ended twice")
+    {
+        stage::applyEdit (a, edit ("begin", a.id, "playerX"));
+        stage::applyEdit (a, edit ("begin", a.id, "playerX"));
+        stage::applyEdit (a, edit ("change", a.id, "playerX", 2.0f));
+        stage::applyEdit (a, edit ("end", a.id, "playerX"));
+        stage::applyEdit (a, edit ("end", a.id, "playerX"));
+        CHECK_THAT (a.getParam ("playerX"), WithinAbs (2.0, 1e-4));
+    }
+
+    SECTION ("a scene switch from another window during a drag")
+    {
+        stage::applyEdit (a, edit ("begin", a.id, "playerX"));
+        stage::setScene (b, "B");
+        stage::setScene (b, "A");
+        stage::applyEdit (a, edit ("change", a.id, "playerX", 2.0f));
+        stage::applyEdit (a, edit ("end", a.id, "playerX"));
+    }
+
+    SECTION ("a track that joins while the room is being dragged")
+    {
+        stage::applyEdit (a, edit ("begin", a.id, "roomSize"));
+        ComposerProcessor late;
+        HostGestureLog hostOfLate (late);
+        stage::join (late);
+        stage::applyEdit (a, edit ("change", a.id, "roomSize", 30.0f));
+        stage::applyEdit (a, edit ("end", a.id, "roomSize"));
+        CHECK (hostOfLate.balanced());
+        CHECK_THAT (late.getParam ("roomSize"), WithinAbs (30.0, 1e-4));
+    }
+
+    SECTION ("the window closes in the middle of a drag")
+    {
+        {
+            stage::OpenGestures ofThisWindow;
+            ofThisWindow.applyEdit (a, edit ("begin", a.id, "listenerX"));
+            ofThisWindow.applyEdit (a, edit ("change", a.id, "listenerX", 2.0f));
+            ofThisWindow.endAll (a);
+        }
+        CHECK_THAT (b.getParam ("listenerX"), WithinAbs (2.0, 1e-4));
+    }
+
+    CHECK (hostOfA.balanced());
+    CHECK (hostOfB.balanced());
+}
 
 TEST_CASE ("applyEdit: writes metres, ignores unknown params and other targets", "[integration]")
 {
@@ -38,6 +120,34 @@ TEST_CASE ("applyEdit: writes metres, ignores unknown params and other targets",
     drag (p, p.id + 1000, "playerX", 7.0f);
     drag (p, p.id, "notAParam", 7.0f);
     CHECK_THAT (p.getParam ("playerX"), WithinAbs (-3.25, 1e-4));
+
+    SECTION ("an edit the page could never send does nothing")
+    {
+        auto change = [&] (std::function<void (juce::DynamicObject&)> spoil)
+        {
+            auto e = edit ("change", p.id, "playerX", 7.0f);
+            spoil (*e.getDynamicObject());
+            stage::applyEdit (p, e);
+        };
+
+        change ([] (auto& e) { e.removeProperty ("value"); });
+        change ([] (auto& e) { e.setProperty ("value", juce::var()); }); // what NaN becomes as JSON
+        change ([] (auto& e) { e.setProperty ("value", std::numeric_limits<float>::infinity()); });
+        change ([] (auto& e) { e.setProperty ("value", "7"); });
+        change ([] (auto& e) { e.removeProperty ("target"); });
+        change ([] (auto& e) { e.setProperty ("target", "first"); });
+        CHECK_THAT (p.getParam ("playerX"), WithinAbs (-3.25, 1e-4));
+
+        ComposerProcessor fresh;
+        stage::applyEdit (fresh, edit ("wobble", fresh.id, "playerX", 7.0f));
+        CHECK_FALSE (fresh.isPlaced());
+    }
+
+    SECTION ("a name is cut to 64 characters")
+    {
+        stage::setName (p, p.id, juce::String::repeatedString ("x", 200));
+        CHECK (p.getDisplayName().length() == 64);
+    }
 }
 
 TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float residue", "[integration]")
@@ -126,14 +236,14 @@ TEST_CASE ("a new insert adopts the stage's scene, room/listener and takes a fre
 {
     juce::ScopedJuceInitialiser_GUI juce;
     ComposerProcessor a;
-    stage::join (a, true); // alone: stays where it is
+    stage::join (a); // alone: stays where it is
     stage::setScene (a, "C");
     drag (a, a.id, "roomSize", 30.0f);
     drag (a, a.id, "listenerY", -3.0f);
     drag (a, a.id, "playerY", 3.0f); // seat 0 (0, 3) is taken by a
 
     ComposerProcessor b;
-    stage::join (b, true);
+    stage::join (b);
 
     CHECK (b.getScene() == "C");
     CHECK_THAT (b.getParam ("roomSize"), WithinAbs (30.0, 1e-4));
@@ -214,6 +324,32 @@ TEST_CASE ("scenes store and recall every instance's layout", "[integration]")
     CHECK (a.getScene() == "B");
 }
 
+TEST_CASE ("a track added in a later scene shares the room and listener of every scene", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+    drag (a, a.id, "roomSize", 25.0f);
+    drag (a, a.id, "listenerX", 1.0f);
+
+    stage::setScene (a, "B");
+    drag (a, a.id, "roomSize", 40.0f);
+    drag (a, a.id, "listenerX", -3.0f);
+
+    ComposerProcessor late; // inserted while B is active: it has never been in A
+    stage::join (late);
+    const auto seatInB = late.getParam ("playerX");
+
+    stage::setScene (a, "A");
+    CHECK (late.getScene() == "A");
+    CHECK_THAT (late.getParam ("roomSize"), WithinAbs (25.0, 1e-4));
+    CHECK_THAT (late.getParam ("listenerX"), WithinAbs (1.0, 1e-4));
+    CHECK_THAT (late.getParam ("playerX"), WithinAbs (seatInB, 1e-4)); // its place is its own: kept
+
+    stage::setScene (a, "B");
+    CHECK_THAT (late.getParam ("roomSize"), WithinAbs (40.0, 1e-4));
+    CHECK_THAT (late.getParam ("listenerX"), WithinAbs (-3.0, 1e-4));
+}
+
 TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room is per scene", "[integration]")
 {
     // first: set in scene A; second: set in scene B; shown: how the snapshot reports `first`.
@@ -243,7 +379,7 @@ TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room
         CHECK_THAT (b.getParam (id), WithinAbs (second, 1e-4));
 
         ComposerProcessor c;
-        stage::join (c, true);
+        stage::join (c);
         CHECK_THAT (c.getParam (id), WithinAbs (second, 1e-4)); // adopted
 
         b.getStateInformation (saved);

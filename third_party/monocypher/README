@@ -1,4 +1,0 @@
-Monocypher 4.0.2 (https://monocypher.org), unmodified: src/monocypher.{c,h} and
-src/optional/monocypher-ed25519.{c,h}. Dual-licensed BSD-2-Clause / CC0 (LICENCE.md).
-Used for Ed25519 (SHA-512) signature checks of offline licences: Source/licensing.
-Archive sha256: bc1ca30b1b2654e4e7daf2492c0d204200e55137f23fda6b7142fd7d523bd6b4

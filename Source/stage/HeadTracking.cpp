@@ -22,7 +22,7 @@ void HeadTracking::pollNow()
     registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
         for (auto* p : members)
-            wanted = wanted || p->getParam ("outputMode") > 0.5f;
+            wanted = wanted || p->getParam (params::outputMode) > 0.5f;
     });
 
     if (getTimerInterval() != (wanted ? 10 : 500))
@@ -37,16 +37,4 @@ void HeadTracking::pollNow()
     // Live: follow the tracker as it is. Otherwise ease back to straight ahead.
     const auto current = yawDegrees.load (std::memory_order_relaxed);
     yawDegrees.store (isLive ? pose->yaw : current * 0.9f, std::memory_order_relaxed);
-}
-
-bool HeadTracking::startInstalledTracker()
-{
-   #if JUCE_MAC
-    // The per-user install first: a build folder may hold another copy with the same identity.
-    const auto installed = juce::File::getSpecialLocation (juce::File::userHomeDirectory)
-                               .getChildFile ("Applications/Agogica Tracker.app");
-    return installed.exists() && installed.startAsProcess();
-   #else
-    return false; // ponytail: the tracker isn't installed on Windows yet (Hub plan 7b)
-   #endif
 }

@@ -125,7 +125,7 @@ juce::WebBrowserComponent::Options platformOptions()
 {
     juce::WebBrowserComponent::Options options;
    #if JUCE_WINDOWS
-    // WebView2 needs a folder it can write its profile to: per PC, like the licence.
+    // WebView2 needs a folder it can write its profile to: per PC.
     return options.withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
                   .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
                       .withUserDataFolder (juce::File::getSpecialLocation (juce::File::windowsLocalAppData)

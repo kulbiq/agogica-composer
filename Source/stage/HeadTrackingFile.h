@@ -77,15 +77,18 @@ class Reader
 public:
     explicit Reader (juce::File, juce::uint32 checkEveryMs = 500);
 
-    // The latest consistent pose, or nothing if there's no valid file.
-    std::optional<Pose> read();
+    // The latest consistent pose (the previous one while a write is in progress), or nothing
+    // if there's no valid file.
+    std::optional<Pose> read()   { return read (juce::Time::getMillisecondCounter()); }
+    std::optional<Pose> read (juce::uint32 nowMs); // the clock handed in (tests)
 
 private:
-    void remapIfNeeded();
+    void remapIfNeeded (juce::uint32 nowMs);
 
     juce::File file;
     std::unique_ptr<juce::MemoryMappedFile> map;
     const Record* record = nullptr;
+    std::optional<Pose> lastRead;
     juce::uint64 identity = 0;
     juce::int64 size = 0;
     juce::uint32 checkEveryMs, checkedAt = 0;

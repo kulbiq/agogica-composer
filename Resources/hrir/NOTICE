@@ -10,8 +10,9 @@ Individual and Non-Individual HRTFs: A Case Study of the SADIE II Database",
 Applied Sciences 8(11), 2029 (2018). doi:10.3390/app8112029
 
 Modifications (tools/make_hrir.py): only the 0-degree-elevation ring is kept and
-re-indexed clockwise; one global onset delay is removed; responses are truncated
-(256 taps at 48 kHz, scaled with the sample rate) with a short fade-out; the 88.2,
+re-indexed clockwise; one global onset delay is removed; responses are cut or
+zero-padded to 256 taps at 48 kHz (scaled with the sample rate; the measured
+responses are shorter, so the script's fade-out falls on the padding); the 88.2,
 176.4 and 192 kHz tables are resampled from the 44.1 and 96 kHz measurements; a
 per-ear gain equalises the ear microphones, and each table is scaled so the front
 direction matches the stereo pan level at centre.

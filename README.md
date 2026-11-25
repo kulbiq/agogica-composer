@@ -50,7 +50,7 @@ After rebuilding, quit the DAW completely (Dorico's audio engine keeps the old p
 ## Licences to resolve before a release
 - **HFHPE** (the tracker's head-pose model; code MIT): its weights carry no stated licence, so the author must confirm the terms before the tracker ships (`tracker/models/MODELS.md`).
 - The YOLOX head detector and the SADIE II HRTFs are Apache-2.0 (attribution shown in the UI).
-- The repository may later be published under AGPLv3; all dependencies are chosen to be compatible.
+- Composer is free and open source under AGPLv3 (JUCE's open-source licence); all dependencies are compatible with it.
 
 ## Roadmap
 
@@ -79,7 +79,7 @@ Ideas and decisions collected during development, so none of them get lost.
   Needs the motion permission (`NSMotionUsageDescription`) and a recenter on start, because the headphones report rotation relative to where they started.
 - Smoothing between camera frames on slow computers, if the steps are audible.
 - Measure the full motion-to-sound latency.
-- Windows (and Intel Mac) builds of the tracker; bundling it with the planned Agogica hub app.
+- Windows (and Intel Mac) builds of the tracker.
 
 ### Release
-- Beta build expiry and licence check entry point, CI builds for macOS (universal) and Windows, signing and notarisation.
+- macOS universal builds (arm64 + x86_64); Authenticode signing on Windows.

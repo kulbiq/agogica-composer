@@ -1,38 +1,11 @@
 #include "PluginEditor.h"
-#include "bridge/Stage.h"
-#include "bridge/Mime.h"
-#include "bridge/Apps.h"
-#include <BinaryData.h>
+#include "bridge/StageSnapshot.h"
+#include "stage/Scenes.h"
+#include "bridge/PageProtocol.h"
+#include "bridge/UiResources.h"
 
 namespace
 {
-juce::ZipFile& getUiZip()
-{
-    static juce::MemoryInputStream stream { BinaryData::ui_zip, BinaryData::ui_zipSize, false };
-    static juce::ZipFile zip { stream };
-    return zip;
-}
-
-std::optional<juce::WebBrowserComponent::Resource> getResource (const juce::String& url)
-{
-    const auto path = url == "/" ? juce::String { "index.html" }
-                                 : url.fromFirstOccurrenceOf ("/", false, false).upToFirstOccurrenceOf ("?", false, false);
-
-    auto& zip = getUiZip();
-    const auto* entry = zip.getEntry (path);
-
-    if (entry == nullptr)
-        return std::nullopt;
-
-    std::unique_ptr<juce::InputStream> in { zip.createStreamForEntry (*entry) };
-
-    if (in == nullptr)
-        return std::nullopt;
-
-    std::vector<std::byte> data ((size_t) in->getTotalLength());
-    in->read (data.data(), data.size());
-    return juce::WebBrowserComponent::Resource { std::move (data), web::mimeType (path) };
-}
 juce::var getBuildInfo (const juce::AudioProcessor& processor)
 {
     auto info = std::make_unique<juce::DynamicObject>();
@@ -80,64 +53,49 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                     .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
                                                  .withUserDataFolder (webViewProfile()))
                     .withNativeIntegrationEnabled()
-                    .withNativeFunction ("getStage", [this] (const auto&, auto complete)
+                    .withNativeFunction (page::getStage, [this] (const auto&, auto complete)
                                          {
                                              complete (stage::snapshot (composer));
                                          })
-                    .withNativeFunction ("edit", [this] (const juce::Array<juce::var>& args, auto complete)
+                    .withNativeFunction (page::edit, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
                                              if (args.size() == 1)
-                                                 stage::applyEdit (composer, args[0]);
+                                                 gesturesBegunHere.applyEdit (composer, args[0]);
 
                                              complete ({});
                                          })
-                    .withNativeFunction ("setName", [this] (const juce::Array<juce::var>& args, auto complete)
+                    .withNativeFunction (page::setName, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
-                                             if (args.size() == 2)
+                                             if (args.size() == 2 && args[0].isInt() && args[1].isString())
                                                  stage::setName (composer, (int) args[0], args[1].toString());
 
                                              complete ({});
                                          })
-                    .withNativeFunction ("setScene", [this] (const juce::Array<juce::var>& args, auto complete)
+                    .withNativeFunction (page::setScene, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
                                              if (args.size() == 1)
                                                  stage::setScene (composer, args[0].toString());
 
                                              complete ({});
                                          })
-                    .withNativeFunction ("startTracker", [this] (const auto&, auto complete)
+                    .withNativeFunction (page::startTracker, [this] (const auto&, auto complete)
                                          {
-                                             if (HeadTracking::startInstalledTracker())
-                                                 complete (true);
-                                             else
-                                                 openApp ("com.agogica.tracker", std::move (complete));
+                                             trackerLauncher.start ([complete] (bool started) { complete (started); });
                                          })
-                    // "Not activated" screen: Agogica Hub signs in and writes the licence.
-                    .withNativeFunction ("openHub", [this] (const auto&, auto complete)
-                                         {
-                                             // Not installed: get it from the website.
-                                             openApp ("com.agogica.hub", std::move (complete),
-                                                      [] { juce::URL ("https://agogica.app/dashboard").launchInDefaultBrowser(); });
-                                         })
-                    .withNativeFunction ("checkLicence", [this] (const auto&, auto complete)
-                                         {
-                                             composer.licence->refresh();
-                                             complete (composer.licence->isValid());
-                                         })
-                    .withNativeFunction ("getBuildInfo", [this] (const auto&, auto complete)
+                    .withNativeFunction (page::getBuildInfo, [this] (const auto&, auto complete)
                                          {
                                              complete (getBuildInfo (composer));
                                          })
                     // The web page draws its own resize grip (JUCE's corner resizer would sit
                     // under the native webview); hosts like Ableton rely on it.
-                    .withNativeFunction ("setEditorSize", [this] (const juce::Array<juce::var>& args, auto complete)
+                    .withNativeFunction (page::setEditorSize, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
                                              if (args.size() == 2)
                                                  setBoundsConstrained (getBounds().withSize ((int) args[0], (int) args[1]));
 
                                              complete ({});
                                          })
-                    .withResourceProvider (getResource, resourceOrigin) }
+                    .withResourceProvider (web::uiResource, resourceOrigin) }
 {
     addAndMakeVisible (browser);
 
@@ -145,61 +103,31 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
     setResizeLimits (640, 400, 2560, 1600);
     setSize (960, 600);
 
-    browser.onPageLoaded = [this] { startTimerHz (30); };
+    browser.onPageLoaded = [this]
+    {
+        gesturesBegunHere.endAll (composer); // a page that reloaded in the middle of a drag
+
+        // A fresh page knows nothing: what was last sent to the old one doesn't count.
+        lastStage.clear();
+        lastHeadYaw = 0.0f;
+        startTimerHz (30);
+    };
     browser.goToURL (uiUrl);
 }
 
-void ComposerEditor::openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion complete,
-                              std::function<void()> ifFailed)
+ComposerEditor::~ComposerEditor()
 {
-   #if JUCE_MAC
-    if (auto process = std::make_unique<juce::ChildProcess>(); process->start (juce::StringArray { "/usr/bin/open", "-b", bundleId }))
-    {
-        opening.push_back ({ std::move (process), std::move (complete), std::move (ifFailed), juce::Time::getMillisecondCounter() });
-        return;
-    }
-   #elif JUCE_WINDOWS
-    // ShellExecute returns once the app's process exists (as the browser fallback does): nothing
-    // to wait for. A ChildProcess would pass the host's inheritable handles on to the app, and
-    // the app keeps running, so the timer would count it as failed.
-    if (const auto exe = apps::windowsExecutable (bundleId); exe.existsAsFile() && exe.startAsProcess())
-    {
-        complete (true);
-        return;
-    }
-   #else
-    juce::ignoreUnused (bundleId);
-   #endif
-
-    if (ifFailed)
-        ifFailed();
-    complete (false);
-}
-
-void ComposerEditor::finishOpening()
-{
-    const auto now = juce::Time::getMillisecondCounter();
-
-    for (auto it = opening.begin(); it != opening.end();)
-    {
-        const auto running = it->process->isRunning();
-        if (running && now - it->startedAt < 5000)
-        {
-            ++it;
-            continue;
-        }
-
-        const auto ok = ! running && it->process->getExitCode() == 0;
-        if (! ok && it->ifFailed)
-            it->ifFailed();
-        it->complete (ok);
-        it = opening.erase (it);
-    }
+    gesturesBegunHere.endAll (composer);
 }
 
 void ComposerEditor::timerCallback()
 {
-    finishOpening();
+    trackerLauncher.poll();
+
+    // Nothing is sent to a page that isn't shown, so nothing is worked out for it either:
+    // what it last saw stays "last sent", and it catches up when it is shown again.
+    if (! browser.isVisible())
+        return;
 
     // Every track's input level in dB, by player id; its own event so the stage diff
     // below stays quiet while audio plays.
@@ -212,7 +140,7 @@ void ComposerEditor::timerCallback()
             levels->setProperty (juce::String (p->id), juce::Decibels::gainToDecibels (p->readInputLevel (now), -60.0f));
     });
 
-    browser.emitEventIfBrowserIsVisible ("levels", levels.release());
+    browser.emitEventIfBrowserIsVisible (page::levels, levels.release());
 
     // Development monitoring (LoadMeter), ~4 times a second: this track, and all Composer
     // tracks in this process (the sum is their share of one core; host threads may spread it).
@@ -233,7 +161,7 @@ void ComposerEditor::timerCallback()
         {
             for (auto* p : members)
             {
-                const auto r = p->load.read();
+                const auto r = p->load.read (juce::Time::getMillisecondCounter());
                 if (p == &composer)
                     self = r;
                 all.average += r.average;
@@ -247,14 +175,14 @@ void ComposerEditor::timerCallback()
         auto everyone = reading (all);
         everyone->setProperty ("tracks", tracks);
         event->setProperty ("all", everyone.release());
-        browser.emitEventIfBrowserIsVisible ("load", event.release());
+        browser.emitEventIfBrowserIsVisible (page::load, event.release());
     }
 
     // The listener's head (degrees), only when it moved: 30 times a second while tracking.
     if (const auto yaw = composer.headTracking->yaw(); std::abs (yaw - lastHeadYaw) > 0.01f)
     {
         lastHeadYaw = yaw;
-        browser.emitEventIfBrowserIsVisible ("headYaw", yaw);
+        browser.emitEventIfBrowserIsVisible (page::headYaw, yaw);
     }
 
     // Automation playback and other changes reach the UI here; it only draws them.
@@ -263,7 +191,7 @@ void ComposerEditor::timerCallback()
     if (auto json = juce::JSON::toString (stage, true); json != lastStage)
     {
         lastStage = std::move (json);
-        browser.emitEventIfBrowserIsVisible ("stage", stage);
+        browser.emitEventIfBrowserIsVisible (page::stage, stage);
     }
 }
 
