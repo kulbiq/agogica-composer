@@ -1,6 +1,7 @@
 #pragma once
 
-#include <juce_video/juce_video.h>
+#include <juce_events/juce_events.h>
+#include "CameraSource.h"
 
 namespace tracker
 {
@@ -10,18 +11,16 @@ namespace tracker
 // Which camera: the one the user chose (Camera menu), or - with no choice - each camera once, in
 // the system's order, until one gives a picture.
 // A camera that gives no picture is tried a few times and then left alone (`hasGivenUp`): the
-// app doesn't keep waking a camera that won't answer, e.g. a phone offered as one. (On macOS
-// JUCE gets frames as a chain of still captures, and one failed capture ends the chain - which
-// is why a camera that did work is opened again.)
-class CameraFeed final : private juce::CameraDevice::Listener,
-                         private juce::Timer
+// app doesn't keep waking a camera that won't answer (a phone offered as one and out of reach,
+// a laptop's own camera under a closed lid).
+class CameraFeed final : private juce::Timer
 {
 public:
     // `chosenCamera`: a name from `availableCameras()`; empty, or a camera that isn't there = no choice.
     explicit CameraFeed (const juce::String& chosenCamera); // message thread
     ~CameraFeed() override;
 
-    static juce::StringArray availableCameras() { return juce::CameraDevice::getAvailableDevices(); }
+    static juce::StringArray availableCameras() { return CameraSource::availableCameras(); }
 
     // The user's choice: opened now, and tried afresh. Message thread.
     void choose (const juce::String& cameraName);
@@ -39,7 +38,7 @@ public:
     bool hasGivenUp() const { return gaveUp.load (std::memory_order_relaxed); }
 
 private:
-    void imageReceived (const juce::Image&) override;
+    void frameArrivedFromCamera (const juce::Image&);
     void timerCallback() override;
     void retryIfNoPicture();
     void startTrying (int cameraIndex, bool isUsersChoice);
@@ -51,7 +50,7 @@ private:
     // a second - the whole app can then be run and checked on a computer without a camera.
     const juce::Image developmentFrame;
 
-    std::unique_ptr<juce::CameraDevice> camera;
+    std::unique_ptr<CameraSource> camera;
     int cameraIndex = 0;
     bool isUsersChoice = false;
     bool hasCurrentCameraDelivered = false;

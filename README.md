@@ -77,7 +77,6 @@ Ideas and decisions collected during development, so none of them get lost.
 - **AirPods head tracking** (AirPods Pro, AirPods Max, AirPods 3rd gen and later): Core Motion's `CMHeadphoneMotionManager` (macOS 14+) gives the head's rotation from the headphones' own sensors, with no camera, full 360° and no front/back ambiguity.
   The tracker app would read it and write the same shared file, so Composer itself doesn't change; the camera stays as the fallback for other headphones.
   Needs the motion permission (`NSMotionUsageDescription`) and a recenter on start, because the headphones report rotation relative to where they started.
-- A capture path of the tracker's own on macOS (JUCE delivers frames as still captures, which some cameras refuse).
 - Smoothing between camera frames on slow computers, if the steps are audible.
 - Measure the full motion-to-sound latency.
 - Windows (and Intel Mac) builds of the tracker; bundling it with the planned Agogica hub app.

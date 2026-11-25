@@ -32,6 +32,7 @@ camera ──frame──> TrackingLoop ──head, as the camera sees it──> 
 | | `TrackerSettings.h` | What is remembered between runs; the only place with the settings file's keys. |
 | | `AppFiles.h` | Where the build puts the page and the models. |
 | `tracking/` | `CameraFeed` | The camera (the Camera menu's choice, else the first that gives a picture) and its latest frame; a silent camera is tried a few times, then left alone. |
+| | `CameraSource` | One open camera delivering video frames: AVFoundation's video output on macOS (`_mac.mm`), `juce::CameraDevice` elsewhere (`_juce.cpp`). |
 | | `TrackingLoop` | The tracking thread: a short loop over named steps. |
 | | `TrackingReports.h` | What the loop reports: status, frame, performance. Plain structs. |
 | | `ListenerPose.h` | Pure: camera-frame head to listener-frame head. Invert, Recenter, Pause, "live". |
@@ -129,7 +130,6 @@ With a real camera: cover it (No head); choose a camera that can't answer in the
 
 ## Known limits
 
-- macOS: JUCE's camera frames are still captures; a camera that fails them (seen with an iPhone as camera) gives no picture, and the app moves on to the next camera.
 - A MacBook's own camera gives no picture while the lid is closed; the app then says "No picture" and the Camera menu chooses another.
 - Windows: runs from the build folder; no installer, and Composer's "Start head tracking" does nothing there yet.
 - macOS builds are arm64 only (ONNX Runtime ships no universal build).

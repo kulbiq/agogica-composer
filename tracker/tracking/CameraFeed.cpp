@@ -4,15 +4,6 @@ namespace tracker
 {
 namespace
 {
-struct SizeRange { int minWidth, minHeight, maxWidth, maxHeight; };
-
-// VGA first: the models need no more (the detector sees 320x192, the pose model a 128 px head),
-// and webcams send uncompressed frames, so larger sizes are what USB 2 caps (the integrated
-// camera of an i5-10210U laptop: 1280x720 at 10 fps, 640x480 at 30 in good light, 10 in a dim
-// room) and cost Windows more to convert (0.2 cores at 1280x720).
-// On Windows JUCE takes the largest size in the range.
-constexpr SizeRange preferredSizes[] { { 640, 480, 640, 480 }, { 640, 360, 640, 360 }, { 320, 240, 1280, 720 } };
-
 // Long enough for a camera to start: a phone offered as a camera has to wake and connect first,
 // and at 4 s it was closed and opened again before it could answer.
 constexpr int noPictureTimeoutMs = 10000;
@@ -70,28 +61,17 @@ void CameraFeed::open (int index)
         return;
 
     cameraIndex = index % cameras.size();
-    for (const auto& size : preferredSizes)
-    {
-        const bool highQuality = false;
-        camera.reset (juce::CameraDevice::openDevice (cameraIndex, size.minWidth, size.minHeight, size.maxWidth, size.maxHeight, highQuality));
-        if (camera != nullptr)
-            break;
-    }
-
     {
         const juce::ScopedLock sl (frameLock);
         name = cameras[cameraIndex];
     }
-    if (camera != nullptr)
-        camera->addListener (this);
+    camera = CameraSource::open (cameraIndex, [this] (const juce::Image& frame) { frameArrivedFromCamera (frame); });
 }
 
 // The camera is let go; its name stays, for the status.
 void CameraFeed::close()
 {
-    if (camera != nullptr)
-        camera->removeListener (this);
-    camera.reset();
+    camera.reset(); // no frame arrives after this
 }
 
 void CameraFeed::giveUp()
@@ -104,7 +84,7 @@ void CameraFeed::giveUp()
 void CameraFeed::timerCallback()
 {
     if (developmentFrame.isValid())
-        imageReceived (developmentFrame);
+        frameArrivedFromCamera (developmentFrame);
     else
         retryIfNoPicture();
 }
@@ -149,7 +129,7 @@ juce::String CameraFeed::cameraName() const
     return name;
 }
 
-void CameraFeed::imageReceived (const juce::Image& image)
+void CameraFeed::frameArrivedFromCamera (const juce::Image& image)
 {
     received.fetch_add (1, std::memory_order_relaxed);
     {

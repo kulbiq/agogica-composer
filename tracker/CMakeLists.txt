@@ -42,6 +42,7 @@ target_sources(ComposerTracker PRIVATE
     app/TrackerPage.cpp
     app/TrackerWindow.cpp
     tracking/CameraFeed.cpp
+    $<IF:$<PLATFORM_ID:Darwin>,tracking/CameraSource_mac.mm,tracking/CameraSource_juce.cpp>
     tracking/ProcessCpu.cpp
     tracking/TrackingLoop.cpp
     vision/HeadDetector.cpp
@@ -51,7 +52,8 @@ target_sources(ComposerTracker PRIVATE
     ${CMAKE_SOURCE_DIR}/Source/stage/HeadTrackingFile.cpp) # the file shared with the plugin
 target_include_directories(ComposerTracker SYSTEM PRIVATE ${onnxruntime_SOURCE_DIR}/include) # third-party warnings off
 if(APPLE)
-    target_link_libraries(ComposerTracker PRIVATE ${ONNXRUNTIME_LIB}/libonnxruntime.1.dylib)
+    target_link_libraries(ComposerTracker PRIVATE ${ONNXRUNTIME_LIB}/libonnxruntime.1.dylib
+        "-framework AVFoundation" "-framework CoreMedia" "-framework CoreVideo") # tracking/CameraSource_mac.mm
     set_target_properties(ComposerTracker PROPERTIES BUILD_RPATH "@executable_path/../Frameworks" INSTALL_RPATH "@executable_path/../Frameworks")
 else()
     # The exe's own folder is searched first, before System32's Windows ML onnxruntime.dll.
