@@ -1,60 +1,44 @@
-"""Downloads the Agogica Tracker's models (HFHPE + the YOLOX head detector) for development builds;
-the files are not committed - see MODELS.md for sources, licences and training-data terms.
+"""Downloads the Agogica Tracker's models for development builds; the files are not committed -
+see MODELS.md for sources, licences and training-data terms.
 
     python3 tracker/models/fetch_models.py
 
-The archives are streamed and abandoned as soon as the needed file has been read, so only a
-fraction of each is downloaded. The build checks every file against check_models.cmake.
+models.json lists them (name, SHA-256, archive, the file inside it). The archives are streamed
+and abandoned as soon as the needed file has been read, so only a fraction of each is
+downloaded. A download that doesn't match its pinned hash is not kept.
 """
 
-from __future__ import annotations  # `str | None` on the macOS system Python (3.9)
-
+import hashlib
+import json
 import pathlib
 import tarfile
 import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
-PINTO = "https://s3.ap-northeast-2.wasabisys.com/pinto-model-zoo"
-HFHPE = "https://github.com/PINTO0309/High-Angle_Robust_Fast_Head_Pose_Estimation/releases/download/weights"
-
-# name in tracker/models -> (url, member inside a .tar.gz or None for a plain file)
-MODELS = {
-    "yolox_n_body_head_hand_192x320.onnx": (
-        f"{PINTO}/426_YOLOX-Body-Head-Hand/resources_n.tar.gz",
-        "yolox_n_body_head_hand_post_0461_0.4428_1x3x192x320.onnx",
-    ),
-    "hfhpe_vitt_ypr_kappa_1x3x128x128.onnx": (
-        f"{HFHPE}/vitt_distill_128_ypr_unified_v19_r180_lr2e4.tar.gz",
-        "hfhpe_vitt_ypr_kappa_1x3x128x128.onnx",
-    ),
-}
 
 
-def fetch(name: str, url: str, member: str | None):
+def fetch(name: str, sha256: str, url: str, archive_member: str):
     target = HERE / name
     if target.exists():
         return
     print(f"{name}: downloading…", flush=True)
+    data = None
     with urllib.request.urlopen(url) as response:
-        if member is None:
-            data = response.read()
-        else:
-            data = None
-            with tarfile.open(fileobj=response, mode="r|gz") as tar:
-                for entry in tar:
-                    if entry.name.endswith(member):
-                        data = tar.extractfile(entry).read()
-                        break
-            if data is None:
-                raise SystemExit(f"{member} not found in {url}")
-    if not data.startswith(b"\x08"):  # ONNX files are protobufs starting with the ir_version field
-        raise SystemExit(f"{name}: doesn't look like an ONNX model")
-    temp = target.with_suffix(".part")
-    temp.write_bytes(data)
-    temp.rename(target)
+        with tarfile.open(fileobj=response, mode="r|gz") as archive:
+            for entry in archive:
+                if entry.name.endswith(archive_member):
+                    data = archive.extractfile(entry).read()
+                    break
+    if data is None:
+        raise SystemExit(f"{archive_member} not found in {url}")
+    if hashlib.sha256(data).hexdigest() != sha256:
+        raise SystemExit(f"{name}: the download doesn't match the SHA-256 pinned in models.json")
+    partial = target.with_suffix(".part")
+    partial.write_bytes(data)
+    partial.rename(target)
     print(f"{name}: {len(data) / 1e6:.1f} MB")
 
 
 if __name__ == "__main__":
-    for name, (url, member) in MODELS.items():
-        fetch(name, url, member)
+    for model in json.loads((HERE / "models.json").read_text()):
+        fetch(model["name"], model["sha256"], model["url"], model["archiveMember"])

@@ -74,7 +74,7 @@ rm -rf "$STAGE" "$ZIP"
 mkdir -p "$STAGE"
 ditto build/release/Composer_artefacts/Release/VST3/Composer.vst3 "$STAGE/Composer.vst3"
 ditto build/release/Composer_artefacts/Release/AU/Composer.component "$STAGE/Composer.component"
-ditto "build/release/ComposerTracker_artefacts/Release/Agogica Tracker.app" "$STAGE/Agogica Tracker.app"
+ditto "build/release/tracker/ComposerTracker_artefacts/Release/Agogica Tracker.app" "$STAGE/Agogica Tracker.app"
 
 # A Release plugin trusts only the production licence key: the dev key's bytes must be absent.
 DEV_KEY=$(sed -n '/developmentKey/,/}/p' Source/licensing/PublicKeys.h | grep -o '0x[0-9a-f][0-9a-f]' | sed 's/0x//' | tr -d '\n')
