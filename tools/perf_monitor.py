@@ -111,7 +111,7 @@ def table(title, cpu, memory, running):
     lines = [
         title,
         "",
-        f"{'':<9}{'CPU, % of one core':<47}{'memory, MB':>18}",
+        f"{'':<9}{f'CPU, % of one core (all {psutil.cpu_count()} cores = {psutil.cpu_count() * 100} %)':<47}{'memory, MB':>18}",
         f"{'':<9}" + "".join(f"{c:>9}" for c in CPU_COLUMNS) + f"{'now':>11}{'max':>9}",
         RULE,
     ]
@@ -127,6 +127,8 @@ def table(title, cpu, memory, running):
         lines.append(
             f"{name:<9}{cpu_history[-1]:9.1f}" + "".join(f"{stats[k]:9.1f}" for k in CPU_COLUMNS[1:]) + f"{memory_history[-1]:11.0f}{max(memory_history):9.0f}"
         )
+    whole = summary(rows[-1][1])["mean"] / psutil.cpu_count()
+    lines.append(f"{'':<9}on average {whole:.1f} % of the whole machine")
     return lines
 
 
