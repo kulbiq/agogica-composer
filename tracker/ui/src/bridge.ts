@@ -11,9 +11,12 @@ export type TrackerStatus = {
   detail: string;
 };
 
-// One camera frame the app got to. Angles as the camera sees the head (before Invert and Recenter).
+// One camera frame the app got to (or, with `found` false and no camera angles, the camera going silent).
 export type TrackingFrame = {
-  found: boolean;
+  found: boolean; // a head is in the frame
+  live: boolean; // Composer hears it: found, and not paused
+  listenerYawDegrees: number; // what Composer hears (Invert and Recenter applied); 0 while not live
+  // As the camera sees the head, before Invert and Recenter:
   reusedStillHead: boolean; // the head hadn't moved: the last reading again, the models didn't run
   changeSinceLastEstimate: number;
   warning?: string; // the models failed on this frame
@@ -36,15 +39,11 @@ export type Performance = {
   droppedPerSecond: number;
 };
 
-// What Composer hears.
-export type ListenerPose = { yawDegrees: number; live: boolean };
-
 type Events = {
   status: TrackerStatus;
   trackingFrame: TrackingFrame;
   performance: Performance;
   cameraPreview: string; // a JPEG data URL
-  listenerPose: ListenerPose;
   debugView: boolean;
   about: undefined;
 };

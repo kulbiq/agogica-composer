@@ -1,7 +1,6 @@
 #pragma once
 
 #include <juce_gui_extra/juce_gui_extra.h>
-#include "../tracking/ListenerPose.h"
 #include "../tracking/TrackingReports.h"
 
 namespace tracker
@@ -40,7 +39,6 @@ public:
     void reportCameraPreview (const juce::MemoryBlock& jpeg);
 
     // Message thread.
-    void showListenerPose (const ListenerPose::Reading&);
     void showDebugView (bool on);
     void showAbout();
 

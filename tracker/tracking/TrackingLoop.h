@@ -15,8 +15,9 @@ namespace tracker
 class TrackingLoop final : private juce::Thread
 {
 public:
-    // Each frame's head (nothing = no head), for Composer. Called on the tracking thread.
-    using HeadOutput = std::function<void (std::optional<HeadOrientation>)>;
+    // Takes each frame's head (nothing = no head) for Composer and answers what Composer hears.
+    // Called on the tracking thread.
+    using HeadOutput = std::function<ListenerPose::Reading (std::optional<HeadOrientation>)>;
 
     // Called on the tracking thread.
     struct Reports
@@ -37,6 +38,7 @@ private:
     void run() override;
     bool loadEstimator();
     void setStatus (TrackerStatus);
+    void reportCameraSilent();
     FrameReport trackHead (const juce::Image& frame);
     void publishCameraPreviewIfDue (const juce::Image& frame);
 

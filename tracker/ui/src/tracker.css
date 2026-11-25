@@ -120,8 +120,14 @@
   cursor: pointer;
 }
 
-.ghost:hover {
+.ghost:hover:enabled {
   border-color: var(--ink);
+}
+
+.ghost:disabled {
+  border-style: dashed;
+  color: var(--ink-lighter);
+  cursor: default;
 }
 
 .ghost[aria-pressed="true"] {
@@ -130,11 +136,29 @@
   color: var(--paper);
 }
 
-.more .frame {
+/* The camera's picture with the followed head marked on it. */
+.preview {
+  position: relative;
+  margin-top: 12px;
+  transform: scaleX(-1); /* a mirror is what people expect to see */
+}
+
+.preview .frame {
   display: block;
   width: 100%;
   border-radius: var(--radius-chip);
-  transform: scaleX(-1); /* a mirror is what people expect to see */
+}
+
+.preview .box {
+  position: absolute;
+  border: 1px solid var(--paper);
+  outline: 1px solid var(--line-strong);
+  border-radius: var(--radius-input);
+  pointer-events: none;
+}
+
+.preview .box[hidden] {
+  display: none;
 }
 
 .more summary {

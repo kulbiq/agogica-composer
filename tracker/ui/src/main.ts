@@ -1,16 +1,15 @@
 import "../../../ui/src/styles/fonts.css";
 import "../../../ui/src/styles/tokens.css";
 import "./tracker.css";
-import { fitHeight, onEvent, pageReady, recenter, setInverted, setPaused, type TrackerStatus } from "./bridge";
+import { fitHeight, onEvent, pageReady, recenter, setInverted, setPaused, type TrackerStatus, type TrackingFrame } from "./bridge";
 import { setUpCameraSection, showCameraPicture, showHeadBox } from "./cameraPreview";
 import { buildDialGrid, turnDialTo } from "./dial";
-import { elementById, wrapDegrees } from "./dom";
+import { elementById } from "./dom";
 import { startPlot } from "./plot";
 import { SessionStats } from "./sessionStats";
 
-// The app tracks the head and writes the pose for Composer by itself; this page shows it and
-// sends the buttons. "listenerPose" events turn the dial, "trackingFrame" events (one per camera
-// frame) carry the readouts and the plot.
+// The app tracks the head, decides what Composer hears and writes it; this page only shows it
+// ("trackingFrame" events, one per camera frame) and sends the buttons.
 
 const STATUS_TEXT: Record<TrackerStatus["phase"], (detail: string) => string> = {
   loadingModels: () => "Loading model",
@@ -20,11 +19,26 @@ const STATUS_TEXT: Record<TrackerStatus["phase"], (detail: string) => string> = 
   failed: (reason) => `Error: ${reason}`,
 };
 
-function showStatus(text: string, isLive: boolean) {
+// The chip: the app's status until it tracks, then what the latest frame says.
+function showStatus(status: TrackerStatus | undefined, frame: TrackingFrame | undefined, isPaused: boolean) {
   const chip = elementById("status");
+  const isTracking = status?.phase === "tracking";
+  let text = "Loading";
+  if (status && !isTracking) text = STATUS_TEXT[status.phase](status.detail);
+  else if (isPaused) text = "Paused";
+  else if (frame && !frame.found) text = "No head";
+  else if (isTracking) text = "Tracking";
+
   chip.textContent = text;
-  chip.dataset.status = isLive ? "live" : "soon";
-  return chip;
+  chip.dataset.status = isTracking && frame?.live ? "live" : "soon";
+  // The longer story on hover: which camera, or why a frame failed.
+  chip.title = status?.phase === "waitingForCamera" ? status.detail : (frame?.warning ?? "");
+}
+
+function showError(error: unknown) {
+  const chip = elementById("status");
+  chip.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+  chip.dataset.status = "soon";
 }
 
 // Debugging (the app's View menu) shows the readouts and the plot; off, the window is fixed and
@@ -34,9 +48,14 @@ function showDebugView(on: boolean) {
   fitWindowToPage();
 }
 
+let fittedHeight = 0;
 function fitWindowToPage() {
   const app = document.querySelector<HTMLElement>(".app");
-  if (app && !document.body.hasAttribute("data-debug")) void fitHeight(app.offsetHeight);
+  if (!app || document.body.hasAttribute("data-debug")) {
+    fittedHeight = 0; // the debugging view sizes itself: fit again when the compact view returns
+    return;
+  }
+  if (app.offsetHeight !== fittedHeight) void fitHeight((fittedHeight = app.offsetHeight));
 }
 
 function toggleButton(id: string, initiallyOn: boolean, onChange: (on: boolean) => void) {
@@ -53,40 +72,38 @@ function toggleButton(id: string, initiallyOn: boolean, onChange: (on: boolean) 
 async function main() {
   const stats = new SessionStats();
   const plot = startPlot(elementById<HTMLCanvasElement>("plot"));
+  const recenterButton = elementById<HTMLButtonElement>("recenter");
   buildDialGrid();
-  showStatus("Loading", false);
 
-  // The page's own copy of Invert, Recenter and Pause, for the plot and the readouts.
-  // To go: the app decides all three (tracker/tracking/ListenerPose.h) and the page should draw its answer.
-  const controls = { isInverted: false, isPaused: false, centreYawDegrees: 0, lastYawDegrees: 0 };
-  let providerName = "";
+  let status: TrackerStatus | undefined;
+  let latestFrame: TrackingFrame | undefined;
+  let isPaused = false;
   let inferenceMs = 0;
+  const refreshStatus = () => showStatus(status, latestFrame, isPaused);
+  refreshStatus();
 
-  onEvent("status", (status) => {
-    if (controls.isPaused) return;
-    if (status.phase === "tracking") providerName = status.detail;
-    const chip = showStatus(STATUS_TEXT[status.phase](status.detail), status.phase === "tracking");
-    chip.title = status.phase === "waitingForCamera" ? status.detail : ""; // which camera
+  onEvent("status", (newStatus) => {
+    status = newStatus;
+    refreshStatus();
   });
 
   onEvent("trackingFrame", (frame) => {
-    if (controls.isPaused) return;
+    latestFrame = frame;
+    stats.count(frame);
+    showHeadBox(frame.headBox);
+    recenterButton.disabled = !frame.live; // there is nothing to centre on
+    refreshStatus();
+
+    if (frame.live) {
+      turnDialTo(frame.listenerYawDegrees);
+      plot.add(frame.listenerYawDegrees, frame.confidence ?? 1);
+    }
 
     // Timings come with frames the models ran on (a still head repeats the last reading).
     if (frame.detectMs !== undefined && frame.poseMs !== undefined) {
       inferenceMs = frame.detectMs + frame.poseMs;
-      elementById("source").textContent = `${providerName} · detect ${frame.detectMs.toFixed(1)} ms · pose ${frame.poseMs.toFixed(1)} ms`;
-    }
-
-    showHeadBox(frame.found ? frame.headBox : undefined);
-
-    const yawSign = controls.isInverted ? -1 : 1;
-    const yawDegrees = frame.found && frame.cameraYawDegrees !== undefined ? yawSign * frame.cameraYawDegrees : undefined;
-    stats.countFrame(yawDegrees);
-    showStatus(yawDegrees === undefined ? "No head" : "Tracking", yawDegrees !== undefined);
-    if (yawDegrees !== undefined) {
-      controls.lastYawDegrees = yawDegrees;
-      plot.add(wrapDegrees(yawDegrees - controls.centreYawDegrees), frame.confidence ?? 1);
+      elementById("source").textContent =
+        `${status?.detail ?? ""} · detect ${frame.detectMs.toFixed(1)} ms · pose ${frame.poseMs.toFixed(1)} ms`;
     }
   });
 
@@ -94,12 +111,6 @@ async function main() {
     elementById("perf").textContent =
       `Camera ${p.cameraWidth}x${p.cameraHeight} at ${p.cameraFramesPerSecond.toFixed(0)}/s · CPU ${p.cpuCores.toFixed(2)} cores · ` +
       `models ${p.estimatedPerSecond.toFixed(0)}/s · reused ${p.reusedPerSecond.toFixed(0)}/s · dropped ${p.droppedPerSecond.toFixed(0)}/s`;
-  });
-
-  onEvent("listenerPose", (pose) => {
-    if (!pose.live || controls.isPaused) return;
-    stats.countHeard(pose.yawDegrees);
-    turnDialTo(pose.yawDegrees);
   });
 
   onEvent("cameraPreview", showCameraPicture);
@@ -115,19 +126,14 @@ async function main() {
   if (app) new ResizeObserver(fitWindowToPage).observe(app);
   setUpCameraSection();
 
-  controls.isInverted = initial.inverted;
-  toggleButton("invert", initial.inverted, (on) => {
-    controls.isInverted = on;
-    void setInverted(on);
-  });
+  toggleButton("invert", initial.inverted, (on) => void setInverted(on));
   toggleButton("pause", false, (on) => {
-    controls.isPaused = on;
+    isPaused = on;
+    refreshStatus();
     void setPaused(on);
   });
-  elementById("recenter").onclick = () => {
-    controls.centreYawDegrees = controls.lastYawDegrees;
-    void recenter();
-  };
+  recenterButton.disabled = true;
+  recenterButton.onclick = () => void recenter();
 
   setInterval(() => {
     const frames = stats.takeFramesPerSecond();
@@ -139,4 +145,4 @@ async function main() {
   }, 1000);
 }
 
-main().catch((error) => showStatus(`Error: ${error instanceof Error ? error.message : String(error)}`, false));
+main().catch(showError);

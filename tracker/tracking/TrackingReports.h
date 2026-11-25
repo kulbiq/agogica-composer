@@ -3,6 +3,7 @@
 #include <juce_core/juce_core.h>
 #include <optional>
 #include "../HeadObservation.h"
+#include "ListenerPose.h"
 
 // What the tracking thread tells the rest of the app (the page shows it; the development log
 // records it). Plain values: nothing here knows about JSON or the page.
@@ -30,7 +31,8 @@ struct TrackerStatus
 // One camera frame the tracking thread got to.
 struct FrameReport
 {
-    std::optional<HeadObservation> head;  // nothing = no head in the frame
+    std::optional<HeadObservation> head;  // as the camera sees it; nothing = no head in the frame
+    ListenerPose::Reading heard;          // what Composer hears after this frame
     bool reusedStillHead = false;         // the head hadn't moved: the last observation again, the models didn't run
     float changeSinceLastEstimate = 0;    // StillGate's measure for this frame
     juce::String warning;                 // the models failed on this frame

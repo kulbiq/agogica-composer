@@ -23,7 +23,7 @@ export function showCameraPicture(jpegDataUrl: string) {
   picture.hidden = false;
 }
 
-// The head the app follows, over the picture (which is shown mirrored: x runs the other way).
+// The head the app follows, over the picture (the two are mirrored together, in tracker.css).
 export function showHeadBox(headBox: TrackingFrame["headBox"]) {
   const box = elementById("box");
   box.hidden = headBox === undefined;
@@ -31,7 +31,7 @@ export function showHeadBox(headBox: TrackingFrame["headBox"]) {
 
   const [x, y, width, height] = headBox;
   Object.assign(box.style, {
-    left: `${(1 - x - width) * 100}%`,
+    left: `${x * 100}%`,
     top: `${y * 100}%`,
     width: `${width * 100}%`,
     height: `${height * 100}%`,

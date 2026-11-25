@@ -9,29 +9,24 @@ namespace tracker
 inline float wrapDegrees (float degrees) { return std::remainder (degrees, 360.0f); } // [-180, 180]
 
 // Turns the head the camera sees into the head Composer hears: the one place where Invert,
-// Recenter, Pause and "is tracking live" are decided. No threads, no clock of its own (the
-// caller passes the time), so it is tested directly (tests/ListenerPoseTests.cpp).
+// Recenter and Pause are decided. No threads, no clock (tests/ListenerPoseTests.cpp).
 class ListenerPose
 {
 public:
-    // A camera frame older than this means tracking has stalled: not live.
-    static constexpr double staleAfterSeconds = 0.4;
+    // The estimator's reading for the latest camera frame, in the camera's frame; nothing = no head.
+    void observe (std::optional<HeadOrientation> head) { cameraHead = head; }
 
-    // The estimator's reading for one camera frame, in the camera's frame; nothing = no head.
-    void observe (std::optional<HeadOrientation> head, double nowSeconds)
-    {
-        lastObservedSeconds = nowSeconds;
-        hasHead = head.has_value();
-        if (head)
-            cameraHead = *head;
-    }
-
-    // Invert: for a camera that shows the head mirrored.
+    // Invert: for a camera that shows the head mirrored (left and right swapped).
     void setInverted (bool on) { inverted = on; }
     void setPaused (bool on)   { paused = on; }
 
-    // "Where I look now is straight ahead."
-    void recenter() { centreYawDegrees = yawSign() * cameraHead.yawDegrees; }
+    // "Where I look now is straight ahead." Needs a head: false, and nothing changes, without one.
+    bool recenter()
+    {
+        if (cameraHead)
+            centreCameraYawDegrees = cameraHead->yawDegrees;
+        return cameraHead.has_value();
+    }
 
     struct Reading
     {
@@ -39,23 +34,24 @@ public:
         bool live = false;
     };
 
-    // What Composer hears at `nowSeconds`.
-    Reading at (double nowSeconds) const
+    // What Composer hears. The centre is kept in the camera's frame and the mirror applied last,
+    // so Invert and Recenter give the same result in either order. A mirror swaps the sides the
+    // head turns (yaw) and tilts (roll) to; nodding (pitch) looks the same in it.
+    Reading current() const
     {
-        if (paused || ! hasHead || nowSeconds - lastObservedSeconds >= staleAfterSeconds)
+        if (paused || ! cameraHead)
             return {};
 
-        return { { wrapDegrees (yawSign() * cameraHead.yawDegrees - centreYawDegrees),
-                   cameraHead.pitchDegrees, cameraHead.rollDegrees },
+        const auto mirror = inverted ? -1.0f : 1.0f;
+        return { { mirror * wrapDegrees (cameraHead->yawDegrees - centreCameraYawDegrees),
+                   cameraHead->pitchDegrees,
+                   mirror * cameraHead->rollDegrees },
                  true };
     }
 
 private:
-    float yawSign() const { return inverted ? -1.0f : 1.0f; }
-
-    HeadOrientation cameraHead;    // the last head seen
-    float centreYawDegrees = 0;
-    double lastObservedSeconds = 0;
-    bool hasHead = false, inverted = false, paused = false;
+    std::optional<HeadOrientation> cameraHead;
+    float centreCameraYawDegrees = 0;
+    bool inverted = false, paused = false;
 };
 } // namespace tracker

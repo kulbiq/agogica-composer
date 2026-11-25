@@ -15,7 +15,7 @@ const juce::Identifier pageReady { "pageReady" }, setInverted { "setInverted" },
 namespace event
 {
 const juce::Identifier status { "status" }, trackingFrame { "trackingFrame" }, performance { "performance" },
-    cameraPreview { "cameraPreview" }, listenerPose { "listenerPose" }, debugView { "debugView" }, about { "about" };
+    cameraPreview { "cameraPreview" }, debugView { "debugView" }, about { "about" };
 }
 
 juce::var object (std::initializer_list<std::pair<const char*, juce::var>> properties)
@@ -47,6 +47,8 @@ juce::var toJson (const TrackerStatus& status)
 juce::var toJson (const FrameReport& frame)
 {
     auto json = object ({ { "found", frame.head.has_value() },
+                          { "live", frame.heard.live },
+                          { "listenerYawDegrees", frame.heard.listenerHead.yawDegrees },
                           { "reusedStillHead", frame.reusedStillHead },
                           { "changeSinceLastEstimate", frame.changeSinceLastEstimate } });
     auto* o = json.getDynamicObject();
@@ -255,11 +257,6 @@ void TrackerPage::handleAsyncUpdate()
         emit (event::performance, toJson (*performance));
     if (! previewJpeg.isEmpty())
         emit (event::cameraPreview, "data:image/jpeg;base64," + juce::Base64::toBase64 (previewJpeg.getData(), previewJpeg.getSize()));
-}
-
-void TrackerPage::showListenerPose (const ListenerPose::Reading& heard)
-{
-    emit (event::listenerPose, object ({ { "yawDegrees", heard.listenerHead.yawDegrees }, { "live", heard.live } }));
 }
 
 void TrackerPage::showDebugView (bool on) { emit (event::debugView, on); }

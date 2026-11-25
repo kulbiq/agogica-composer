@@ -1,28 +1,33 @@
+import type { TrackingFrame } from "./bridge";
 import { wrapDegrees } from "./dom";
 
 const JITTER_WINDOW_MS = 2000;
 
-// The debugging view's numbers: frames and dropouts in the last second, how far the head has
-// turned this session, and the model's frame-to-frame noise.
+// The debugging view's numbers: frames in the last second, frames without a head and how far
+// the head has turned this session, and the model's frame-to-frame noise.
 export class SessionStats {
-  private recentYaw: { timeMs: number; yawDegrees: number }[] = [];
+  private recentCameraYaw: { timeMs: number; yawDegrees: number }[] = [];
   private framesThisSecond = 0;
   dropouts = 0; // frames without a head, this session
   turnedDegrees = { min: 0, max: 0 }; // what Composer heard, this session
 
-  countFrame(yawDegrees: number | undefined) {
+  count(frame: TrackingFrame) {
     this.framesThisSecond++;
-    if (yawDegrees === undefined) {
-      this.dropouts++;
-      return;
-    }
-    const now = performance.now();
-    this.recentYaw = [...this.recentYaw.filter((r) => now - r.timeMs < JITTER_WINDOW_MS), { timeMs: now, yawDegrees }];
-  }
+    if (!frame.found) this.dropouts++;
 
-  countHeard(yawDegrees: number) {
-    this.turnedDegrees.min = Math.min(this.turnedDegrees.min, yawDegrees);
-    this.turnedDegrees.max = Math.max(this.turnedDegrees.max, yawDegrees);
+    if (frame.live) {
+      this.turnedDegrees.min = Math.min(this.turnedDegrees.min, frame.listenerYawDegrees);
+      this.turnedDegrees.max = Math.max(this.turnedDegrees.max, frame.listenerYawDegrees);
+    }
+
+    // The model's own readings only: a still head repeats the last one, which would read as no noise.
+    if (frame.cameraYawDegrees !== undefined && !frame.reusedStillHead) {
+      const now = performance.now();
+      this.recentCameraYaw = [
+        ...this.recentCameraYaw.filter((reading) => now - reading.timeMs < JITTER_WINDOW_MS),
+        { timeMs: now, yawDegrees: frame.cameraYawDegrees },
+      ];
+    }
   }
 
   // Call once a second.
@@ -32,9 +37,10 @@ export class SessionStats {
     return frames;
   }
 
-  // RMS of the frame-to-frame yaw changes over the last 2 s (hold still to read the model's noise).
+  // RMS of the yaw's change between the model's readings over the last 2 s (hold still to read its noise).
   jitterDegrees() {
-    const changes = this.recentYaw.slice(1).map((r, i) => wrapDegrees(r.yawDegrees - this.recentYaw[i].yawDegrees));
+    const readings = this.recentCameraYaw;
+    const changes = readings.slice(1).map((reading, i) => wrapDegrees(reading.yawDegrees - readings[i].yawDegrees));
     return changes.length ? Math.sqrt(changes.reduce((sum, change) => sum + change * change, 0) / changes.length) : 0;
   }
 }

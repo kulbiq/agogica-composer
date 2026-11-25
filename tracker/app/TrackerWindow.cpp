@@ -11,7 +11,6 @@ constexpr int compactViewMinHeight = 200, compactViewMaxHeight = 1600;
 constexpr int debugViewMinWidth = 340, debugViewMinHeight = 200, debugViewMaxWidth = 1200, debugViewMaxHeight = 2400;
 constexpr int debugViewDefaultWidth = 900, debugViewDefaultHeight = 720;
 constexpr int anySize = 1 << 15;
-constexpr int dialRefreshHz = 60;
 
 enum MenuItem { debuggingItem = 1, aboutItem };
 const char* const aboutItemText = "About Agogica Tracker";
@@ -22,7 +21,7 @@ TrackerWindow::TrackerWindow()
       listenerPoseOutput (headtracking::defaultFile()),
       page (appResourcesFolder().getChildFile ("ui"), pageActions()),
       trackingLoop (appResourcesFolder().getChildFile ("models"), camera,
-                    [this] (std::optional<HeadOrientation> head) { listenerPoseOutput.observe (head); },
+                    [this] (std::optional<HeadOrientation> head) { return listenerPoseOutput.observe (head); },
                     trackingReports())
 {
     listenerPoseOutput.setInverted (settings.inverted());
@@ -46,13 +45,10 @@ TrackerWindow::TrackerWindow()
    #else
     setMenuBar (this);
    #endif
-
-    startTimerHz (dialRefreshHz);
 }
 
 TrackerWindow::~TrackerWindow()
 {
-    stopTimer();
    #if JUCE_MAC
     juce::MenuBarModel::setMacMainMenu (nullptr);
    #else
@@ -90,7 +86,12 @@ TrackerPage::Actions TrackerWindow::pageActions()
 TrackingLoop::Reports TrackerWindow::trackingReports()
 {
     TrackingLoop::Reports reports;
-    reports.status = [this] (const TrackerStatus& status) { page.report (status); };
+    reports.status = [this] (const TrackerStatus& status)
+    {
+        // Whatever the tracking does, Composer hears nothing of it without the file.
+        page.report (listenerPoseOutput.isWritingToFile() ? status
+                                                          : TrackerStatus { TrackerPhase::failed, "Can't write the head-tracking file" });
+    };
     reports.frame = [this] (const FrameReport& frame) { page.report (frame); };
     reports.performance = [this] (const PerformanceReport& performance) { page.report (performance); };
     reports.cameraPreview = [this] (const juce::MemoryBlock& jpeg) { page.reportCameraPreview (jpeg); };
@@ -190,10 +191,5 @@ void TrackerWindow::menuItemSelected (int itemId, int)
         setDebugView (! isDebugView);
     else if (itemId == aboutItem)
         page.showAbout();
-}
-
-void TrackerWindow::timerCallback()
-{
-    page.showListenerPose (listenerPoseOutput.current());
 }
 } // namespace tracker

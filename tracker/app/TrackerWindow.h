@@ -14,8 +14,7 @@ namespace tracker
 // Two views (View > Debugging): compact - a fixed window as tall as the page; debugging - a
 // resizable one with the readouts and the plot, its size remembered.
 class TrackerWindow final : public juce::DocumentWindow,
-                            private juce::MenuBarModel,
-                            private juce::Timer
+                            private juce::MenuBarModel
 {
 public:
     TrackerWindow();
@@ -36,8 +35,6 @@ private:
     juce::PopupMenu getMenuForIndex (int menuIndex, const juce::String&) override;
     void menuItemSelected (int itemId, int) override;
     static juce::PopupMenu aboutMenu();
-
-    void timerCallback() override; // the dial: what Composer hears
 
     bool isDebugView = false;
 

@@ -28,10 +28,9 @@ void HeadTracking::pollNow()
     if (getTimerInterval() != (wanted ? 10 : 500))
         startTimer (wanted ? 10 : 500);
 
-    constexpr std::uint64_t staleAfterMs = 500;
     const auto pose = wanted ? reader.read() : std::nullopt;
     const auto now = (std::uint64_t) juce::Time::currentTimeMillis();
-    const auto isLive = pose.has_value() && pose->face && now - pose->timestampMs < staleAfterMs;
+    const auto isLive = pose.has_value() && pose->face && now - pose->timestampMs < headtracking::staleAfterMs;
 
     live.store (isLive, std::memory_order_relaxed);
 

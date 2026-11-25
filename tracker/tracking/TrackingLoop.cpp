@@ -1,4 +1,5 @@
 #include "TrackingLoop.h"
+#include "../../Source/stage/HeadTrackingFile.h"
 #include "../engines/Engines.h"
 #include "ProcessCpu.h"
 
@@ -7,8 +8,7 @@ namespace tracker
 namespace
 {
 constexpr int frameWaitMs = 200;            // how often the loop looks whether it should stop
-constexpr int stopTimeoutMs = 5000;         // the estimator finishes its current frame first
-constexpr double cameraSilentAfterSeconds = 1.0; // no frame for this long: the camera isn't delivering
+constexpr double cameraSilentAfterSeconds = headtracking::staleAfterMs / 1000.0; // no frame for this long: no head
 constexpr double previewIntervalSeconds = 0.1;
 constexpr int previewWidthPixels = 480;     // sharp at 2x in the compact window's ~320 px
 constexpr float previewJpegQuality = 0.7f;
@@ -69,7 +69,10 @@ TrackingLoop::TrackingLoop (juce::File models, CameraFeed& feed, HeadOutput outp
 
 TrackingLoop::~TrackingLoop()
 {
-    stopThread (stopTimeoutMs);
+    // Waits for the frame in hand or for the models to finish loading, however long (the first
+    // load on a Mac took 7.6 s): a thread killed inside ONNX Runtime can take the app with it.
+    const int waitForever = -1;
+    stopThread (waitForever);
 }
 
 void TrackingLoop::run()
@@ -87,7 +90,7 @@ void TrackingLoop::run()
         if (! frame.isValid())
         {
             if (secondsNow() - lastFrameSeconds > cameraSilentAfterSeconds)
-                setStatus ({ TrackerPhase::waitingForCamera, camera.cameraName() });
+                reportCameraSilent();
             continue;
         }
         lastFrameSeconds = secondsNow();
@@ -95,8 +98,8 @@ void TrackingLoop::run()
         if (isFirstFrame)
             setStatus ({ TrackerPhase::compilingModels, estimator->provider() });
 
-        publishCameraPreviewIfDue (frame);
         const auto report = trackHead (frame);
+        publishCameraPreviewIfDue (frame); // after the pose is out: Composer doesn't wait for a JPEG
 
         isFirstFrame = false;
         setStatus ({ TrackerPhase::tracking, estimator->provider() });
@@ -107,6 +110,21 @@ void TrackingLoop::run()
         if (const auto measured = performance.measureIfDue (frame, camera.framesReceived()))
             reports.performance (*measured);
     }
+}
+
+// Without frames there is no head: Composer and the page are told once, not left with the last one.
+void TrackingLoop::reportCameraSilent()
+{
+    const TrackerStatus waiting { TrackerPhase::waitingForCamera, camera.cameraName() };
+    if (status.has_value() && status->phase == TrackerPhase::tracking)
+    {
+        lastHead.reset();
+        stillHead.clear();
+        FrameReport noFrame;
+        noFrame.heard = headOutput (std::nullopt);
+        reports.frame (noFrame);
+    }
+    setStatus (waiting);
 }
 
 // Reported when it changes.
@@ -151,16 +169,19 @@ FrameReport TrackingLoop::trackHead (const juce::Image& frame)
                 stillHead.clear();
         }
 
-        headOutput (lastHead ? std::optional (lastHead->orientation) : std::nullopt);
         report.head = lastHead;
         report.changeSinceLastEstimate = stillHead.difference;
     }
     catch (const std::exception& e)
     {
         // One bad frame is "no head this frame", not the end of tracking.
+        lastHead.reset();
+        stillHead.clear();
         report = {};
         report.warning = e.what();
     }
+
+    report.heard = headOutput (report.head ? std::optional (report.head->orientation) : std::nullopt);
     return report;
 }
 

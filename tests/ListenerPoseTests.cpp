@@ -9,115 +9,148 @@ using tracker::ListenerPose;
 namespace
 {
 HeadOrientation facing (float yawDegrees) { return { yawDegrees, 0.0f, 0.0f }; }
-float heardYaw (const ListenerPose& pose, double nowSeconds = 0.0) { return pose.at (nowSeconds).listenerHead.yawDegrees; }
+float heardYaw (const ListenerPose& pose) { return pose.current().listenerHead.yawDegrees; }
 } // namespace
 
 TEST_CASE ("listener pose: Composer hears the head the camera sees")
 {
     ListenerPose pose;
-    CHECK_FALSE (pose.at (0.0).live); // nothing seen yet
+    CHECK_FALSE (pose.current().live); // nothing seen yet
 
-    pose.observe (HeadOrientation { 30.0f, -5.0f, 2.0f }, 0.0);
-    const auto heard = pose.at (0.0);
+    pose.observe (HeadOrientation { 30.0f, -5.0f, 2.0f });
+    const auto heard = pose.current();
     CHECK (heard.live);
     CHECK_THAT (heard.listenerHead.yawDegrees, WithinAbs (30.0, 1e-4));
     CHECK_THAT (heard.listenerHead.pitchDegrees, WithinAbs (-5.0, 1e-4));
     CHECK_THAT (heard.listenerHead.rollDegrees, WithinAbs (2.0, 1e-4));
 }
 
-TEST_CASE ("listener pose: Invert flips the yaw of a mirrored camera")
+TEST_CASE ("listener pose: Invert undoes a mirrored camera - yaw and roll flip, pitch stays")
 {
     ListenerPose pose;
-    pose.observe (facing (30.0f), 0.0);
+    pose.observe (HeadOrientation { 30.0f, 5.0f, 8.0f });
     pose.setInverted (true);
-    CHECK_THAT (heardYaw (pose), WithinAbs (-30.0, 1e-4));
+
+    const auto heard = pose.current().listenerHead;
+    CHECK_THAT (heard.yawDegrees, WithinAbs (-30.0, 1e-4));
+    CHECK_THAT (heard.pitchDegrees, WithinAbs (5.0, 1e-4));
+    CHECK_THAT (heard.rollDegrees, WithinAbs (-8.0, 1e-4));
 }
 
 TEST_CASE ("listener pose: Recenter makes the current direction straight ahead")
 {
     ListenerPose pose;
-    pose.observe (facing (40.0f), 0.0);
-    pose.recenter();
+    pose.observe (facing (40.0f));
+    CHECK (pose.recenter());
     CHECK_THAT (heardYaw (pose), WithinAbs (0.0, 1e-4));
 
-    pose.observe (facing (55.0f), 0.0);
+    pose.observe (facing (55.0f));
     CHECK_THAT (heardYaw (pose), WithinAbs (15.0, 1e-4));
 
     SECTION ("across the +-180 seam the short way round")
     {
-        pose.observe (facing (170.0f), 0.0);
+        pose.observe (facing (170.0f));
         pose.recenter();
-        pose.observe (facing (-170.0f), 0.0); // 20 degrees further to the right
+        pose.observe (facing (-170.0f)); // 20 degrees further to the right
         CHECK_THAT (heardYaw (pose), WithinAbs (20.0, 1e-4));
+        pose.observe (facing (150.0f));  // 20 degrees to the left
+        CHECK_THAT (heardYaw (pose), WithinAbs (-20.0, 1e-4));
     }
 
-    SECTION ("inverted")
+    SECTION ("Invert afterwards keeps the centre: no jump")
     {
         pose.setInverted (true);
-        pose.observe (facing (10.0f), 0.0);
-        pose.recenter();
-        pose.observe (facing (25.0f), 0.0);
         CHECK_THAT (heardYaw (pose), WithinAbs (-15.0, 1e-4));
+        pose.observe (facing (40.0f));
+        CHECK_THAT (heardYaw (pose), WithinAbs (0.0, 1e-4));
+    }
+
+    SECTION ("Invert first, then Recenter: the same")
+    {
+        ListenerPose inverted;
+        inverted.setInverted (true);
+        inverted.observe (facing (40.0f));
+        inverted.recenter();
+        inverted.observe (facing (55.0f));
+        CHECK_THAT (heardYaw (inverted), WithinAbs (-15.0, 1e-4));
+    }
+
+    SECTION ("without a head there is nothing to centre on")
+    {
+        pose.observe (std::nullopt);
+        CHECK_FALSE (pose.recenter());
+        pose.observe (facing (40.0f));
+        CHECK_THAT (heardYaw (pose), WithinAbs (0.0, 1e-4)); // the centre from before
     }
 }
 
-TEST_CASE ("listener pose: not live while paused, without a head, or once the frames stop")
+TEST_CASE ("listener pose: not live while paused or without a head")
 {
     ListenerPose pose;
-    pose.observe (facing (30.0f), 10.0);
-    CHECK (pose.at (10.0).live);
+    pose.observe (facing (30.0f));
+    CHECK (pose.current().live);
 
     SECTION ("paused")
     {
         pose.setPaused (true);
-        CHECK_FALSE (pose.at (10.0).live);
-        CHECK_THAT (heardYaw (pose, 10.0), WithinAbs (0.0, 1e-4)); // straight ahead
+        CHECK_FALSE (pose.current().live);
+        CHECK_THAT (heardYaw (pose), WithinAbs (0.0, 1e-4)); // straight ahead
         pose.setPaused (false);
-        CHECK (pose.at (10.0).live);
+        CHECK (pose.current().live);
+        CHECK_THAT (heardYaw (pose), WithinAbs (30.0, 1e-4));
     }
 
     SECTION ("no head in the frame")
     {
-        pose.observe (std::nullopt, 10.1);
-        CHECK_FALSE (pose.at (10.1).live);
-        pose.observe (facing (31.0f), 10.2);
-        CHECK (pose.at (10.2).live);
-    }
-
-    SECTION ("frames stopped")
-    {
-        CHECK (pose.at (10.0 + ListenerPose::staleAfterSeconds - 0.01).live);
-        CHECK_FALSE (pose.at (10.0 + ListenerPose::staleAfterSeconds).live);
+        pose.observe (std::nullopt);
+        CHECK_FALSE (pose.current().live);
+        pose.observe (facing (31.0f));
+        CHECK (pose.current().live);
     }
 }
 
-// What the tracker does today and should not: pinned here so the refactoring changes nothing,
-// each to be turned round by its own fix.
-TEST_CASE ("listener pose: known wrong behaviour, kept for now")
+// ---- With the file -------------------------------------------------------------------------------
+#include "../tracker/tracking/ListenerPoseOutput.h"
+
+TEST_CASE ("listener pose output: Composer's file follows every frame and every button", "[integration]")
 {
-    ListenerPose pose;
-
-    SECTION ("Invert after Recenter makes the yaw jump")
+    auto file = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("composer-tests").getChildFile ("listener-pose-output");
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+    headtracking::Reader reader (file, 0);
     {
-        pose.observe (facing (30.0f), 0.0);
-        pose.recenter();
-        pose.setInverted (true);
-        CHECK_THAT (heardYaw (pose), WithinAbs (-60.0, 1e-4)); // should stay 0
-    }
+        tracker::ListenerPoseOutput output (file);
+        REQUIRE (output.isWritingToFile());
 
-    SECTION ("Recenter without a head centres on the last head seen")
-    {
-        pose.observe (facing (30.0f), 0.0);
-        pose.observe (std::nullopt, 0.1);
-        pose.recenter();
-        pose.observe (facing (0.0f), 0.2);
-        CHECK_THAT (heardYaw (pose, 0.2), WithinAbs (-30.0, 1e-4)); // should stay 0
-    }
+        CHECK (output.observe (facing (30.0f)).live);
+        auto read = reader.read();
+        REQUIRE (read.has_value());
+        CHECK (read->face);
+        CHECK_THAT (read->yaw, WithinAbs (30.0, 1e-4));
+        CHECK (juce::Time::currentTimeMillis() - (juce::int64) read->timestampMs < (juce::int64) headtracking::staleAfterMs);
 
-    SECTION ("Invert leaves the roll of a mirrored camera as it is")
-    {
-        pose.observe (HeadOrientation { 30.0f, 5.0f, 8.0f }, 0.0);
-        pose.setInverted (true);
-        CHECK_THAT (pose.at (0.0).listenerHead.rollDegrees, WithinAbs (8.0, 1e-4)); // should be -8
+        output.recenter(); // a button, with no new frame: written at once
+        CHECK_THAT (reader.read()->yaw, WithinAbs (0.0, 1e-4));
+
+        output.setPaused (true);
+        CHECK_FALSE (reader.read()->face);
+        output.setPaused (false);
+        CHECK (reader.read()->face);
+
+        output.observe (std::nullopt); // the head left, or the camera went silent
+        CHECK_FALSE (reader.read()->face);
+        output.observe (facing (30.0f));
+        CHECK (reader.read()->face);
     }
+    CHECK_FALSE (reader.read()->face); // the app has quit
+}
+
+TEST_CASE ("listener pose output: a file that can't be created is reported, not ignored", "[integration]")
+{
+    const auto blocker = juce::File::createTempFile ("not-a-folder");
+    REQUIRE (blocker.replaceWithText ("x"));
+    tracker::ListenerPoseOutput output (blocker.getChildFile ("head-tracking")); // a file where a folder should be
+    CHECK_FALSE (output.isWritingToFile());
+    CHECK (output.observe (facing (30.0f)).live); // tracking itself goes on
+    blocker.deleteFile();
 }
