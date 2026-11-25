@@ -3,6 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "PluginProcessor.h"
 #include "bridge/StageEdits.h"
+#include "bridge/TrackerLauncher.h"
 
 // Hosts the web UI; all UI logic lives in ui/.
 class ComposerEditor final : public juce::AudioProcessorEditor,
@@ -30,19 +31,7 @@ private:
 
     void timerCallback() override;
 
-    // Opens an app by bundle id without waiting on the host's message thread. macOS: `open -b`,
-    // and the timer completes the call when `open` has finished (or after 5 s), true if it worked.
-    // Elsewhere it completes with false at once.
-    void openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion);
-    void finishOpening();
-
-    struct Opening
-    {
-        std::unique_ptr<juce::ChildProcess> process;
-        juce::WebBrowserComponent::NativeFunctionCompletion complete;
-        juce::uint32 startedAt;
-    };
-    std::vector<Opening> opening;
+    TrackerLauncher trackerLauncher;
 
     ComposerProcessor& composer;
     Browser browser;

@@ -80,10 +80,7 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                                          })
                     .withNativeFunction (page::startTracker, [this] (const auto&, auto complete)
                                          {
-                                             if (HeadTracking::startInstalledTracker())
-                                                 complete (true);
-                                             else
-                                                 openApp ("com.agogica.tracker", std::move (complete));
+                                             trackerLauncher.start ([complete] (bool started) { complete (started); });
                                          })
                     .withNativeFunction (page::getBuildInfo, [this] (const auto&, auto complete)
                                          {
@@ -123,42 +120,9 @@ ComposerEditor::~ComposerEditor()
     gesturesBegunHere.endAll (composer);
 }
 
-void ComposerEditor::openApp (const juce::String& bundleId, juce::WebBrowserComponent::NativeFunctionCompletion complete)
-{
-   #if JUCE_MAC
-    if (auto process = std::make_unique<juce::ChildProcess>(); process->start (juce::StringArray { "/usr/bin/open", "-b", bundleId }))
-    {
-        opening.push_back ({ std::move (process), std::move (complete), juce::Time::getMillisecondCounter() });
-        return;
-    }
-   #else
-    juce::ignoreUnused (bundleId);
-   #endif
-
-    complete (false);
-}
-
-void ComposerEditor::finishOpening()
-{
-    const auto now = juce::Time::getMillisecondCounter();
-
-    for (auto it = opening.begin(); it != opening.end();)
-    {
-        const auto running = it->process->isRunning();
-        if (running && now - it->startedAt < 5000)
-        {
-            ++it;
-            continue;
-        }
-
-        it->complete (! running && it->process->getExitCode() == 0);
-        it = opening.erase (it);
-    }
-}
-
 void ComposerEditor::timerCallback()
 {
-    finishOpening();
+    trackerLauncher.poll();
 
     // Nothing is sent to a page that isn't shown, so nothing is worked out for it either:
     // what it last saw stays "last sent", and it catches up when it is shown again.

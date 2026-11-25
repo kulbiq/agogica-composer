@@ -61,6 +61,7 @@ target_sources(Composer PRIVATE
     Source/bridge/StageSnapshot.cpp
     Source/bridge/StageEdits.cpp
     Source/bridge/UiResources.cpp
+    Source/bridge/TrackerLauncher.cpp
     Source/stage/Scenes.cpp
     Source/stage/Seating.cpp
     Source/stage/StageRegistry.cpp
