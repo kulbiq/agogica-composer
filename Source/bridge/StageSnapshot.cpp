@@ -104,7 +104,9 @@ juce::var snapshot (ComposerProcessor& self)
             pro->setProperty (id, self.getParam (id));
     o->setProperty ("pro", pro.release());
     o->setProperty ("room", roomSize);
-    o->setProperty ("listener", point (listener));
+    auto listenerObject = point (listener);
+    listenerObject.getDynamicObject()->setProperty ("yaw", self.getParam (params::listenerYaw));
+    o->setProperty ("listener", listenerObject);
     return o.release();
 }
 } // namespace stage

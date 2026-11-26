@@ -39,7 +39,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     // ?elsewhere: another track's window is open (the "open here anyway" screen).
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
     room: 20,
-    listener: { x: 0, y: 0 },
+    listener: { x: 0, y: 0, yaw: 0 },
     // `own`: the track's name; `playerName`: the player's, when it has one (see setName).
     players: seats.map(([own, colour, x, y, player], i) => ({
       id: i, own, playerName: player ?? "", colour, icon: "", player: player?.toLowerCase() ?? "", self: i === 2, x, y,
@@ -50,7 +50,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   const snapshot = () => {
     const half = scene.room / 2;
     const clamp = (v: number) => Math.min(half, Math.max(-half, v));
-    const l = { x: clamp(scene.listener.x), y: clamp(scene.listener.y) };
+    const l = { x: clamp(scene.listener.x), y: clamp(scene.listener.y), yaw: scene.listener.yaw };
     return {
       ...scene,
       listener: l,
@@ -99,6 +99,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (e.param === "outputMode") scene.outputMode = e.value > 0.5 ? "binaural" : "stereo";
       if (e.param === "listenerX") scene.listener.x = e.value;
       if (e.param === "listenerY") scene.listener.y = e.value;
+      if (e.param === "listenerYaw") scene.listener.yaw = e.value;
       if (p && e.param === "playerX") tracks.forEach((t) => (t.x = e.value));
       if (p && e.param === "playerY") tracks.forEach((t) => (t.y = e.value));
       emitStageSoon();

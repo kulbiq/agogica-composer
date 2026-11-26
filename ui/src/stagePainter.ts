@@ -19,7 +19,7 @@ export type MapFrame = {
   selected: NodeKey | null;
   overrides: ReadonlyMap<NodeKey, Point>; // nodes the user is moving, in metres
   levels: Levels;
-  headYaw: number; // degrees clockwise
+  facing: number; // degrees clockwise the listener faces, as heard (stage direction + tracked head)
   view: MapView;
   names: MapNames;
   ink: string; // "r,g,b"
@@ -233,12 +233,12 @@ export class StagePainter {
     }
     this.paintText(ctx, texts, ink, paper);
 
-    // Listener: an arrowhead facing +y (front), turned with the head when tracking. Slim and
+    // Listener: an arrowhead facing +y (front), turned the way it faces in Binaural. Slim and
     // notched so its direction reads at any angle (an equilateral triangle turned 25°
     // looks like it points left).
     ctx.save();
     ctx.translate(sx(listener.x), sy(listener.y));
-    ctx.rotate((frame.headYaw * Math.PI) / 180);
+    ctx.rotate((frame.facing * Math.PI) / 180);
     ctx.beginPath();
     ctx.moveTo(0, -8);
     ctx.lineTo(5.5, 6);

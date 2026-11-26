@@ -132,6 +132,7 @@ private:
         std::atomic<float>* roomSize;
         std::atomic<float>* listenerX;
         std::atomic<float>* listenerY;
+        std::atomic<float>* listenerYaw;
         std::atomic<float>* playerX;
         std::atomic<float>* playerY;
         std::atomic<float>* outputMode;
@@ -141,6 +142,7 @@ private:
     const AudioParams audioParams { state.getRawParameterValue (params::roomSize),
                                     state.getRawParameterValue (params::listenerX),
                                     state.getRawParameterValue (params::listenerY),
+                                    state.getRawParameterValue (params::listenerYaw),
                                     state.getRawParameterValue (params::playerX),
                                     state.getRawParameterValue (params::playerY),
                                     state.getRawParameterValue (params::outputMode),

@@ -5,3 +5,4 @@ playerX v1 "Player X" -25.0000..25.0000 step 0.0100 skew 1.0000 default 0.0000
 playerY v1 "Player Y" -25.0000..25.0000 step 0.0100 skew 1.0000 default 5.0000
 outputMode v1 "Output" 0.0000..1.0000 step 1.0000 skew 1.0000 default 0.0000 choices Stereo|Binaural
 proDistanceLaw v1 "Distance law" 0.0000..6.0206 step 0.0000 skew 1.0000 default 2.0069
+listenerYaw v1 "Listener yaw" -180.0000..180.0000 step 0.1000 skew 1.0000 default 0.0000

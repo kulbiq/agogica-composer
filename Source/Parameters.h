@@ -15,13 +15,14 @@ inline constexpr auto playerX = "playerX";               // m, this track's play
 inline constexpr auto playerY = "playerY";
 inline constexpr auto outputMode = "outputMode";         // 0 = Stereo, 1 = Binaural
 inline constexpr auto proDistanceLaw = "proDistanceLaw"; // dB quieter per doubling of distance
+inline constexpr auto listenerYaw = "listenerYaw";       // degrees clockwise the listener faces from +y (Binaural)
 
 // A player's place: each track has its own.
 inline const juce::StringArray ofPlayer { playerX, playerY };
 // The same for the whole stage: every track carries a copy, and an edit goes to all of them.
-inline const juce::StringArray ofStage { roomSize, listenerX, listenerY, outputMode, proDistanceLaw };
+inline const juce::StringArray ofStage { roomSize, listenerX, listenerY, listenerYaw, outputMode, proDistanceLaw };
 // What a scene (A-H) remembers. Output mode and the Pro values are project-wide instead.
-inline const juce::StringArray ofScene { roomSize, listenerX, listenerY, playerX, playerY };
+inline const juce::StringArray ofScene { roomSize, listenerX, listenerY, listenerYaw, playerX, playerY };
 
 inline const float dbPerDoublingFreeField = 20.0f * std::log10 (2.0f); // 6.02 dB
 
@@ -56,6 +57,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                      juce::NormalisableRange<float> { 0.0f, dbPerDoublingFreeField },
                                                      dbPerDoublingFreeField * geometry::distanceLawExponent,
                                                      juce::AudioParameterFloatAttributes{}.withLabel ("dB/doubling")),
+
+        // Added after the first release: new parameters go at the end.
+        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { listenerYaw, 1 }, "Listener yaw",
+                                                     juce::NormalisableRange<float> { -180.0f, 180.0f, 0.1f },
+                                                     0.0f,
+                                                     juce::AudioParameterFloatAttributes{}.withLabel (juce::String::fromUTF8 ("\xc2\xb0"))), // degree sign
     };
 }
 } // namespace params

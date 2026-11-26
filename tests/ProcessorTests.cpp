@@ -665,6 +665,7 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK_THAT (p.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
         CHECK (p.getDisplayName() == "Viola");
         CHECK (p.getIcon().isEmpty()); // saved before icons: automatic
+        CHECK_THAT (p.getParam ("listenerYaw"), WithinAbs (0.0, 1e-4)); // saved before it existed: ahead
         CHECK (p.getScene() == "D");
         CHECK (p.isPlaced());
 

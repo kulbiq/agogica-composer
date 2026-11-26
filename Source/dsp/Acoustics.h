@@ -16,7 +16,7 @@ struct Acoustics
     OutputMode mode = OutputMode::stereo;
     Adjustments adjust;
 
-    // Listener's head rotation, degrees clockwise (head turned right). Binaural only and
-    // realtime only - the processor sets 0 otherwise.
+    // Which way the listener's head points, degrees clockwise (turned right). Binaural only -
+    // the processor sets 0 in stereo; the tracked part of it only in realtime.
     float headYaw = 0.0f;
 };

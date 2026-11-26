@@ -494,16 +494,20 @@ TEST_CASE ("scenes store and recall every instance's layout", "[integration]")
     drag (a, a.id, "playerX", -6.0f);
     drag (a, b.id, "playerX", -7.0f);
     drag (a, a.id, "roomSize", 40.0f);
+    drag (a, a.id, "listenerYaw", 45.0f); // the whole stage, like the room
 
     stage::setScene (a, "A");
     CHECK_THAT (a.getParam ("playerX"), WithinAbs (1.0, 1e-4));
     CHECK_THAT (b.getParam ("playerX"), WithinAbs (2.0, 1e-4));
     CHECK_THAT (b.getParam ("roomSize"), WithinAbs (25.0, 1e-4));
+    CHECK_THAT (b.getParam ("listenerYaw"), WithinAbs (0.0, 1e-4));
 
     stage::setScene (a, "B");
     CHECK_THAT (a.getParam ("playerX"), WithinAbs (-6.0, 1e-4));
     CHECK_THAT (b.getParam ("playerX"), WithinAbs (-7.0, 1e-4));
     CHECK_THAT (a.getParam ("roomSize"), WithinAbs (40.0, 1e-4));
+    CHECK_THAT (b.getParam ("listenerYaw"), WithinAbs (45.0, 1e-4));
+    CHECK_THAT ((double) stage::snapshot (b)["listener"]["yaw"], WithinAbs (45.0, 1e-4));
 
     const auto scenes = stage::snapshot (a)["scenes"];
     CHECK (scenes.size() == 2);

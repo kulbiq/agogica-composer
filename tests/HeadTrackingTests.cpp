@@ -355,6 +355,52 @@ TEST_CASE ("head tracking: live only in binaural, never in exports", "[integrati
     CHECK (std::abs (leftToRight (false)) < 1.0); // stereo: tracking ignored
 }
 
+TEST_CASE ("listener yaw: turns the binaural scene, live and in exports, on top of the tracked head", "[integration]")
+{
+    const auto file = tempFile ("listener-yaw");
+    Writer writer (file);
+    const TrackingFileOverride trackingFile (file);
+
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor p;
+    set (p, "playerY", 5.0f); // straight ahead
+    set (p, "outputMode", 1.0f);
+    set (p, "listenerYaw", 90.0f); // facing right: the player is on the left
+
+    auto leftToRight = [&] (bool offline)
+    {
+        p.setNonRealtime (offline);
+        p.setPlayConfigDetails (2, 2, 48000.0, 480);
+        p.prepareToPlay (48000.0, 480);
+
+        juce::Random rng (4);
+        juce::MidiBuffer midi;
+        double left = 0.0, right = 0.0;
+        for (int b = 0; b < 20; ++b)
+        {
+            juce::AudioBuffer<float> buffer (2, 480);
+            for (int i = 0; i < 480; ++i)
+                buffer.setSample (0, i, rng.nextFloat() - 0.5f), buffer.setSample (1, i, 0.0f);
+            p.processBlock (buffer, midi);
+            for (int i = 0; i < 480; ++i)
+                left += std::pow (buffer.getSample (0, i), 2.0f), right += std::pow (buffer.getSample (1, i), 2.0f);
+        }
+        return 10.0 * std::log10 (left / right);
+    };
+
+    CHECK (leftToRight (false) > 6.0);
+    CHECK (leftToRight (true) > 6.0); // a parameter: exports have it too
+
+    writer.write (pose (-90.0f)); // the head turned back left: straight ahead again, live only
+    p.headTracking->pollNow();
+    REQUIRE (p.headTracking->isLive());
+    CHECK (std::abs (leftToRight (false)) < 3.0);
+    CHECK (leftToRight (true) > 6.0);
+
+    set (p, "outputMode", 0.0f);
+    CHECK (std::abs (leftToRight (true)) < 1.0); // stereo: speakers don't turn
+}
+
 TEST_CASE ("head tracking: stale or faceless data is not live, the scene eases back ahead", "[integration]")
 {
     const auto file = tempFile ("stale");

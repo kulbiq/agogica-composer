@@ -2,6 +2,7 @@ import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react"
 import { beginGesture, useEvent, type Gesture, type Point } from "./bridge";
 import type { SeatedStage } from "./players";
 import styles from "./App.module.css";
+import { wrapDegrees } from "./ease";
 import type { Levels } from "./level";
 import { badgeRadius, nodesOf, StagePainter, type MapNames, type MapView, type NodeKey, type View } from "./stagePainter";
 
@@ -26,6 +27,9 @@ const nudgeKeys: Record<string, Point> = {
 
 const round = (v: number) => Math.round(v * 100) / 100;
 
+// Q and E turn the listener (Binaural) 5 degrees, Shift 15; one gesture per key press.
+const turnKeys: Record<string, number> = { q: -1, e: 1 };
+
 export default function StageMap({ stage, selfId, selected, onSelect, view: mapView, names }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textCopyRef = useRef<HTMLCanvasElement>(null);
@@ -39,6 +43,7 @@ export default function StageMap({ stage, selfId, selected, onSelect, view: mapV
   const overrides = useRef(new Map<NodeKey, Point>());
   const drag = useRef<{ key: NodeKey; gesture: Gesture; pointerId: number } | null>(null);
   const keyGesture = useRef<{ key: NodeKey; gesture: Gesture } | null>(null);
+  const turn = useRef<{ gesture: Gesture; yaw: number } | null>(null); // drawn from here until the key is up
   const view = useRef<View>({ cx: 0, cy: 0, scale: 1, drawn: new Map() });
   const levels = useRef<Levels>({});
   useEvent("levels", (l) => (levels.current = l));
@@ -93,11 +98,12 @@ export default function StageMap({ stage, selfId, selected, onSelect, view: mapV
     const restingFrameMs = 1000 / 30;
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
-      const moving = !painter.settled || drag.current !== null || keyGesture.current !== null;
+      const moving = !painter.settled || drag.current !== null || keyGesture.current !== null || turn.current !== null;
       if (!moving && now - lastPaint < restingFrameMs - 4) return; // 4 ms: frames don't arrive exactly on time
       lastPaint = now;
       // The window moved to a screen with another pixel ratio: no resize event tells us.
       if ((window.devicePixelRatio || 1) !== dpr) resize();
+      const s = latest.current.stage;
       view.current = painter.paint(ctx, {
         width: W,
         height: H,
@@ -105,7 +111,8 @@ export default function StageMap({ stage, selfId, selected, onSelect, view: mapV
         ...latest.current,
         overrides: overrides.current,
         levels: levels.current,
-        headYaw: headYaw.current,
+        // What is heard: stereo speakers don't turn, so the arrow doesn't either.
+        facing: s.outputMode === "binaural" ? (turn.current?.yaw ?? s.listener.yaw) + headYaw.current : 0,
         ink,
         paper,
       });
@@ -183,6 +190,15 @@ export default function StageMap({ stage, selfId, selected, onSelect, view: mapV
 
   // Arrow keys nudge the selected node 0.1 m (Shift: 1 m); one gesture per key press.
   const onKeyDown = (e: KeyboardEvent) => {
+    const side = turnKeys[e.key.toLowerCase()];
+    if (side && selected === "listener" && stage.outputMode === "binaural" && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      turn.current ??= { gesture: beginGesture(selfId, ["listenerYaw"]), yaw: stage.listener.yaw };
+      turn.current.yaw = wrapDegrees(turn.current.yaw + side * (e.shiftKey ? 15 : 5));
+      turn.current.gesture.change({ listenerYaw: turn.current.yaw });
+      return;
+    }
+
     const dir = nudgeKeys[e.key];
     if (!dir || selected === null || drag.current) return;
     e.preventDefault();
@@ -203,6 +219,10 @@ export default function StageMap({ stage, selfId, selected, onSelect, view: mapV
     keyGesture.current?.gesture.end();
     keyGesture.current = null;
   };
+  const endTurn = () => {
+    turn.current?.gesture.end();
+    turn.current = null;
+  };
 
   return (
     <>
@@ -211,15 +231,21 @@ export default function StageMap({ stage, selfId, selected, onSelect, view: mapV
         ref={canvasRef}
         className={styles.map}
         tabIndex={0}
-        aria-label="Stage map. Arrow keys move the selected node, Shift for 1 m steps."
+        aria-label="Stage map. Arrow keys move the selected node, Shift for 1 m steps. Q and E turn the listener in Binaural."
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
         onLostPointerCapture={onPointerEnd}
         onKeyDown={onKeyDown}
-        onKeyUp={(e) => nudgeKeys[e.key] && endKeyGesture()}
-        onBlur={endKeyGesture}
+        onKeyUp={(e) => {
+          if (nudgeKeys[e.key]) endKeyGesture();
+          if (turnKeys[e.key.toLowerCase()]) endTurn();
+        }}
+        onBlur={() => {
+          endKeyGesture();
+          endTurn();
+        }}
       />
     </>
   );

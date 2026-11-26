@@ -28,11 +28,11 @@ export type Stage = {
   alone: boolean;
   openElsewhere?: string; // name of another track whose Composer window is open
   room: number;
-  listener: Point;
+  listener: Point & { yaw: number }; // yaw: degrees clockwise it faces (Binaural; listenerYaw)
   players: Player[];
 };
 
-export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode"
+export type Param = "roomSize" | "listenerX" | "listenerY" | "listenerYaw" | "playerX" | "playerY" | "outputMode"
   | "proDistanceLaw";
 
 export type BuildInfo = { version: string; format: string; host: string; credits?: string; debug?: boolean };

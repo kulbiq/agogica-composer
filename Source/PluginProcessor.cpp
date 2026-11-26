@@ -220,9 +220,16 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, roomSize);
     acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
 
-    // Head tracking is a live monitoring aid: never in exports, never in stereo.
-    if (acoustics.mode == OutputMode::binaural && ! isNonRealtime())
-        acoustics.headYaw = headTracking->yaw();
+    // Which way the listener faces, in Binaural only (stereo speakers don't turn): the stage's
+    // direction, a parameter (so exports and automation have it), plus the tracked head, a
+    // live monitoring aid that never reaches an export.
+    if (acoustics.mode == OutputMode::binaural)
+    {
+        acoustics.headYaw = audioParams.listenerYaw->load();
+
+        if (! isNonRealtime())
+            acoustics.headYaw += headTracking->yaw();
+    }
 
     auto& adjust = acoustics.adjust;
     adjust.distanceExponent = audioParams.proDistanceLaw->load() / params::dbPerDoublingFreeField;
