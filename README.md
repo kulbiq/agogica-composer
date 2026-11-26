@@ -51,6 +51,16 @@ cmake --preset release && cmake --build --preset release --target ComposerTracke
 A full build installs per user, without admin rights: the plugins into `~/Library/Audio/Plug-Ins`, the tracker into `~/Applications` (target `ComposerTrackerInstall`).
 After rebuilding, quit the DAW completely (Dorico's audio engine keeps the old plugin loaded) and quit a running tracker before starting the new one.
 
+## Requirements
+
+macOS 11 or newer on Apple Silicon (VST3 and Audio Unit), Windows 10 or 11 (VST3).
+Tested in Dorico 6, MuseScore 4 and Ableton Live 12.
+
+## Privacy
+
+Composer works offline. Official releases ask once whether you want to share anonymous usage data; nothing is sent without a yes, and builds from source never ask.
+What is sent, where it goes and how to turn it off: `PRIVACY.md`.
+
 ## Licence
 
 Composer is free and open source under the GNU Affero General Public License, version 3 (`LICENSE`), JUCE's open-source licence.

@@ -23,7 +23,7 @@ def fetch(name: str, sha256: str, url: str, archive_member: str):
         return
     print(f"{name}: downloading…", flush=True)
     data = None
-    with urllib.request.urlopen(url) as response:
+    with urllib.request.urlopen(url, timeout=60) as response:  # a stalled server must not hang the build
         with tarfile.open(fileobj=response, mode="r|gz") as archive:
             for entry in archive:
                 if entry.name.endswith(archive_member):

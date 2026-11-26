@@ -21,6 +21,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Memory and undefined behaviour (ASan + UBSan) on every run; data races (TSan) nightly, with
+  # the [slow] cases. macOS only: the presets' flags are clang's.
+  sanitizers:
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: ${{ github.event_name == 'schedule' && fromJSON('["asan", "tsan"]') || fromJSON('["asan"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # JUCE
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cmake --preset ${{ matrix.preset }} -DCOMPOSER_TRACKER_SKIP_MODELS=ON
+      - run: cmake --build --preset ${{ matrix.preset }}
+      - run: ctest --preset ${{ matrix.preset }} ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
+
   tests:
     strategy:
       fail-fast: false
