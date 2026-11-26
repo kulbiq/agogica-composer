@@ -37,7 +37,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
     room: 20,
     listener: { x: 0, y: 0 },
-    players: seats.map(([name, colour, x, y], i) => ({ id: i, name, colour, self: i === 2, x, y })),
+    players: seats.map(([name, colour, x, y], i) => ({ id: i, name, colour, icon: "", self: i === 2, x, y })),
   };
 
   // Rough stand-in for Source/dsp/Geometry.h; only so the panel shows plausible numbers.
@@ -99,6 +99,11 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (p) p.name = name || names[id];
       emitStageSoon();
     },
+    setIcon: (id: number, icon: string) => {
+      const p = scene.players.find((pl) => pl.id === id);
+      if (p) p.icon = icon;
+      emitStageSoon();
+    },
   };
 
   (window as unknown as { __JUCE__: object }).__JUCE__ = {
@@ -114,15 +119,19 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   if (location.search.includes("azimuth")) localStorage.setItem("mapView", "azimuth");
   if (location.search.includes("allnames")) localStorage.setItem("mapNames", "all");
 
-  // ?settings opens the settings popover (for screenshots; nothing to click in headless Chrome).
-  if (location.search.includes("settings"))
+  // ?settings opens the settings popover, ?edit edits this track's player (for screenshots;
+  // nothing to click in headless Chrome).
+  const clickOnce = (find: () => HTMLButtonElement | undefined) =>
     new MutationObserver((_, observer) => {
-      const button = document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]');
+      const button = find();
       if (button) {
         button.click();
         observer.disconnect();
       }
     }).observe(document, { childList: true, subtree: true });
+  const buttons = () => [...document.querySelectorAll("button")];
+  if (location.search.includes("settings")) clickOnce(() => buttons().find((b) => b.ariaLabel === "Settings"));
+  if (location.search.includes("edit")) clickOnce(() => buttons().find((b) => b.textContent === "Edit player"));
 
   // A little fake input level per player (the timpani stays silent).
   setInterval(() => {

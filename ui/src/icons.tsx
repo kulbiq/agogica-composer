@@ -52,6 +52,16 @@ const shapes: Record<IconKey, Shape> = {
 
 export const iconKeys = Object.keys(shapes) as IconKey[];
 
+export const iconLabels: Record<IconKey, string> = {
+  violin: "Violin, viola", cello: "Cello, bass", flute: "Flute", reed: "Reeds", horn: "Horn", trumpet: "Brass",
+  timpani: "Timpani", drum: "Percussion", piano: "Piano", organ: "Organ", harp: "Harp", voice: "Voice", other: "Other",
+};
+
+// The icon the player was given, else one picked from its name ("" = automatic).
+export function playerIcon(player: { icon: string; name: string }): IconKey {
+  return iconKeys.includes(player.icon as IconKey) ? (player.icon as IconKey) : autoIcon(player.name);
+}
+
 // Picked from the track name; the first rule that matches wins, so the specific ones
 // (bass clarinet, english horn, bass drum) come before the general ones (clarinet, horn, bass).
 const rules: [RegExp, IconKey][] = [

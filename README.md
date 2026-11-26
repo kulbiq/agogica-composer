@@ -11,16 +11,20 @@ Detailed engineering notes, decisions and traps live in [CLAUDE.md](CLAUDE.md); 
 - Each track gets its own Composer insert; that instance is one player.
 - All instances in the same host process find each other through an in-process registry, so **every editor shows the whole ensemble** and any player can be moved from any editor.
   A move always writes the owning track's parameters, so automation lands on the right track.
-- Room size, listener position, output mode, hall and the Pro settings are shared: each instance keeps its own copy (so exports and project reloads stay correct), and the UI writes changes to all of them.
-- **Scenes A-H** are alternative layouts of the whole ensemble (positions, room, listener, hall); switching scenes stores the current layout and recalls the other one.
+- Room size, listener position, output mode and the Distance level setting are shared: each instance keeps its own copy (so exports and project reloads stay correct), and the UI writes changes to all of them.
+- **Scenes A-H** are alternative layouts of the whole ensemble (positions, room, listener); switching scenes stores the current layout and recalls the other one.
+- **Player names** come from the host's track name where the host sends one (VST3 channel context, e.g. Ableton Live, REAPER, Cubase).
+  Dorico and MuseScore can't give the instrument name to an effect plugin, so there each player is named by hand ("Edit player", or double-click the name):
+  - Dorico sends a name it generates itself ("Track N"): it doesn't know which instrument a mixer channel plays (Steinberg on their forum, 2022).
+  - MuseScore 4 sends nothing (its VST3 host in `musescore/muse_framework` never calls `IInfoListener::setChannelContextInfos`), so players show as "Player N".
+  - AU has no track name at all.
+  Possible later: reading the players through Dorico's Remote Control API, a MuseScore plugin that sends the part names, or a MuseScore pull request that passes the track name; all of them still have to match names to instances.
 
 ### Sound
 The DSP is a chain of independent stages (`Source/dsp`), each reading the player's input history and adding its output:
-- **Direct path**: delay by distance (speed of sound, no Doppler: a moving player's delay settles and crossfades instead of gliding), loudness by distance (-2 dB per doubling, adjustable), air absorption (ISO 9613-1), then placement.
+- **Direct path**: delay by distance (speed of sound, no Doppler: a moving player's delay settles and crossfades instead of gliding), loudness by distance (-2 dB per doubling, adjustable as "Distance level" in the settings), then placement.
 - **Placement**: Stereo (constant-power pan, rear positions mirrored to the front) or **Binaural** (HRTF from the SADIE II KU100 dummy head, full 360°, for headphones).
-- **Early reflections**: image sources of the square room (walls, floor, ceiling, corners), diffused and filtered per surface so they don't comb-filter.
-- **Reverb tail**: an 8-line feedback delay network per hall preset (Dry, Studio, Chamber, Concert hall, Church), level independent of distance.
-- **Pro panel**: project-wide adjustments on top of the hall (reflections, diffusion, floor, brightness, reverb, decay, pre-delay, distance law, air).
+- Early reflections, the reverb tail, halls and air absorption were removed to save CPU (2026-11); they are in git history and come back rebuilt for CPU.
 
 ### Head tracking
 - The **Agogica Tracker** app (`tracker/`) watches the listener through the camera and shares the head's rotation with every Composer instance through a small memory-mapped file (no network).

@@ -8,6 +8,7 @@ namespace page
 inline constexpr auto getStage = "getStage";           // () -> the stage (bridge/StageSnapshot)
 inline constexpr auto edit = "edit";                   // ({ phase, target, param, value }) one step of a gesture
 inline constexpr auto setName = "setName";             // (id, name)
+inline constexpr auto setIcon = "setIcon";             // (id, icon key from ui/src/icons.tsx, "" = automatic)
 inline constexpr auto setScene = "setScene";           // ("A".."H")
 inline constexpr auto startTracker = "startTracker";   // () -> whether Agogica Tracker was started
 inline constexpr auto getBuildInfo = "getBuildInfo";   // () -> { version, format, host, credits, debug? }

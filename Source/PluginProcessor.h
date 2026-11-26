@@ -67,6 +67,9 @@ public:
     void setActiveScene (const juce::String& scene)     { setStateProperty ("scene", scene); }
     juce::String getDisplayName() const;                // name override, else host track name, else empty
     void setNameOverride (const juce::String& name)     { setStateProperty ("name", name.trim()); }
+    // Instrument icon key (ui/src/icons.tsx), empty = picked from the name by the page.
+    juce::String getIcon() const                        { return state.state.getProperty ("icon").toString(); }
+    void setIcon (const juce::String& key)              { setStateProperty ("icon", key); }
 
     // Host track colour as "#rrggbb", or empty when the host doesn't send one.
     juce::String getTrackColour() const                 { return trackColour; }

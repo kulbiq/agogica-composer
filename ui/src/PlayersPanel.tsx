@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import styles from "./App.module.css";
 import { setName, type Stage } from "./bridge";
-import { autoIcon, Icon } from "./icons";
+import EditPlayer from "./EditPlayer";
+import { Icon, playerIcon } from "./icons";
 import LevelMeter from "./LevelMeter";
 import type { NodeKey } from "./stagePainter";
 
@@ -13,11 +14,15 @@ type Props = {
 
 // The players, listener first; the selected row is the one the map highlights.
 // Double-click (or F2) a name to rename the player; an empty name goes back to the track's.
+// "Edit player" under the selected row drills the panel into that player.
 export default function PlayersPanel({ stage, selected, onSelect }: Props) {
   const [renaming, setRenaming] = useState<number>();
+  const [editing, setEditing] = useState<number>();
+  const edited = stage.players.find((p) => p.id === editing); // gone if its track was removed
 
   return (
     <aside className={styles.players}>
+      {edited && <EditPlayer key={edited.id} player={edited} onBack={() => setEditing(undefined)} />}
       <div className={styles.playersHead}>
         <span className={styles.label}>Players · {stage.players.length}</span>
         {stage.alone && (
@@ -41,7 +46,7 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
             {renaming === p.id ? (
               <div className={styles.item} data-editing>
                 <span className={styles.tick} style={p.colour ? { background: p.colour } : undefined} />
-                <Icon icon={autoIcon(p.name)} className={styles.itemIcon} />
+                <Icon icon={playerIcon(p)} className={styles.itemIcon} />
                 <NameField id={p.id} name={p.name} onDone={() => setRenaming(undefined)} />
               </div>
             ) : (
@@ -54,11 +59,18 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
                 onKeyDown={(e) => e.key === "F2" && setRenaming(p.id)}
               >
                 <span className={styles.tick} style={p.colour ? { background: p.colour } : undefined} />
-                <Icon icon={autoIcon(p.name)} className={styles.itemIcon} />
+                <Icon icon={playerIcon(p)} className={styles.itemIcon} />
                 <span className={styles.itemName}>{p.name}</span>
                 {p.self && <span className={styles.you}>This track</span>}
                 <LevelMeter id={p.id} className={styles.listMeter} />
               </button>
+            )}
+            {selected === p.id && renaming !== p.id && (
+              <div className={styles.selBar}>
+                <button className={styles.mini} onClick={() => setEditing(p.id)}>
+                  Edit player
+                </button>
+              </div>
             )}
           </li>
         ))}

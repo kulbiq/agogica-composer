@@ -1,6 +1,6 @@
 import type { Point, Stage } from "./bridge";
 import { easeToward } from "./ease";
-import { autoIcon, drawIcon } from "./icons";
+import { drawIcon, playerIcon } from "./icons";
 import { levelOf, type Levels } from "./level";
 
 export type NodeKey = "listener" | number;
@@ -265,7 +265,7 @@ export class StagePainter {
         ctx.strokeStyle = `rgba(${ink},0.35)`;
         ctx.stroke();
       }
-      drawIcon(ctx, autoIcon(player.name), x, y, badgeRadius * 1.3, chosen ? paper : `rgb(${ink})`);
+      drawIcon(ctx, playerIcon(player), x, y, badgeRadius * 1.3, chosen ? paper : `rgb(${ink})`);
     }
 
     return { cx, cy, scale, drawn };

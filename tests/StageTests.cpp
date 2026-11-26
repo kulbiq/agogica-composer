@@ -184,6 +184,19 @@ TEST_CASE ("applyEdit: writes metres, ignores unknown params and other targets",
         stage::setName (p, p.id, juce::String::repeatedString ("x", 200));
         CHECK (p.getDisplayName().length() == 64);
     }
+
+    SECTION ("an icon is one of the page's keys or empty; anything else is ignored")
+    {
+        CHECK (stage::snapshot (p)["players"][0]["icon"] == juce::var (""));
+        stage::setIcon (p, p.id, "harp");
+        CHECK (stage::snapshot (p)["players"][0]["icon"] == juce::var ("harp"));
+        stage::setIcon (p, p.id, "banjo");
+        stage::setIcon (p, p.id, "Harp");
+        stage::setIcon (p, p.id + 1000, "organ");
+        CHECK (p.getIcon() == "harp");
+        stage::setIcon (p, p.id, "");
+        CHECK (p.getIcon().isEmpty());
+    }
 }
 
 TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float residue", "[integration]")
@@ -206,7 +219,7 @@ TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float res
     CHECK_THAT ((double) self["derived"]["distance"], WithinAbs (std::hypot (5.0, 5.0), 1e-3));
 }
 
-TEST_CASE ("state round-trip: parameters, name, scenes, placed", "[integration]")
+TEST_CASE ("state round-trip: parameters, name, icon, scenes, placed", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     juce::MemoryBlock saved;
@@ -214,6 +227,7 @@ TEST_CASE ("state round-trip: parameters, name, scenes, placed", "[integration]"
     {
         ComposerProcessor p;
         p.setNameOverride ("Viola");
+        stage::setIcon (p, p.id, "violin");
         drag (p, p.id, "roomSize", 35.0f);
         drag (p, p.id, "playerX", 3.0f);
         stage::setScene (p, "D");
@@ -224,6 +238,7 @@ TEST_CASE ("state round-trip: parameters, name, scenes, placed", "[integration]"
     ComposerProcessor restored;
     restored.setStateInformation (saved.getData(), (int) saved.getSize());
     CHECK (restored.getDisplayName() == "Viola");
+    CHECK (restored.getIcon() == "violin");
     CHECK_THAT (restored.getParam ("roomSize"), WithinAbs (35.0, 1e-4));
     CHECK (restored.getScene() == "D");
     CHECK (restored.isPlaced());

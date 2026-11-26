@@ -11,6 +11,7 @@ export type Player = Point & {
   id: number;
   name: string;
   colour: string; // host track colour "#rrggbb", or ""
+  icon: string; // a key from icons.tsx, or "" = picked from the name
   self: boolean;
 };
 
@@ -47,6 +48,7 @@ type Edit = { phase: "begin" | "change" | "end"; target: number; param: Param; v
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const edit = getNativeFunction("edit") as (edit: Edit) => Promise<void>;
 export const setName = getNativeFunction("setName") as (id: number, name: string) => Promise<void>;
+export const setIcon = getNativeFunction("setIcon") as (id: number, icon: string) => Promise<void>;
 export const setScene = getNativeFunction("setScene") as (scene: string) => Promise<void>;
 export const startTracker = getNativeFunction("startTracker") as () => Promise<boolean>;
 export const getBuildInfo = getNativeFunction("getBuildInfo") as () => Promise<BuildInfo>;

@@ -71,6 +71,13 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
+                    .withNativeFunction (page::setIcon, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 2 && args[0].isInt() && args[1].isString())
+                                                 stage::setIcon (composer, (int) args[0], args[1].toString());
+
+                                             complete ({});
+                                         })
                     .withNativeFunction (page::setScene, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
                                              if (args.size() == 1)

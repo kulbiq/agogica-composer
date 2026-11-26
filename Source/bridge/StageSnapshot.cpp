@@ -32,6 +32,7 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
     o->setProperty ("id", p.id);
     o->setProperty ("name", name.isNotEmpty() ? name : "Player " + juce::String (index + 1));
     o->setProperty ("colour", p.getTrackColour());
+    o->setProperty ("icon", p.getIcon());
     o->setProperty ("x", pos.x);
     o->setProperty ("y", pos.y);
     o->setProperty ("self", self);

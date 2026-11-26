@@ -31,4 +31,8 @@ private:
 // is saved with the project and sent to every window.
 constexpr int maxNameLength = 64;
 void setName (ComposerProcessor& self, int id, const juce::String& name);
+
+// Sets player `id`'s icon: one of the keys in ui/src/icons.tsx, or empty for automatic.
+// Anything else is ignored.
+void setIcon (ComposerProcessor& self, int id, const juce::String& key);
 } // namespace stage

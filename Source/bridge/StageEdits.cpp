@@ -95,4 +95,21 @@ void setName (ComposerProcessor& self, int id, const juce::String& name)
                 p->setNameOverride (name.trim().substring (0, maxNameLength));
     });
 }
+
+void setIcon (ComposerProcessor& self, int id, const juce::String& key)
+{
+    // The same keys as ui/src/icons.tsx (iconKeys); "" = automatic.
+    static const juce::StringArray known { "", "violin", "cello", "flute", "reed", "horn", "trumpet", "timpani",
+                                           "drum", "piano", "organ", "harp", "voice", "other" };
+
+    if (! known.contains (key))
+        return;
+
+    self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+    {
+        for (auto* p : members)
+            if (p->id == id)
+                p->setIcon (key);
+    });
+}
 } // namespace stage
