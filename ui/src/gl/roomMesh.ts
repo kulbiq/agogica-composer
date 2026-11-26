@@ -43,7 +43,7 @@ const lerp3 = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] +
 
 // A flat quad a b c d (in order round its edge), cut into nu x nv pieces, as triangles.
 // (u, v) run 0..1 across it for floorboards.
-export function pushQuad(out: Floats, a: Pt, b: Pt, c: Pt, d: Pt, colour: RGB, kind = 0, nu?: number, nv?: number) {
+function pushQuad(out: Floats, a: Pt, b: Pt, c: Pt, d: Pt, colour: RGB, kind = 0, nu?: number, nv?: number) {
   const across = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
   const along = Math.hypot(d[0] - a[0], d[1] - a[1], d[2] - a[2]);
   const n = nu ?? Math.max(1, Math.ceil(across / piece));
@@ -60,7 +60,7 @@ export function pushQuad(out: Floats, a: Pt, b: Pt, c: Pt, d: Pt, colour: RGB, k
 }
 
 // A line from a to b, `width` CSS px wide whatever the distance, in pieces for the lens.
-export function pushLine(out: Floats, a: Pt, b: Pt, width: number, colour: RGB, alpha = 1) {
+function pushLine(out: Floats, a: Pt, b: Pt, width: number, colour: RGB, alpha = 1) {
   const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / piece));
   const [r, g, bl] = unit(colour);
   for (let i = 0; i < n; i++) {
@@ -158,5 +158,3 @@ export function buildSeats(seats: readonly { x: number; y: number }[], M: Materi
   }
   return out.done();
 }
-
-export { Floats };

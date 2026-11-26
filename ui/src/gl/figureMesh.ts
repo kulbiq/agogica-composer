@@ -62,22 +62,16 @@ export function buildFigures(players: readonly { id: number; x: number; y: numbe
       vertex(a, 1, 1, 0, 0, b, k); vertex(b, 1, -1, 0, 0, a, k); vertex(b, 1, 1, 0, 0, a, k);
       vertex(a, 1, 1, 0, 0, b, k); vertex(b, 1, 1, 0, 0, a, k); vertex(a, 1, -1, 0, 0, b, k);
     };
-    const part = (draw: () => void): [number, number] => {
-      const first = out.vertices;
-      draw();
-      return [first, out.vertices - first];
-    };
-
-    const chairBase = part(() => {
+    const chairBase = part(out, () => {
       for (const [u, v] of [[-0.22, -0.22], [-0.22, 0.22], [0.2, -0.22], [0.2, 0.22]]) line(P(u, v, 0), P(u, v, 0.46));
       face([P(-0.23, -0.23, 0.46), P(-0.23, 0.23, 0.46), P(0.22, 0.23, 0.46), P(0.22, -0.23, 0.46)]);
     });
-    const chairBack = part(() => face([P(-0.23, -0.23, 0.5), P(-0.23, 0.23, 0.5), P(-0.26, 0.23, 0.96), P(-0.26, -0.23, 0.96)]));
-    const legs = part(() => {
+    const chairBack = part(out, () => face([P(-0.23, -0.23, 0.5), P(-0.23, 0.23, 0.5), P(-0.26, 0.23, 0.96), P(-0.26, -0.23, 0.96)]));
+    const legs = part(out, () => {
       face([P(-0.02, -0.16, 0.5), P(-0.02, 0.16, 0.5), P(0.42, 0.16, 0.52), P(0.42, -0.16, 0.52)]);
       face([P(0.42, -0.16, 0), P(0.42, 0.16, 0), P(0.42, 0.16, 0.52), P(0.42, -0.16, 0.52)]);
     });
-    const torso = part(() => {
+    const torso = part(out, () => {
       // A cut-out from the hips to the shoulders, the shoulders rounded: its outline as
       // (anchor, fraction of the row's width, metres up), fanned from the first point.
       const hip = P(-0.06, 0, 0.48);
@@ -105,7 +99,7 @@ export function buildFigures(players: readonly { id: number; x: number; y: numbe
       const head = P(-0.04, 0, 1.27);
       for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]]) vertex(head, 3, a, b, 0, head, 1);
     });
-    const stand = part(() => {
+    const stand = part(out, () => {
       line(P(0.62, 0, 0), P(0.62, 0, 0.88), 1.3);
       line(P(0.62, -0.16, 0), P(0.62, 0.16, 0), 1.3);
       line(P(0.5, 0, 0), P(0.74, 0, 0), 1.3);

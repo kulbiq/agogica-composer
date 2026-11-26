@@ -61,9 +61,9 @@ const TAU = Math.PI * 2;
 type Align = "left" | "center";
 type Text = { text: string; x: number; y: number; opacity: number; halo: boolean; align: Align };
 
-// What the 2D overlay draws, as data: it is drawn again only when this list changes (the
-// levels and the breathing ring are in the WebGL frame, so a playing ensemble doesn't redraw it).
-// exact: drawn as one sprite (on the map, where badges keep their size).
+// The overlay (badges, names, labels, the arrow, the minimap) as data: a frame is drawn only when
+// it, or anything under it, changed; it is turned into quads by `overlayOf`.
+// Badge.exact: drawn as one sprite (on the map, where badges keep their size).
 type Badge = { k: "badge"; icon: IconKey; tracks: number; x: number; y: number; r: number; chosen: boolean; exact: boolean };
 type Label = { k: "label" } & Text;
 type Arrow = { k: "arrow"; x: number; y: number; degrees: number; alpha: number; size: number };
@@ -79,7 +79,6 @@ type Minimap = {
   alpha: number;
 };
 type Op = Badge | Label | Arrow | Minimap;
-
 
 // Text drawn before a font has loaded is in a fallback font, so it is drawn again afterwards.
 let fontLoads = 0;
@@ -507,15 +506,13 @@ export class StagePainter {
       for (const [first, count] of runs) for (let k = 0; k < count; k++) order[i++] = first + k;
     }
 
-    for (const { player, c, chosen, x, y, rb, name } of items) {
-      players.depth = c.z;
+    for (const { player, chosen, x, y, rb, name } of items) {
       this.halo(players, x, y, rb, shown.get(player.id) ?? 0, ink);
       if (chosen) this.ring(players, x, y, rb, frame.seconds, ink);
       ops.push({ k: "badge", icon: this.iconOf(player), tracks: player.tracks.length, x, y, r: rb, chosen, exact: false });
       if (name) ops.push({ k: "label", ...name });
       hits.unshift({ key: player.id, x, y, r: rb + 2 }); // nearest first
     }
-    players.depth = 0;
 
     // The listener's arrow fades out as the camera comes down. In the room it would lie on the
     // floor (user decision, 2026-11-26); the minimap shows where it stands.

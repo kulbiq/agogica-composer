@@ -9,16 +9,16 @@ describe("Tris", () => {
     const t = new Tris();
     t.disc(50, 40, 10, ink);
     expect(t.vertices).toBe(6);
-    const [x, y, depth, r, g, b, a, cx, cy, outer, inner] = vertex(t, 0);
+    const [x, y, r, g, b, a, cx, cy, outer, inner] = vertex(t, 0);
     expect([x, y]).toEqual([39, 29]); // the quad reaches 1 px past the edge for its smoothing
-    expect([depth, cx, cy, outer, inner]).toEqual([0, 50, 40, 10, 0]);
+    expect([cx, cy, outer, inner]).toEqual([50, 40, 10, 0]);
     expect([r, g, b, a].map((v) => +v.toFixed(4))).toEqual([+(10 / 255).toFixed(4), +(20 / 255).toFixed(4), +(30 / 255).toFixed(4), 0.5]);
   });
 
   it("draws a ring centred on its radius, as the canvas strokes an arc", () => {
     const t = new Tris();
     t.ring(0, 0, 14, 1, ink);
-    const [, , , , , , , , , outer, inner] = vertex(t, 0);
+    const [, , , , , , , , outer, inner] = vertex(t, 0);
     expect([outer, inner]).toEqual([14.5, 13.5]);
   });
 
@@ -44,7 +44,7 @@ describe("Tris", () => {
     t.line(0, 0, 10, 0, 1, ink);
     t.line(5, -5, 5, 5, 1, ink);
     t.end();
-    expect(t.groups).toEqual([{ first: 6, count: 12, once: true }]);
+    expect(t.groups).toEqual([{ first: 6, count: 12 }]);
   });
 
   it("dashes along a subpath and starts the pattern again at the next", () => {

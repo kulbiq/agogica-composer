@@ -9,7 +9,7 @@ import type { Shot } from "../room/camera";
 import type { RGB } from "../room/scene";
 import { figureStride } from "./figureMesh";
 import { overlayStride, SpriteAtlas, type OverlayQuads } from "./sprites";
-import { faceStride, lineStride } from "./roomMesh";
+import { faceStride, lineStride, type RoomMesh } from "./roomMesh";
 import { trisStride, type Group, type Tris } from "./tris";
 
 // Depth range, metres: the near plane is room/camera.ts's; the far one holds the map's camera
@@ -145,17 +145,16 @@ void main() {
 
 // Screen-space triangles (gl/tris.ts): CSS px, with the depth of what they belong to.
 const trisVertex = `${common}
-attribute vec3 aPos;
+attribute vec2 aPos;
 attribute vec4 aColour;
 attribute vec4 aCircle; // centre, outer and inner radius (CSS px); outer 0: a plain triangle
 varying vec4 vColour;
 varying vec2 vAt;
 varying vec4 vCircle;
 void main() {
-  float z = aPos.z > 0.0 ? depthNdc(max(aPos.z, NEAR)) : 0.0;
-  gl_Position = vec4(aPos.x / uView.z * 2.0 - 1.0, 1.0 - aPos.y / uView.w * 2.0, z, 1.0);
+  gl_Position = vec4(aPos.x / uView.z * 2.0 - 1.0, 1.0 - aPos.y / uView.w * 2.0, 0.0, 1.0);
   vColour = aColour;
-  vAt = aPos.xy;
+  vAt = aPos;
   vCircle = aCircle;
 }`;
 
@@ -365,7 +364,7 @@ export type WorldFrame = {
   average: RGB;
   vignette: { shade: RGB; alpha: number }; // alpha already times `shows`
   before: Tris; // the map's lines and the distance arcs (under the vignette)
-  after: Tris; // shadows and the audience on the map (over the vignette, under the seats)
+  after: Tris; // the azimuth line and the audience on the map (over the vignette and the shadows, under the seats)
   ink: RGB;
   shadows?: { first: number; count: number; shade: RGB; alpha: number }; // under the players, in the room
   figures?: Uint16Array | Uint32Array; // the players' parts, far to near (indices into setFigures' mesh)
@@ -375,7 +374,7 @@ export type WorldFrame = {
 };
 
 export class WorldRenderer {
-  readonly gl: WebGLRenderingContext;
+  private readonly gl: WebGLRenderingContext;
   private faces: Program;
   private lines: Program;
   private tris: Program;
@@ -397,7 +396,7 @@ export class WorldRenderer {
   private wideIndices: boolean; // OES_element_index_uint: more than 65536 figure vertices
   private counts = { faces: 0, ceiling: 0, lines: 0, seats: 0, figures: 0 };
 
-  constructor(readonly canvas: HTMLCanvasElement) {
+  constructor(private readonly canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl", { alpha: true, antialias: true, depth: true, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: false });
     if (!gl) throw new Error("WebGL is not available");
     if (!gl.getExtension("OES_standard_derivatives")) throw new Error("WebGL lacks OES_standard_derivatives");
@@ -431,7 +430,7 @@ export class WorldRenderer {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
   }
 
-  setRoom(mesh: { faces: Float32Array; ceiling: Float32Array; lines: Float32Array }) {
+  setRoom(mesh: RoomMesh) {
     const { gl } = this;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.roomFaces);
     gl.bufferData(gl.ARRAY_BUFFER, mesh.faces, gl.STATIC_DRAW);
@@ -691,7 +690,7 @@ export class WorldRenderer {
 
   private stencilBase = 0;
 
-  // Groups drawn once where they overlap themselves (see Tris.begin) use the stencil buffer:
+  // Groups (paths drawn once where they overlap themselves, see Tris.begin) use the stencil buffer:
   // each gets its own value, and a pixel already holding it is not drawn again. The rest is
   // drawn in as few calls as possible.
   private drawTris(f: WorldFrame, t: Tris) {
@@ -702,9 +701,9 @@ export class WorldRenderer {
     this.uniformsFor(p, f);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.trisBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, t.data.subarray(0, t.length), gl.STREAM_DRAW);
-    this.attribute(p, "aPos", 3, trisStride, 0);
-    this.attribute(p, "aColour", 4, trisStride, 3);
-    this.attribute(p, "aCircle", 4, trisStride, 7);
+    this.attribute(p, "aPos", 2, trisStride, 0);
+    this.attribute(p, "aColour", 4, trisStride, 2);
+    this.attribute(p, "aCircle", 4, trisStride, 6);
 
     let at = 0;
     const plain = (until: number) => {

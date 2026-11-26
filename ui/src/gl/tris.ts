@@ -1,27 +1,24 @@
-// Screen-space triangles for the stage's WebGL pass: what the map and the players are drawn
-// with (the grid, the azimuth rose, shadows, figures, halos, rings). Positions are CSS pixels,
-// as the 2D canvas had them; `depth` is the camera depth (metres) of what is being drawn, so it
-// is hidden behind nearer seats and walls, or 0 for "no depth" (drawn over everything earlier).
-// Circles are one quad each, cut out exactly in the shader (gl/world.ts). Pure data, no DOM:
-// tested in node.
+// Screen-space triangles for the stage's WebGL pass: the map's grid, azimuth rose and scale bar,
+// the distance arcs, the audience on the map, the halos and rings. Positions are CSS pixels, as
+// the 2D canvas had them; each layer is drawn over what came before it. Circles are one quad
+// each, cut out exactly in the shader (gl/world.ts). Pure data, no DOM: tested in node.
 import type { PathSink } from "../room/camera";
 
 export type RGBA = readonly [number, number, number, number]; // 0..255, alpha 0..1
 
-// Per vertex: x, y (CSS px), depth (metres, 0: none), r, g, b, a (0..1, not premultiplied),
+// Per vertex: x, y (CSS px), r, g, b, a (0..1, not premultiplied),
 // then the circle it is part of: centre x, y, outer and inner radius (CSS px). An outer radius
 // of 0 is a plain triangle; an inner one above 0 makes a ring.
-export const trisStride = 11;
+export const trisStride = 10;
 
-// One stroke or fill that the canvas drew as a single path: where its own triangles overlap
-// (lines crossing, the pieces of a curve), the colour is laid down once. The renderer draws a
-// group with the stencil buffer when `once` is set; otherwise triangles simply blend.
-export type Group = { first: number; count: number; once: boolean };
+// One stroke that the canvas drew as a single path: where its own triangles overlap (lines
+// crossing, the pieces of a curve), the colour is laid down once (the renderer draws a group
+// with the stencil buffer). Triangles outside any group simply blend.
+export type Group = { first: number; count: number };
 
 export class Tris {
   data = new Float32Array(1 << 14);
   length = 0; // floats used
-  depth = 0;
   groups: Group[] = [];
   private open: Group | undefined;
 
@@ -29,7 +26,6 @@ export class Tris {
     this.length = 0;
     this.groups = [];
     this.open = undefined;
-    this.depth = 0;
   }
 
   get vertices() {
@@ -39,7 +35,7 @@ export class Tris {
   // Everything added until `end` is one path, drawn once where it overlaps itself.
   begin() {
     this.end();
-    this.open = { first: this.vertices, count: 0, once: true };
+    this.open = { first: this.vertices, count: 0 };
   }
 
   end() {
@@ -65,7 +61,6 @@ export class Tris {
     let i = this.length;
     d[i++] = x;
     d[i++] = y;
-    d[i++] = this.depth;
     d[i++] = c[0] / 255;
     d[i++] = c[1] / 255;
     d[i++] = c[2] / 255;
@@ -122,9 +117,9 @@ export class Tris {
 
 // Collects one path from Camera.poly / Camera.seg: polygons for fills, polylines for strokes.
 export class PathCollector implements PathSink {
-  xs: number[][] = [];
-  ys: number[][] = [];
-  closed: boolean[] = [];
+  private xs: number[][] = [];
+  private ys: number[][] = [];
+  private closed: boolean[] = [];
 
   reset() {
     this.xs = [];
@@ -200,5 +195,3 @@ export function parseRgb(text: string): [number, number, number] {
   const [r, g, b] = text.split(",").map((v) => Number(v.trim()));
   return [r || 0, g || 0, b || 0];
 }
-
-export const rgba = (rgb: readonly [number, number, number] | readonly number[], a: number): RGBA => [rgb[0], rgb[1], rgb[2], a];
