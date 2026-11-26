@@ -64,8 +64,8 @@ void join (ComposerProcessor& self)
         ComposerProcessor* source = nullptr;
 
         for (auto* p : members)
-            if (p != &self && p->isPlaced())
-                source = source == nullptr ? p : source;
+            if (source == nullptr && p != &self && p->isPlaced())
+                source = p; // the first one placed
 
         if (source != nullptr)
         {
@@ -76,10 +76,7 @@ void join (ComposerProcessor& self)
 
             self.setHeadTrackingOn (source->isHeadTrackingOn());
             self.setAudience (source->getAudience());
-        }
 
-        if (source != nullptr)
-        {
             // Where everyone is drawn (clamped to the room), not their stored values.
             const auto roomSize = self.getParam (params::roomSize);
             std::vector<geometry::Point> taken;

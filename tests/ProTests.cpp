@@ -85,20 +85,6 @@ TEST_CASE ("Pro panel at the values it shipped with (no delay stretch): the dire
     }
 }
 
-TEST_CASE ("Pro: the distance law in the derived values", "[integration]")
-{
-    juce::ScopedJuceInitialiser_GUI juce;
-    ComposerProcessor p;
-    set (p, "playerY", 2.0f);
-
-    CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["levelDb"], WithinAbs (-2.5, 0.01)); // default
-    set (p, "proDistanceLaw", params::legacyDistanceLaw);
-    CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["levelDb"], WithinAbs (-2.007, 0.01));
-    set (p, "proDistanceLaw", 20.0f * std::log10 (2.0f));
-    CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["levelDb"], WithinAbs (-6.02, 0.01));
-
-}
-
 TEST_CASE ("delay stretch: a smooth field, near places alike, far ones apart, always the same")
 {
     float lowest = 1.0f, highest = 0.0f, steepest = 0.0f;

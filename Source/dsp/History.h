@@ -15,8 +15,8 @@ public:
     static constexpr int maxBlock = 32;
 
     // The longest delay anyone asks for: the longest direct path (opposite corners of the
-    // largest room, 70.7 m: 0.21 s), with margin.
-    static constexpr double maxDelaySeconds = 0.85; // the largest room's diagonal (70.7 m), stretched 4x
+    // largest room, 70.7 m: 0.206 s) stretched 4x (dsp/DelayStretch.h): 0.825 s, with margin.
+    static constexpr double maxDelaySeconds = 0.85;
 
     // Allocates. Not on the audio thread.
     void prepare (int maxDelaySamples)

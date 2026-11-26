@@ -132,7 +132,15 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
                     // under the native webview); hosts like Ableton rely on it.
                     .withNativeFunction (page::setEditorSize, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
-                                             if (args.size() == 2)
+                                             // Two numbers that are numbers, within what an int holds (the
+                                             // resize limits then apply).
+                                             const auto isSize = [] (const juce::var& v)
+                                             {
+                                                 return (v.isInt() || v.isInt64() || v.isDouble()) && std::isfinite ((double) v)
+                                                        && (double) v >= 0.0 && (double) v <= 100000.0;
+                                             };
+
+                                             if (args.size() == 2 && isSize (args[0]) && isSize (args[1]))
                                                  setBoundsConstrained (getBounds().withSize ((int) args[0], (int) args[1]));
 
                                              complete ({});

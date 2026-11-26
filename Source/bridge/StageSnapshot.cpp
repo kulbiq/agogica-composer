@@ -14,17 +14,9 @@ juce::var point (geometry::Point p)
     return o.release();
 }
 
-juce::var player (const ComposerProcessor& p, int index, bool self, float roomSize, geometry::Point listener,
-                  float lawExponent)
+juce::var player (const ComposerProcessor& p, int index, bool self, float roomSize)
 {
     const auto pos = playerPlace (p, roomSize);
-
-    auto derived = std::make_unique<juce::DynamicObject>();
-    derived->setProperty ("distance", geometry::distance (pos, listener));
-    derived->setProperty ("azimuth", geometry::azimuthDegrees (pos, listener));
-    derived->setProperty ("pan", geometry::pan (pos, listener));
-    derived->setProperty ("delayMs", geometry::delayMs (pos, listener));
-    derived->setProperty ("levelDb", 20.0f * std::log10 (geometry::distanceGain (geometry::distance (pos, listener), lawExponent)));
 
     const auto name = p.getPlayerLabel();
     const auto track = p.getDisplayName();
@@ -39,7 +31,6 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
     o->setProperty ("x", pos.x);
     o->setProperty ("y", pos.y);
     o->setProperty ("self", self);
-    o->setProperty ("derived", derived.release());
     return o.release();
 }
 } // namespace
@@ -49,7 +40,6 @@ juce::var snapshot (ComposerProcessor& self)
     auto o = std::make_unique<juce::DynamicObject>();
     const auto roomSize = self.getParam (params::roomSize);
     const auto listener = listenerPlace (self);
-    const auto lawExponent = self.getParam (params::proDistanceLaw) / params::dbPerDoublingFreeField;
 
     // ponytail: the viewing instance's room/listener stand for the stage. The copies can
     // drift if someone edits one track's automation lane by hand; add an "out of sync" hint
@@ -61,7 +51,7 @@ juce::var snapshot (ComposerProcessor& self)
 
         for (int i = 0; i < members.size(); ++i)
         {
-            players.add (player (*members[i], i, members[i] == &self, roomSize, listener, lawExponent));
+            players.add (player (*members[i], i, members[i] == &self, roomSize));
             stored.addArray (members[i]->getStoredScenes());
 
             // Hosts give a plugin no way to close its window, so a second editor offers

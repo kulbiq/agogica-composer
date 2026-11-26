@@ -3,7 +3,8 @@
 #include "Geometry.h"
 #include "OutputMode.h"
 
-// The Pro panel: project-wide adjustments, in natural units. The defaults are neutral.
+// The Pro panel: project-wide adjustments, in natural units. These defaults are the sound as it
+// first shipped (tests/LegacyDirectPath.h); the plugin's own are the parameters' (Parameters.h).
 struct Adjustments
 {
     float distanceExponent = geometry::distanceLawExponent; // 1 = free field (-6 dB per doubling)

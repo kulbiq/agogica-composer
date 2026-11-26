@@ -349,7 +349,7 @@ TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float res
     CHECK (self["self"]);
     CHECK_THAT ((double) self["x"], WithinAbs (5.0, 1e-4));             // drawn at the edge
     CHECK_THAT (p.getParam ("playerX"), WithinAbs (20.0, 1e-4));        // stored value kept
-    CHECK_THAT ((double) self["derived"]["distance"], WithinAbs (std::hypot (5.0, 5.0), 1e-3));
+    CHECK_THAT ((double) self["y"], WithinAbs (5.0, 1e-4));
 }
 
 TEST_CASE ("state round-trip: parameters, names, icon, player, scenes, placed", "[integration]")

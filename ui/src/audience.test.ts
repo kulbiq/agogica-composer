@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import stageEdits from "../../Source/bridge/StageEdits.cpp?raw";
+import stateRules from "../../Source/stage/StateRules.h?raw";
 import { cellOf, decodeAudience, emptyAudience, encodeAudience, hasSeat, seatPitch, seatsIn, setSeat } from "./audience";
 
 test("seats survive saving; none at all saves nothing; anything else reads as no audience", () => {
@@ -20,10 +20,10 @@ test("seats survive saving; none at all saves nothing; anything else reads as no
   expect(seatsIn(decodeAudience(btoa("short")), 50)).toEqual([]);
 });
 
-test("C++ accepts exactly what the page saves (StageEdits.cpp, audienceLength)", () => {
+test("C++ accepts exactly what the page saves (StateRules.h, audienceLength)", () => {
   const seats = emptyAudience();
   setSeat(seats, 1, 1, true);
-  const length = Number(/audienceLength = (\d+);/.exec(stageEdits)?.[1]);
+  const length = Number(/audienceLength = (\d+);/.exec(stateRules)?.[1]);
   expect(encodeAudience(seats).length).toBe(length);
 });
 

@@ -3,7 +3,7 @@
 #include "History.h"
 #include "DspUtil.h"
 
-// One delayed path (the direct sound, a reflection) read from the History.
+// One delayed path (the direct sound; a reflection, when they come back) read from the History.
 // The delay never glides (that would bend the pitch - Doppler) and doesn't chase a
 // moving source (a chain of crossfades flutters). It holds until the target has been
 // still for `settleSeconds` (or has kept moving for `maxWaitSeconds`), then crossfades
@@ -97,8 +97,7 @@ private:
             waitingFor = 0;
         }
 
-        // The interpolation weights only when a delay changes (rarely): reading is most of the
-        // reflections' cost, ten paths per player per sample.
+        // The interpolation weights only when a delay changes (rarely), not per sample.
         if (! juce::exactlyEqual (from, fromTapDelay))
             fromTap = history.tapAt (fromTapDelay = from);
 

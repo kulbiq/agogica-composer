@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import cpp from "../../Source/bridge/StageEdits.cpp?raw";
+import cpp from "../../Source/stage/StateRules.h?raw";
 import { autoIcon, iconKeys, playerIcon } from "./icons";
 
 test.each([
@@ -25,7 +25,7 @@ test("a chosen icon wins over the name; empty or unknown falls back to it", () =
   expect(playerIcon({ icon: "", name: "Horns", tracks: [{ track: "Flute" }] })).toBe("horn"); // its own name first
 });
 
-test("the plugin accepts exactly these icon keys (Source/bridge/StageEdits.cpp)", () => {
+test("the plugin accepts exactly these icon keys (Source/stage/StateRules.h)", () => {
   const list = /known \{([^}]*)\}/.exec(cpp)![1];
   expect([...list.matchAll(/"(\w*)"/g)].map((m) => m[1])).toEqual(["", ...iconKeys]);
 });

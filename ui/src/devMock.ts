@@ -72,17 +72,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       players: scene.players.map((p) => {
         const x = clamp(p.x);
         const y = clamp(p.y);
-        const distance = Math.hypot(x - l.x, y - l.y);
-        const azimuth = (Math.atan2(x - l.x, y - l.y) * 180) / Math.PI;
-        const folded = Math.abs(azimuth) > 90 ? Math.sign(azimuth) * (180 - Math.abs(azimuth)) : azimuth;
-        const derived = {
-          distance,
-          azimuth,
-          pan: folded / 90,
-          delayMs: (distance / 343) * 1000,
-          levelDb: distance <= 1 ? 0 : (-20 / 3) * Math.log10(distance),
-        };
-        return { ...p, name: p.playerName || p.own, track: p.own, x, y, derived };
+        return { ...p, name: p.playerName || p.own, track: p.own, x, y };
       }),
     };
   };

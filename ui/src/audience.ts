@@ -1,6 +1,6 @@
 // Where the audience sits: seats painted on a grid of squares counted from the room's centre,
 // one bit each, saved with the project as base64 (C++ checks only the length and the
-// alphabet: StageEdits.cpp, audienceLength). The grid covers the largest room, so a smaller
+// alphabet: Source/stage/StateRules.h, audienceLength). The grid covers the largest room, so a smaller
 // room keeps the seats it hides. Only drawn: the audience changes nothing anyone hears.
 import type { Point } from "./bridge";
 
