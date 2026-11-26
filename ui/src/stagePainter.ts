@@ -1,7 +1,8 @@
 import type { Point, Stage } from "./bridge";
 import { easeToward } from "./ease";
 import { drawIcon, playerIcon } from "./icons";
-import { levelOf, type Levels } from "./level";
+import type { Levels } from "./level";
+import { seatLevel, type SeatedStage } from "./players";
 
 export type NodeKey = "listener" | number;
 export type MapView = "grid" | "azimuth";
@@ -14,7 +15,7 @@ export type MapFrame = {
   width: number; // CSS pixels
   height: number;
   seconds: number; // since the map appeared; drives the breathing ring
-  stage: Stage;
+  stage: SeatedStage;
   selected: NodeKey | null;
   overrides: ReadonlyMap<NodeKey, Point>; // nodes the user is moving, in metres
   levels: Levels;
@@ -213,7 +214,7 @@ export class StagePainter {
     // Input level: a soft halo around each badge (30 Hz from C++, eased per frame).
     for (const player of stage.players) {
       const p = drawn.get(player.id)!;
-      const level = easeToward(shown.get(player.id) ?? 0, levelOf(frame.levels, player.id), 0.35, dt);
+      const level = easeToward(shown.get(player.id) ?? 0, seatLevel(frame.levels, player.tracks.map((t) => t.id)), 0.35, dt);
       shown.set(player.id, level);
       if (level < 0.01) continue;
       ctx.beginPath();
@@ -266,6 +267,27 @@ export class StagePainter {
         ctx.stroke();
       }
       drawIcon(ctx, playerIcon(player), x, y, badgeRadius * 1.3, chosen ? paper : `rgb(${ink})`);
+
+      // A player with several tracks: how many, on a tab at the badge's shoulder.
+      if (player.tracks.length > 1) {
+        const tx = x + badgeRadius * 0.78;
+        const ty = y - badgeRadius * 0.78;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(tx, ty, 6.5, 0, TAU);
+        ctx.fillStyle = chosen ? paper : `rgb(${ink})`;
+        ctx.fill();
+        if (chosen) {
+          ctx.strokeStyle = `rgba(${ink},0.9)`;
+          ctx.stroke();
+        }
+        ctx.font = '600 8px "JetBrains Mono", monospace';
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = chosen ? `rgb(${ink})` : paper;
+        ctx.fillText(String(player.tracks.length), tx, ty + 0.5);
+        ctx.restore();
+      }
     }
 
     return { cx, cy, scale, drawn };

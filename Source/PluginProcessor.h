@@ -65,11 +65,27 @@ public:
     bool isPlaced() const                               { return state.state.getProperty ("placed", false); }
     void markPlaced()                                   { setStateProperty ("placed", true); }
     void setActiveScene (const juce::String& scene)     { setStateProperty ("scene", scene); }
-    juce::String getDisplayName() const;                // name override, else host track name, else empty
+    // Two names. The track's: its own override, else the host track name, else empty.
+    // The player's (shared by a player's tracks, see getPlayerKey): set when the player has
+    // several tracks or was named while it had; else the track's name is the player's.
+    juce::String getDisplayName() const;                // the track's name
     void setNameOverride (const juce::String& name)     { setStateProperty ("name", name.trim()); }
+    juce::String getPlayerName() const                  { return state.state.getProperty ("playerName").toString(); }
+    void setPlayerName (const juce::String& name)       { setStateProperty ("playerName", name.trim()); }
+    juce::String getPlayerLabel() const                 { return getPlayerName().isNotEmpty() ? getPlayerName() : getDisplayName(); }
     // Instrument icon key (ui/src/icons.tsx), empty = picked from the name by the page.
     juce::String getIcon() const                        { return state.state.getProperty ("icon").toString(); }
     void setIcon (const juce::String& key)              { setStateProperty ("icon", key); }
+    // Host track name, or empty (the player's name may differ: see getDisplayName).
+    juce::String getTrackName() const                   { return trackName; }
+
+    // A player with several tracks: its tracks share this key (saved; empty = a player of its
+    // own) and stand in one place with one name and icon (bridge/StageEdits: joinPlayer).
+    juce::String getPlayerKey() const                   { return state.state.getProperty ("player").toString(); }
+    void setPlayerKey (const juce::String& key)         { setStateProperty ("player", key); }
+    // This track's place in every stored scene becomes `other`'s; where `other` has none,
+    // it keeps its current place there too.
+    void copyScenePlaces (const ComposerProcessor& other);
 
     // Host track colour as "#rrggbb", or empty when the host doesn't send one.
     juce::String getTrackColour() const                 { return trackColour; }
@@ -87,6 +103,9 @@ public:
     // Writes one parameter, in its real units: inside the gesture that is open on it, else as
     // a complete gesture of its own.
     void writeParam (const juce::String& paramId, float value);
+    // Ends the gestures open on these parameters, whoever began them (a track leaving a player
+    // in the middle of a drag would otherwise never get its end).
+    void endGestures (const juce::StringArray& paramIds);
 
     // How long the output goes on after the input stops (reported to the host; also how long a
     // silent track keeps processing): with the direct sound alone, the longest delay.

@@ -1,5 +1,6 @@
 #include "StageEdits.h"
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 
@@ -35,13 +36,48 @@ std::optional<Edit> validateEdit (const juce::var& edit)
                   edit["param"].toString(), (int) target, phase == "change" ? (float) value : 0.0f };
 }
 
+ComposerProcessor* memberWithId (const juce::Array<ComposerProcessor*>& members, int id)
+{
+    for (auto* p : members)
+        if (p->id == id)
+            return p;
+
+    return nullptr;
+}
+
+// Whether `p` is one of the tracks of the player that track `target` belongs to.
+struct PlayerOf
+{
+    PlayerOf (const juce::Array<ComposerProcessor*>& members, int targetId) : target (targetId)
+    {
+        if (const auto* p = memberWithId (members, targetId))
+            key = p->getPlayerKey();
+    }
+
+    bool operator() (const ComposerProcessor& p) const { return p.id == target || (key.isNotEmpty() && p.getPlayerKey() == key); }
+
+    int target;
+    juce::String key;
+};
+
+// A key left on one track only is a player of its own again.
+void dropLoneKeys (const juce::Array<ComposerProcessor*>& members)
+{
+    for (auto* p : members)
+        if (const auto key = p->getPlayerKey(); key.isNotEmpty()
+            && std::count_if (members.begin(), members.end(), [&] (auto* q) { return q->getPlayerKey() == key; }) == 1)
+            p->setPlayerKey ({});
+}
+
 void dispatch (ComposerProcessor& self, const Edit& edit, const void* owner)
 {
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
+        const PlayerOf ofTarget (members, edit.target);
+
         for (auto* p : members)
         {
-            if (params::ofStage.contains (edit.paramId) || (params::ofPlayer.contains (edit.paramId) && p->id == edit.target))
+            if (params::ofStage.contains (edit.paramId) || (params::ofPlayer.contains (edit.paramId) && ofTarget (*p)))
             {
                 switch (edit.phase)
                 {
@@ -90,10 +126,31 @@ void setName (ComposerProcessor& self, int id, const juce::String& name)
 {
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
+        auto* target = memberWithId (members, id);
+        const auto cut = name.trim().substring (0, maxNameLength);
+
+        if (target == nullptr)
+            return;
+
+        // A player of its own: its name is its track's.
+        if (target->getPlayerKey().isEmpty())
+        {
+            target->setNameOverride (cut);
+            target->setPlayerName ({});
+            return;
+        }
+
+        const PlayerOf ofPlayer (members, id);
+
         for (auto* p : members)
-            if (p->id == id)
-                p->setNameOverride (name.trim().substring (0, maxNameLength));
+            if (ofPlayer (*p))
+                p->setPlayerName (cut);
     });
+}
+
+void setTrackName (ComposerProcessor& self, int id, const juce::String& name)
+{
+    self.registry->withMember (id, [&] (ComposerProcessor& p) { p.setNameOverride (name.trim().substring (0, maxNameLength)); });
 }
 
 void setIcon (ComposerProcessor& self, int id, const juce::String& key)
@@ -107,9 +164,75 @@ void setIcon (ComposerProcessor& self, int id, const juce::String& key)
 
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
+        const PlayerOf ofPlayer (members, id);
+
         for (auto* p : members)
-            if (p->id == id)
+            if (ofPlayer (*p))
                 p->setIcon (key);
+    });
+}
+
+void joinPlayer (ComposerProcessor& self, int trackId, int intoId)
+{
+    self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+    {
+        auto* track = memberWithId (members, trackId);
+        auto* into = memberWithId (members, intoId);
+
+        if (track == nullptr || into == nullptr || track == into
+            || (into->getPlayerKey().isNotEmpty() && track->getPlayerKey() == into->getPlayerKey()))
+            return;
+
+        // The track keeps the name it shows: as a player of its own, the player's name (which
+        // differs from the track's after its player lost its other tracks).
+        if (track->getPlayerKey().isEmpty() && track->getPlayerName().isNotEmpty())
+            track->setNameOverride (track->getPlayerName());
+        track->setPlayerName ({});
+
+        if (into->getPlayerKey().isEmpty())
+            into->setPlayerKey (juce::Uuid().toDashedString());
+
+        track->endGestures (params::ofPlayer);
+        track->setPlayerKey (into->getPlayerKey());
+        track->copyScenePlaces (*into);
+
+        for (const auto& paramId : params::ofPlayer)
+            track->writeParam (paramId, into->getParam (paramId));
+
+        // The player keeps the name and icon it had, written to every track so they no longer
+        // depend on which of them is first.
+        const PlayerOf ofPlayer (members, intoId);
+        const auto name = into->getPlayerLabel();
+        const auto icon = into->getIcon();
+
+        for (auto* p : members)
+        {
+            if (ofPlayer (*p))
+            {
+                p->setPlayerName (name);
+                p->setIcon (icon);
+            }
+        }
+
+        track->markPlaced();
+        dropLoneKeys (members);
+    });
+}
+
+void splitPlayer (ComposerProcessor& self, int trackId)
+{
+    self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+    {
+        auto* track = memberWithId (members, trackId);
+
+        if (track == nullptr || track->getPlayerKey().isEmpty())
+            return;
+
+        track->endGestures (params::ofPlayer);
+        track->setPlayerKey ({});
+        track->setPlayerName ({}); // named after its track again, with its own icon
+        track->setIcon ({});
+        dropLoneKeys (members);
     });
 }
 } // namespace stage

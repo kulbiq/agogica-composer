@@ -78,6 +78,32 @@ void ComposerProcessor::writeParam (const juce::String& paramId, float value)
         param->endChangeGesture();
 }
 
+void ComposerProcessor::endGestures (const juce::StringArray& paramIds)
+{
+    for (const auto& paramId : paramIds)
+        if (gesturesOpen.erase (paramId) != 0)
+            state.getParameter (paramId)->endChangeGesture();
+}
+
+void ComposerProcessor::copyScenePlaces (const ComposerProcessor& other)
+{
+    const juce::ScopedLock lock (stateTreeLock);
+    const auto theirs = other.state.state.getChildWithName ("scenes");
+
+    for (auto slot : state.state.getChildWithName ("scenes"))
+    {
+        const auto their = theirs.getChildWithName (slot.getType());
+
+        for (const auto& paramId : params::ofPlayer)
+        {
+            if (their.hasProperty (paramId))
+                slot.setProperty (paramId, their[paramId], nullptr);
+            else
+                slot.removeProperty (paramId, nullptr); // recallScene then keeps the current place
+        }
+    }
+}
+
 void ComposerProcessor::storeScene()
 {
     const juce::ScopedLock lock (stateTreeLock);

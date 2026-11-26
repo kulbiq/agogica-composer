@@ -528,6 +528,148 @@ button.status:focus-visible {
   outline: none;
 }
 
+/* One player in the list: its row, its tracks, its actions. */
+.seat {
+  position: relative;
+}
+
+.seat .item {
+  touch-action: none; /* rows are dragged onto each other */
+}
+
+.seat[data-drop] > .item,
+.players[data-drop] {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.seat[data-dragged] > .item,
+.trackRow[data-dragged] {
+  opacity: 0.4;
+}
+
+.count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--ink-light);
+}
+
+/* A tree's disclosure arrow, in the row's left margin. */
+.expand {
+  position: absolute;
+  top: 4px;
+  left: 1px;
+  width: 15px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: none;
+  color: var(--ink-lighter);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.expand path,
+.check path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+
+.expand:hover,
+.expand:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.tracks {
+  margin: 0;
+  padding: 0 0 4px;
+  list-style: none;
+}
+
+.trackRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px 0 21px;
+  font-size: 12.5px;
+  color: var(--ink-lighter);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.trackRow:hover {
+  color: var(--ink-light);
+  background: var(--line);
+}
+
+.tree {
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.tree path {
+  fill: none;
+  stroke: var(--line-strong);
+}
+
+/* Select mode: a checkbox per player. */
+.check {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ink-lighter);
+  border-radius: var(--radius-input);
+  color: transparent;
+}
+
+.item[aria-pressed="true"] .check {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.mergeBar {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+
+/* Follows the pointer while a row is dragged onto another. */
+.dragLabel {
+  position: fixed;
+  z-index: 20;
+  padding: 4px 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgba(var(--ink-rgb), 0.12);
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* Under the selected row: actions on that player. */
 .selBar {
   display: flex;
@@ -719,6 +861,86 @@ button.status:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+.editTracks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.editTrack {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* A track's name in Edit player: reads as text, edits in place. */
+.trackInput {
+  flex: 1;
+  min-width: 0;
+  margin-left: -6px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+  background: none;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+}
+
+.trackInput:hover {
+  border-color: var(--line-strong);
+}
+
+.trackInput:focus {
+  border-color: var(--ink);
+  background: var(--surface);
+}
+
+/* The website's dashed "add" button. */
+.dashed {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-button);
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashed:hover,
+.dashed:focus-visible,
+.dashed[aria-expanded="true"] {
+  border-color: var(--ink);
+  color: var(--ink);
+  outline: none;
+}
+
+.addList {
+  max-height: 200px;
+  margin: -4px 0 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-top: 0;
+}
+
+.addList .item {
+  padding-right: 12px;
+}
+
 /* The website's primary button: ink fill, hard corners. */
 .primary {
   height: 40px;
@@ -732,6 +954,13 @@ button.status:focus-visible {
   text-transform: uppercase;
   color: var(--paper);
   cursor: pointer;
+}
+
+.primary:disabled {
+  border-color: var(--line-strong);
+  background: none;
+  color: var(--ink-lighter);
+  cursor: default;
 }
 
 .primary:focus {

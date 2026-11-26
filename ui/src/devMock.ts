@@ -8,8 +8,9 @@ type Invoke = { name: string; params: unknown[]; resultId: number };
 type Edit = { phase: string; target: number; param: string; value: number };
 
 if (import.meta.env.DEV && !window.__JUCE__) {
-  // An orchestra in front of the listener (the design canvas's stage).
-  const seats: [string, string, number, number][] = [
+  // An orchestra in front of the listener (the design canvas's stage): one track per player,
+  // except the horns and the piano (two tracks each, see players.ts).
+  const seats: [string, string, number, number, string?][] = [
     ["Violin I", "#d1495b", -5, 2.5],
     ["Violin II", "#edae49", -3, 4.5],
     ["Viola", "#00798c", -1.2, 3],
@@ -17,11 +18,13 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     ["Bass", "#30638e", 4.5, 3.5],
     ["Flute", "#66a182", -1.5, 6],
     ["Clarinet", "#66a182", 1.5, 6],
-    ["Horn", "#edae49", -4.5, 7],
+    ["Horn 1", "#edae49", -4.5, 7, "Horns"],
+    ["Horn 2", "#edae49", -4.5, 7, "Horns"],
     ["Trumpet", "#edae49", 4.5, 7],
     ["Timpani", "", 0, 8.5],
     ["Harp", "#d1495b", -7, 4.5],
-    ["Piano", "", 7, 5],
+    ["Piano RH", "", 7, 5, "Piano"],
+    ["Piano LH", "", 7, 5, "Piano"],
   ];
   const names = seats.map(([name]) => name);
   const scene = {
@@ -37,7 +40,10 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
     room: 20,
     listener: { x: 0, y: 0 },
-    players: seats.map(([name, colour, x, y], i) => ({ id: i, name, colour, icon: "", self: i === 2, x, y })),
+    // `own`: the track's name; `playerName`: the player's, when it has one (see setName).
+    players: seats.map(([own, colour, x, y, player], i) => ({
+      id: i, own, playerName: player ?? "", colour, icon: "", player: player?.toLowerCase() ?? "", self: i === 2, x, y,
+    })),
   };
 
   // Rough stand-in for Source/dsp/Geometry.h; only so the panel shows plausible numbers.
@@ -61,7 +67,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
           delayMs: (distance / 343) * 1000,
           levelDb: distance <= 1 ? 0 : (-20 / 3) * Math.log10(distance),
         };
-        return { ...p, x, y, derived };
+        return { ...p, name: p.playerName || p.own, track: p.own, x, y, derived };
       }),
     };
   };
@@ -71,6 +77,14 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   // The plugin sends the stage from a timer, after the call that changed it has returned.
   const emitStageSoon = () => setTimeout(() => emit("stage", snapshot()), 33);
   const gestures = new GestureLedger();
+  const tracksOf = (id: number) => {
+    const key = scene.players.find((p) => p.id === id)?.player;
+    return scene.players.filter((p) => p.id === id || (key && p.player === key));
+  };
+  const dropLoneKeys = () =>
+    scene.players.forEach((p) => {
+      if (p.player && scene.players.filter((q) => q.player === p.player).length === 1) p.player = "";
+    });
 
   const handlers: Record<string, (...args: never[]) => unknown> = {
     getStage: () => snapshot(),
@@ -79,13 +93,14 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       gestures.record(e.phase, e.target, e.param);
       if (e.phase !== "change") return;
       const p = scene.players.find((pl) => pl.id === e.target);
+      const tracks = tracksOf(e.target);
       if (e.param === "roomSize") scene.room = e.value;
       if (e.param.startsWith("pro")) scene.pro = { ...scene.pro, [e.param]: e.value };
       if (e.param === "outputMode") scene.outputMode = e.value > 0.5 ? "binaural" : "stereo";
       if (e.param === "listenerX") scene.listener.x = e.value;
       if (e.param === "listenerY") scene.listener.y = e.value;
-      if (p && e.param === "playerX") p.x = e.value;
-      if (p && e.param === "playerY") p.y = e.value;
+      if (p && e.param === "playerX") tracks.forEach((t) => (t.x = e.value));
+      if (p && e.param === "playerY") tracks.forEach((t) => (t.y = e.value));
       emitStageSoon();
     },
     startTracker: () => true,
@@ -94,14 +109,40 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       if (!scene.scenes.includes(name)) scene.scenes = [...scene.scenes, name].sort();
       emitStageSoon();
     },
+    // Like stage::setName / setTrackName (Source/bridge/StageEdits.cpp).
     setName: (id: number, name: string) => {
       const p = scene.players.find((pl) => pl.id === id);
-      if (p) p.name = name || names[id];
+      if (p && !p.player) Object.assign(p, { own: name || names[id], playerName: "" });
+      else tracksOf(id).forEach((t) => (t.playerName = name));
+      emitStageSoon();
+    },
+    setTrackName: (id: number, name: string) => {
+      const p = scene.players.find((pl) => pl.id === id);
+      if (p) p.own = name || names[id];
       emitStageSoon();
     },
     setIcon: (id: number, icon: string) => {
-      const p = scene.players.find((pl) => pl.id === id);
-      if (p) p.icon = icon;
+      tracksOf(id).forEach((t) => (t.icon = icon));
+      emitStageSoon();
+    },
+    // Like stage::joinPlayer / splitPlayer (Source/bridge/StageEdits.cpp).
+    joinPlayer: (trackId: number, intoId: number) => {
+      const track = scene.players.find((p) => p.id === trackId);
+      const into = scene.players.find((p) => p.id === intoId);
+      if (!track || !into || track === into || (into.player && track.player === into.player)) return;
+      if (!track.player && track.playerName) track.own = track.playerName;
+      into.player ||= `p${intoId}`;
+      Object.assign(track, { player: into.player, x: into.x, y: into.y });
+      const playerName = into.playerName || into.own;
+      tracksOf(intoId).forEach((t) => Object.assign(t, { playerName, icon: into.icon }));
+      dropLoneKeys();
+      emitStageSoon();
+    },
+    splitPlayer: (trackId: number) => {
+      const track = scene.players.find((p) => p.id === trackId);
+      if (!track?.player) return;
+      Object.assign(track, { player: "", playerName: "", icon: "" });
+      dropLoneKeys();
       emitStageSoon();
     },
   };
@@ -137,7 +178,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   setInterval(() => {
     const t = performance.now();
     const levels: Record<string, number> = {};
-    for (const p of scene.players) levels[p.id] = p.name === "Timpani" ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
+    for (const p of scene.players) levels[p.id] = p.own === "Timpani" ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
     emit("levels", levels);
     emit("headYaw", location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0);
   }, 33);

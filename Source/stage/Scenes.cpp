@@ -1,5 +1,7 @@
 #include "Scenes.h"
 
+#include <map>
+
 namespace stage
 {
 void setScene (ComposerProcessor& self, const juce::String& scene)
@@ -39,6 +41,18 @@ void setScene (ComposerProcessor& self, const juce::String& scene)
                 for (const auto& paramId : params::ofScene)
                     if (params::ofStage.contains (paramId))
                         p->writeParam (paramId, hasBeenThere->getParam (paramId));
+
+        // A player's tracks stand in one place. They store the same place in every scene
+        // (joinPlayer, then edits to all of them), unless an automation lane was edited by
+        // hand: then the first track's place wins.
+        std::map<juce::String, ComposerProcessor*> first;
+
+        for (auto* p : members)
+            if (const auto key = p->getPlayerKey(); key.isNotEmpty())
+                if (const auto [it, isFirst] = first.emplace (key, p); ! isFirst)
+                    for (const auto& paramId : params::ofPlayer)
+                        if (p->getParam (paramId) != it->second->getParam (paramId))
+                            p->writeParam (paramId, it->second->getParam (paramId));
     });
 }
 } // namespace stage

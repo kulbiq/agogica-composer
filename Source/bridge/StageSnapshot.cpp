@@ -26,13 +26,16 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
     derived->setProperty ("delayMs", geometry::delayMs (pos, listener));
     derived->setProperty ("levelDb", 20.0f * std::log10 (geometry::distanceGain (geometry::distance (pos, listener), lawExponent)));
 
-    const auto name = p.getDisplayName();
+    const auto name = p.getPlayerLabel();
+    const auto track = p.getDisplayName();
 
     auto o = std::make_unique<juce::DynamicObject>();
     o->setProperty ("id", p.id);
     o->setProperty ("name", name.isNotEmpty() ? name : "Player " + juce::String (index + 1));
     o->setProperty ("colour", p.getTrackColour());
     o->setProperty ("icon", p.getIcon());
+    o->setProperty ("player", p.getPlayerKey());
+    o->setProperty ("track", track.isNotEmpty() ? track : "Track " + juce::String (index + 1));
     o->setProperty ("x", pos.x);
     o->setProperty ("y", pos.y);
     o->setProperty ("self", self);

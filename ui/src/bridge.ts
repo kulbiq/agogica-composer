@@ -12,6 +12,9 @@ export type Player = Point & {
   name: string;
   colour: string; // host track colour "#rrggbb", or ""
   icon: string; // a key from icons.tsx, or "" = picked from the name
+  player: string; // tracks with the same key are one player (players.ts), "" = a player of its own
+  track: string; // the track's own name (set in Composer, else the host's), or "Track N"
+  // (`name` is the player's: the same on all its tracks)
   self: boolean;
 };
 
@@ -47,8 +50,12 @@ type Edit = { phase: "begin" | "change" | "end"; target: number; param: Param; v
 // Functions the page calls.
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const edit = getNativeFunction("edit") as (edit: Edit) => Promise<void>;
+// The player's name ("" = its track's name), and one track's ("" = the host's).
 export const setName = getNativeFunction("setName") as (id: number, name: string) => Promise<void>;
+export const setTrackName = getNativeFunction("setTrackName") as (id: number, name: string) => Promise<void>;
 export const setIcon = getNativeFunction("setIcon") as (id: number, icon: string) => Promise<void>;
+export const joinPlayer = getNativeFunction("joinPlayer") as (trackId: number, intoId: number) => Promise<void>;
+export const splitPlayer = getNativeFunction("splitPlayer") as (trackId: number) => Promise<void>;
 export const setScene = getNativeFunction("setScene") as (scene: string) => Promise<void>;
 export const startTracker = getNativeFunction("startTracker") as () => Promise<boolean>;
 export const getBuildInfo = getNativeFunction("getBuildInfo") as () => Promise<BuildInfo>;

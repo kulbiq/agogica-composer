@@ -120,6 +120,19 @@ TEST_CASE ("gestures reach the host balanced, whatever the page and the stage do
         second.applyEdit (b, edit ("end", b.id, "listenerX"));
     }
 
+    SECTION ("a player with two tracks is dragged; one leaves in the middle of a drag")
+    {
+        stage::joinPlayer (a, b.id, a.id);
+        drag (a, b.id, "playerX", 3.0f);
+        CHECK_THAT (a.getParam ("playerX"), WithinAbs (3.0, 1e-4));
+
+        stage::applyEdit (a, edit ("begin", a.id, "playerY"));
+        stage::splitPlayer (a, b.id);
+        stage::applyEdit (a, edit ("change", a.id, "playerY", 2.0f));
+        stage::applyEdit (a, edit ("end", a.id, "playerY"));
+        CHECK_THAT (b.getParam ("playerY"), ! WithinAbs (2.0, 1e-4));
+    }
+
     SECTION ("invalid begins and ends do not change the window ledger")
     {
         stage::OpenGestures window;
@@ -199,6 +212,126 @@ TEST_CASE ("applyEdit: writes metres, ignores unknown params and other targets",
     }
 }
 
+TEST_CASE ("players with several tracks: one place, name and icon; join and split", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor rh, lh, flute;
+    const auto x = [] (ComposerProcessor& p) { return (double) p.getParam ("playerX"); };
+
+    drag (rh, rh.id, "playerX", -4.0f);
+    drag (lh, lh.id, "playerX", 2.0f);
+    stage::setName (rh, rh.id, "Piano"); // players of their own: names their tracks
+    stage::setName (lh, lh.id, "Piano LH");
+    stage::setIcon (rh, rh.id, "piano");
+    CHECK (rh.getDisplayName() == "Piano");
+
+    stage::joinPlayer (rh, lh.id, rh.id);
+    CHECK (lh.getPlayerKey().isNotEmpty());
+    CHECK (lh.getPlayerKey() == rh.getPlayerKey());
+    CHECK (flute.getPlayerKey().isEmpty());
+    CHECK_THAT (x (lh), WithinAbs (-4.0, 1e-4)); // takes the player's place and icon
+    CHECK (lh.getIcon() == "piano");
+    CHECK (lh.getPlayerLabel() == "Piano"); // the player keeps its name, the track its own
+    CHECK (lh.getDisplayName() == "Piano LH");
+
+    SECTION ("an edit to any of its tracks goes to all of them, and nowhere else; a track has its own name")
+    {
+        drag (flute, lh.id, "playerX", 1.5f);
+        stage::setName (flute, lh.id, "Pianoforte");
+        stage::setIcon (flute, lh.id, "organ");
+        stage::setTrackName (flute, lh.id, "Left hand");
+        CHECK_THAT (x (rh), WithinAbs (1.5, 1e-4));
+        CHECK (rh.getPlayerLabel() == "Pianoforte");
+        CHECK (rh.getDisplayName() == "Piano");
+        CHECK (lh.getDisplayName() == "Left hand");
+        CHECK (rh.getIcon() == "organ");
+        CHECK_THAT (x (flute), ! WithinAbs (1.5, 1e-4));
+        CHECK (flute.getIcon().isEmpty());
+    }
+
+    SECTION ("split: stays where it stands, named after its track, its own icon; a lone key is dropped")
+    {
+        stage::setName (rh, rh.id, "Keys");
+        stage::splitPlayer (flute, lh.id);
+        CHECK (lh.getPlayerKey().isEmpty());
+        CHECK (rh.getPlayerKey().isEmpty());
+        CHECK_THAT (x (lh), WithinAbs (-4.0, 1e-4));
+        CHECK (lh.getIcon().isEmpty());
+        CHECK (lh.getPlayerLabel() == "Piano LH");
+        CHECK (rh.getPlayerLabel() == "Keys"); // the name it showed stays
+
+        drag (flute, lh.id, "playerX", 6.0f);
+        CHECK_THAT (x (rh), WithinAbs (-4.0, 1e-4));
+
+        // Joining another player, its track keeps the name it showed.
+        stage::setName (flute, flute.id, "Flute");
+        stage::joinPlayer (flute, rh.id, flute.id);
+        CHECK (rh.getDisplayName() == "Keys");
+        CHECK (rh.getPlayerLabel() == "Flute");
+    }
+
+    SECTION ("joining a track of another player moves it; joining its own player does nothing")
+    {
+        stage::joinPlayer (rh, flute.id, lh.id);
+        stage::joinPlayer (rh, lh.id, rh.id);
+        stage::joinPlayer (rh, lh.id, lh.id);
+        stage::joinPlayer (rh, lh.id, lh.id + 1000);
+        CHECK (flute.getPlayerKey() == rh.getPlayerKey());
+
+        stage::joinPlayer (rh, flute.id, flute.id);
+        stage::joinPlayer (rh, rh.id, flute.id); // rh into a group it is in already
+        CHECK (rh.getPlayerKey() == lh.getPlayerKey());
+    }
+
+    SECTION ("the snapshot: each track's player key, player name and track name")
+    {
+        const auto players = stage::snapshot (rh)["players"];
+        CHECK (players[0]["player"] == players[1]["player"]);
+        CHECK (players[1]["name"] == juce::var ("Piano"));
+        CHECK (players[1]["track"] == juce::var ("Piano LH"));
+        CHECK (players[2]["player"] == juce::var (""));
+        CHECK (players[2]["track"] == juce::var ("Track 3")); // no host here to name it
+    }
+}
+
+TEST_CASE ("players with several tracks keep one place in every scene", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    ComposerProcessor a, b;
+    const auto x = [] (ComposerProcessor& p) { return (double) p.getParam ("playerX"); };
+
+    // Each has its own place in scenes A and B, and has never been in C.
+    drag (a, a.id, "playerX", -2.0f);
+    drag (b, b.id, "playerX", 2.0f);
+    stage::setScene (a, "B");
+    drag (a, a.id, "playerX", -6.0f);
+    drag (b, b.id, "playerX", 6.0f);
+    stage::setScene (a, "A");
+
+    stage::joinPlayer (a, a.id, b.id); // the lower id joins: b's places must win everywhere
+    CHECK_THAT (x (a), WithinAbs (2.0, 1e-4));
+
+    stage::setScene (a, "B");
+    CHECK_THAT (x (a), WithinAbs (6.0, 1e-4));
+    CHECK_THAT (x (b), WithinAbs (6.0, 1e-4));
+
+    stage::setScene (a, "C");
+    drag (a, b.id, "playerX", 4.0f);
+    stage::setScene (a, "A");
+    CHECK_THAT (x (a), WithinAbs (2.0, 1e-4));
+    stage::setScene (a, "C");
+    CHECK_THAT (x (a), WithinAbs (4.0, 1e-4));
+    CHECK_THAT (x (b), WithinAbs (4.0, 1e-4));
+
+    SECTION ("a lane edited by hand: the first track's place wins at the next scene switch")
+    {
+        a.writeParam ("playerX", -9.0f);
+        stage::setScene (a, "A");
+        stage::setScene (a, "C");
+        CHECK_THAT (x (b), WithinAbs (-9.0, 1e-4));
+    }
+}
+
 TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float residue", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -219,7 +352,7 @@ TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float res
     CHECK_THAT ((double) self["derived"]["distance"], WithinAbs (std::hypot (5.0, 5.0), 1e-3));
 }
 
-TEST_CASE ("state round-trip: parameters, name, icon, scenes, placed", "[integration]")
+TEST_CASE ("state round-trip: parameters, names, icon, player, scenes, placed", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     juce::MemoryBlock saved;
@@ -228,6 +361,8 @@ TEST_CASE ("state round-trip: parameters, name, icon, scenes, placed", "[integra
         ComposerProcessor p;
         p.setNameOverride ("Viola");
         stage::setIcon (p, p.id, "violin");
+        p.setPlayerKey ("strings");
+        p.setPlayerName ("Strings");
         drag (p, p.id, "roomSize", 35.0f);
         drag (p, p.id, "playerX", 3.0f);
         stage::setScene (p, "D");
@@ -239,6 +374,8 @@ TEST_CASE ("state round-trip: parameters, name, icon, scenes, placed", "[integra
     restored.setStateInformation (saved.getData(), (int) saved.getSize());
     CHECK (restored.getDisplayName() == "Viola");
     CHECK (restored.getIcon() == "violin");
+    CHECK (restored.getPlayerKey() == "strings");
+    CHECK (restored.getPlayerName() == "Strings");
     CHECK_THAT (restored.getParam ("roomSize"), WithinAbs (35.0, 1e-4));
     CHECK (restored.getScene() == "D");
     CHECK (restored.isPlaced());

@@ -71,10 +71,31 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
+                    .withNativeFunction (page::setTrackName, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 2 && args[0].isInt() && args[1].isString())
+                                                 stage::setTrackName (composer, (int) args[0], args[1].toString());
+
+                                             complete ({});
+                                         })
                     .withNativeFunction (page::setIcon, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
                                              if (args.size() == 2 && args[0].isInt() && args[1].isString())
                                                  stage::setIcon (composer, (int) args[0], args[1].toString());
+
+                                             complete ({});
+                                         })
+                    .withNativeFunction (page::joinPlayer, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 2 && args[0].isInt() && args[1].isInt())
+                                                 stage::joinPlayer (composer, (int) args[0], (int) args[1]);
+
+                                             complete ({});
+                                         })
+                    .withNativeFunction (page::splitPlayer, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 1 && args[0].isInt())
+                                                 stage::splitPlayer (composer, (int) args[0]);
 
                                              complete ({});
                                          })

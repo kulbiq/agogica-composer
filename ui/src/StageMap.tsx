@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react";
-import { beginGesture, useEvent, type Gesture, type Point, type Stage } from "./bridge";
+import { beginGesture, useEvent, type Gesture, type Point } from "./bridge";
+import type { SeatedStage } from "./players";
 import styles from "./App.module.css";
 import type { Levels } from "./level";
 import { badgeRadius, nodesOf, StagePainter, type MapNames, type MapView, type NodeKey, type View } from "./stagePainter";
@@ -7,7 +8,7 @@ import { badgeRadius, nodesOf, StagePainter, type MapNames, type MapView, type N
 export type { MapNames, MapView, NodeKey };
 
 type Props = {
-  stage: Stage;
+  stage: SeatedStage;
   selfId: number;
   selected: NodeKey | null;
   onSelect: (key: NodeKey) => void;

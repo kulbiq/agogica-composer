@@ -21,6 +21,8 @@ test("a chosen icon wins over the name; empty or unknown falls back to it", () =
   expect(playerIcon({ icon: "harp", name: "Violin" })).toBe("harp");
   expect(playerIcon({ icon: "", name: "Violin" })).toBe("violin");
   expect(playerIcon({ icon: "banjo", name: "Violin" })).toBe("violin");
+  expect(playerIcon({ icon: "", name: "Woodwinds", tracks: [{ track: "Track 3" }, { track: "Flute" }] })).toBe("flute");
+  expect(playerIcon({ icon: "", name: "Horns", tracks: [{ track: "Flute" }] })).toBe("horn"); // its own name first
 });
 
 test("the plugin accepts exactly these icon keys (Source/bridge/StageEdits.cpp)", () => {

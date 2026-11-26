@@ -57,9 +57,11 @@ export const iconLabels: Record<IconKey, string> = {
   timpani: "Timpani", drum: "Percussion", piano: "Piano", organ: "Organ", harp: "Harp", voice: "Voice", other: "Other",
 };
 
-// The icon the player was given, else one picked from its name ("" = automatic).
-export function playerIcon(player: { icon: string; name: string }): IconKey {
-  return iconKeys.includes(player.icon as IconKey) ? (player.icon as IconKey) : autoIcon(player.name);
+// The icon the player was given, else one picked from its name, else from its tracks' names
+// (a player "Woodwinds" with a flute track).
+export function playerIcon(player: { icon: string; name: string; tracks?: { track: string }[] }): IconKey {
+  if (iconKeys.includes(player.icon as IconKey)) return player.icon as IconKey;
+  return [player.name, ...(player.tracks ?? []).map((t) => t.track)].map(autoIcon).find((k) => k !== "other") ?? "other";
 }
 
 // Picked from the track name; the first rule that matches wins, so the specific ones

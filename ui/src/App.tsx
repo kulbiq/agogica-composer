@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "./App.module.css";
 import { useStage } from "./bridge";
+import { seat } from "./players";
 import PlayersPanel from "./PlayersPanel";
 import { usePref } from "./prefs";
 import ResizeGrip from "./ResizeGrip";
@@ -11,15 +12,18 @@ const views = ["grid", "azimuth"] as const satisfies readonly MapView[];
 const nameModes = ["selected", "all"] as const satisfies readonly MapNames[];
 
 export default function App() {
-  const stage = useStage();
+  const snapshot = useStage();
+  const stage = useMemo(() => snapshot && seat(snapshot), [snapshot]); // a player's tracks as one
   const selfId = stage?.players.find((p) => p.self)?.id;
   const [picked, setPicked] = useState<NodeKey | null>(null);
   const [view, setView] = usePref<MapView>("mapView", "grid", views);
   const [names, setNames] = usePref<MapNames>("mapNames", "selected", nameModes);
 
-  // Own player is selected until the user picks something; a vanished player drops the selection.
-  const exists = (key: NodeKey | null) => key === "listener" || stage?.players.some((p) => p.id === key);
-  const selected = picked !== null && exists(picked) ? picked : (selfId ?? null);
+  // Own player is selected until the user picks something. A pick is a track: it stays selected
+  // as part of whichever player it joins, and a vanished track drops the selection.
+  const seatOf = (key: NodeKey | null) =>
+    key === "listener" ? key : stage?.players.find((s) => s.tracks.some((t) => t.id === key))?.id;
+  const selected = seatOf(picked) ?? selfId ?? null;
 
   // One Composer window is enough (each shows every track), but a plugin can't close host
   // windows. So a window opened while another is open steps aside until the user insists

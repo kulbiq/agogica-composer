@@ -1,13 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./App.module.css";
-import { setIcon, setName, type Player } from "./bridge";
-import { autoIcon, Icon, iconKeys, iconLabels, type IconKey } from "./icons";
+import { setIcon, setName, setTrackName } from "./bridge";
+import { Icon, iconKeys, iconLabels, playerIcon, type IconKey } from "./icons";
+import type { Seat } from "./players";
 
-// One player's name and icon, in a sheet that opens from the players panel over the map.
-// The icon applies at once; the name on Enter, Done, Back, Escape or a press outside.
-// An empty name goes back to the track's.
-export default function EditPlayer({ player, onBack }: { player: Player; onBack: () => void }) {
+type Props = {
+  player: Seat;
+  others: Seat[]; // the other players, whose tracks can be added to this one
+  onSplit: (trackId: number) => void;
+  onAdd: (trackIds: number[]) => void;
+  onBack: () => void;
+};
+
+// One player's name, icon and tracks, in a sheet that opens from the players panel over the
+// map. The icon and tracks apply at once; the name on Enter, Done, Back, Escape or a press
+// outside. An empty name goes back to the track's.
+export default function EditPlayer({ player, others, onSplit, onAdd, onBack }: Props) {
   const [draft, setDraft] = useState(player.name);
+  const [adding, setAdding] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   const commitName = () => {
@@ -78,10 +88,54 @@ export default function EditPlayer({ player, onBack }: { player: Player; onBack:
             Icon
           </span>
           <div className={styles.iconGrid} role="radiogroup" aria-labelledby="icon-label">
-            {cell("", autoIcon(player.name), "Auto", `Automatic: ${iconLabels[autoIcon(player.name)]}`)}
+            {cell("", playerIcon({ ...player, icon: "" }), "Auto", `Automatic: ${iconLabels[playerIcon({ ...player, icon: "" })]}`)}
             {iconKeys.map((key) => cell(key, key, iconLabels[key].split(",")[0], iconLabels[key]))}
           </div>
-          <p className={styles.note}>Auto picks the icon from the track name (pno, vln, hn…).</p>
+          <p className={styles.note}>Auto picks the icon from the player's or its tracks' names (pno, vln, hn…).</p>
+        </div>
+
+        <div className={styles.field}>
+          <span className={styles.label}>Tracks · {player.tracks.length}</span>
+          <ul className={styles.editTracks}>
+            {player.tracks.map((t) => (
+              <li key={t.id} className={styles.editTrack}>
+                <span className={styles.tick} style={t.colour ? { background: t.colour } : undefined} />
+                <TrackName id={t.id} name={t.track} />
+                {t.self && <span className={styles.you}>This track</span>}
+                {player.tracks.length > 1 && (
+                  <button className={styles.mini} onClick={() => onSplit(t.id)}>
+                    Split off
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {others.length > 0 && (
+            <button className={styles.dashed} aria-expanded={adding} onClick={() => setAdding(!adding)}>
+              + Add a track
+            </button>
+          )}
+          {adding && (
+            <ul className={styles.addList} aria-label="Players whose tracks join this one">
+              {others.map((s) => (
+                <li key={s.id}>
+                  <button
+                    className={styles.item}
+                    onClick={() => {
+                      onAdd(s.tracks.map((t) => t.id));
+                      setAdding(false);
+                    }}
+                  >
+                    <span className={styles.tick} style={s.colour ? { background: s.colour } : undefined} />
+                    <Icon icon={playerIcon(s)} className={styles.itemIcon} />
+                    <span className={styles.itemName}>{s.name}</span>
+                    {s.tracks.length > 1 && <span className={styles.count}>{s.tracks.length}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className={styles.note}>A player's tracks stand in one place and move together. Each keeps its own name and level.</p>
         </div>
       </div>
 
@@ -91,5 +145,27 @@ export default function EditPlayer({ player, onBack }: { player: Player; onBack:
         </button>
       </div>
     </div>
+  );
+}
+
+// A track's own name, edited in place (the player's name is the field above).
+function TrackName({ id, name }: { id: number; name: string }) {
+  const [draft, setDraft] = useState<string>(); // while the field has focus
+  const commit = () => {
+    if (draft !== undefined && draft.trim() !== name) void setTrackName(id, draft.trim());
+    setDraft(undefined);
+  };
+
+  return (
+    <input
+      className={styles.trackInput}
+      aria-label="Track name"
+      value={draft ?? name}
+      maxLength={64}
+      onFocus={() => setDraft(name)}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
   );
 }
