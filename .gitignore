@@ -12,3 +12,12 @@ tracker/models/*.part
 
 # Review notes, shared outside the repo
 brief-review*.md
+
+# Scores used for trying things out: not ours to publish
+SAMPLE_SCORES/
+
+# Signing material never belongs here
+*.p12
+*.p8
+*.pem
+*.mobileprovision
