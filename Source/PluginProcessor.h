@@ -7,6 +7,7 @@
 #include "Parameters.h"
 #include "stage/StageRegistry.h"
 #include "stage/HeadTracking.h"
+#include "telemetry/Telemetry.h"
 #include "dsp/DelayStretch.h"
 #include "dsp/DirectPath.h"
 #include "dsp/LoadMeter.h"
@@ -108,6 +109,7 @@ public:
 
     juce::SharedResourcePointer<StageRegistry> registry;
     juce::SharedResourcePointer<HeadTracking> headTracking;
+    juce::SharedResourcePointer<telemetry::Telemetry> telemetry; // anonymous usage data, only after a yes (PRIVACY.md)
 
     // Gestures (message thread). Hosts record automation only for writes inside one, and want
     // one begin and one end per parameter, spanning all owners. Each owner can open it once.

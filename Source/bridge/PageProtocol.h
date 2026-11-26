@@ -16,8 +16,10 @@ inline constexpr auto setScene = "setScene";           // ("A".."H")
 inline constexpr auto setHeadTracking = "setHeadTracking"; // (on) whether the tracked head turns the sound, every track
 inline constexpr auto setAudience = "setAudience";     // (seats) where the audience sits, every track: ui/src/audience.ts
 inline constexpr auto startTracker = "startTracker";   // () -> whether Agogica Tracker was started
-inline constexpr auto getBuildInfo = "getBuildInfo";   // () -> { version, format, host, credits, debug? }
+inline constexpr auto getBuildInfo = "getBuildInfo";   // () -> { version, format, host, credits, debug?, installId? }
 inline constexpr auto setEditorSize = "setEditorSize"; // (width, height) from the page's resize grip
+inline constexpr auto setTelemetry = "setTelemetry";   // (on) the user's answer about anonymous usage data, for this computer
+inline constexpr auto reportError = "reportError";     // (message, stack, where) an error of the page (telemetry/Telemetry.h)
 
 // The editor sends these.
 inline constexpr auto stage = "stage";     // the stage, when it changed

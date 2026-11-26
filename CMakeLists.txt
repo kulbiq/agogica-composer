@@ -89,6 +89,7 @@ target_sources(Composer PRIVATE
     Source/stage/StageRegistry.cpp
     Source/stage/HeadTracking.cpp
     Source/stage/HeadTrackingFile.cpp
+    Source/telemetry/Telemetry.cpp
     Source/dsp/DirectPath.cpp
     Source/dsp/Placer.cpp
     Source/dsp/Hrtf.cpp
@@ -100,6 +101,12 @@ target_compile_definitions(Composer PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
     COMPOSER_VERSION_DISPLAY="${COMPOSER_VERSION_DISPLAY}")
+
+# Anonymous usage data (PRIVACY.md, Source/telemetry): the key of the project it goes to. It is
+# public and write-only, but a build without it - every developer's, every fork's - never
+# asks and never sends. Releases pass it (scripts/release-macos.sh, windows-release.yml).
+set(COMPOSER_TELEMETRY_KEY "" CACHE STRING "Project key for anonymous usage data; empty = none is ever sent")
+target_compile_definitions(Composer PRIVATE COMPOSER_TELEMETRY_KEY="${COMPOSER_TELEMETRY_KEY}")
 
 # Debug only: load the UI from `npm run dev` instead of the embedded zip.
 option(COMPOSER_UI_DEV_SERVER "Debug builds load the web UI from the Vite dev server" OFF)
@@ -178,7 +185,7 @@ if(COMPOSER_BUILD_TESTS)
 
     # Tests link the plugin's shared code (which already contains the JUCE modules)
     # and borrow its include paths and definitions instead of compiling JUCE again.
-    add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp
+    add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp tests/TelemetryTests.cpp
         tracker/vision/ImageTensor.cpp) # the tracker's pure code, tested here (the app itself needs ONNX Runtime)
     target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
     target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)

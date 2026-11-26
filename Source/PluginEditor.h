@@ -30,6 +30,7 @@ private:
     };
 
     void timerCallback() override;
+    void noteUsage (const LoadMeter::Reading& load, int tracks);
 
     TrackerLauncher trackerLauncher;
 

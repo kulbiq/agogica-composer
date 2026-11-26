@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { cellOf, decodeAudience, emptyAudience, encodeAudience, hasSeat, seatPitch, setSeat, type Audience } from "./audience";
-import { beginGesture, setAudience, setParams, useEvent, type Gesture, type Point } from "./bridge";
+import { beginGesture, reportError, setAudience, setParams, useEvent, type Gesture, type Point } from "./bridge";
 import type { SeatedStage } from "./players";
 import styles from "./App.module.css";
 import { wrapDegrees } from "./ease";
@@ -78,13 +78,15 @@ type MapPress = {
   seatBase: Audience;
   hit: NodeKey | null;
 };
-type Moving = { pointerId: number; key: NodeKey; from: Point; moved: boolean; nodes: Map<NodeKey, { gesture: Gesture; start: Point }> };
+// `gesture`: begun with the first real move, so a click that only selects tells the host nothing.
+type Moving = { pointerId: number; key: NodeKey; from: Point; moved: boolean; nodes: Map<NodeKey, { gesture: Gesture | null; start: Point }> };
 type Box = { x0: number; y0: number; x1: number; y1: number };
 
 export default function StageMap(props: Props) {
   const { stage, selfId, selected, selection, onSelect, view: mapView, names, in3d, onLeave3d, tool, seatTool, eraseRequest, onSeatsPicked, top, fitRequest, onZoomed } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [standing, setStanding] = useState(false);
+  const [undrawn, setUndrawn] = useState(false); // no WebGL, or its context is lost
 
   // The rAF loop reads the latest props through refs instead of restarting.
   // The audience: as C++ has it, or as painted until C++ has that (each stroke is sent once,
@@ -107,8 +109,10 @@ export default function StageMap(props: Props) {
     poked.current = performance.now();
   };
 
-  const latest = useRef({ stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top });
-  latest.current = { stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top };
+  // (`selfId` too: a track that joins a player takes that player's id, and the loop's closures
+  // are those of the first render.)
+  const latest = useRef({ stage, selfId, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top });
+  latest.current = { stage, selfId, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top };
 
   // Nodes the user is moving are drawn from here (exactly under the pointer)
   // until C++ reports the new position back.
@@ -153,7 +157,7 @@ export default function StageMap(props: Props) {
       look.current.yaw = wrap(look.current.yaw + degrees);
       return;
     }
-    turn.current ??= { gesture: beginGesture(selfId, ["listenerYaw"]), yaw: yaw() };
+    turn.current ??= { gesture: beginGesture(latest.current.selfId, ["listenerYaw"]), yaw: yaw() };
     turn.current.yaw = wrap(turn.current.yaw + degrees);
     turn.current.gesture.change({ listenerYaw: wrapDegrees(turn.current.yaw) });
   };
@@ -177,7 +181,7 @@ export default function StageMap(props: Props) {
     look.current.pitch = 0;
     if (binaural()) {
       endTurn();
-      setParams(selfId, { listenerYaw: 0 });
+      setParams(latest.current.selfId, { listenerYaw: 0 });
       turned.current = { yaw: 0, until: performance.now() + 1000 };
     } else look.current.yaw = 0;
     poked.current = performance.now(); // drawn at once
@@ -185,16 +189,24 @@ export default function StageMap(props: Props) {
 
   // Moves the listener (one gesture per walk) `seconds` of walking along `yawDegrees`.
   const walkListener = (input: { forward: number; right: number; faster: boolean }, yawDegrees: number, seconds: number) => {
+    // One gesture at a time on the listener's place: not while it is dragged or nudged.
+    if (drag.current?.nodes.has("listener") || keyGesture.current?.gestures.has("listener")) return;
     const s = latest.current.stage;
-    walking.current ??= { gesture: beginGesture(selfId, ["listenerX", "listenerY"]), at: { ...(overrides.current.get("listener") ?? s.listener) } };
+    walking.current ??= { gesture: beginGesture(latest.current.selfId, ["listenerX", "listenerY"]), at: { ...(overrides.current.get("listener") ?? s.listener) } };
     walking.current.at = walk(walking.current.at, input, yawDegrees, seconds, s.room);
     overrides.current.set("listener", walking.current.at);
     walking.current.gesture.change({ listenerX: round(walking.current.at.x), listenerY: round(walking.current.at.y) });
   };
 
+  // Every gesture this map has open ends: the window lost the keys or the pointer, or the map
+  // is going away. (The host must get an end for every begin, or it keeps recording.)
   const endAll = () => {
     held.current.clear();
     lookDrag.current = null;
+    press.current = null;
+    stroke.current = null; // an unfinished stroke isn't sent
+    drag.current?.nodes.forEach((n) => n.gesture?.end());
+    drag.current = null;
     endWalk();
     endTurn();
     endKeyGesture();
@@ -247,6 +259,18 @@ export default function StageMap(props: Props) {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
+    // The map is drawn with WebGL. Where there is none (a host that turns the GPU off, a
+    // remote desktop), or while the context is lost, the map says so and the rest of the
+    // window goes on working.
+    let painter: StagePainter;
+    try {
+      painter = new StagePainter(canvas);
+    } catch (error) {
+      setUndrawn(true);
+      void reportError(String(error), "", "map");
+      return;
+    }
+    painter.onLostChange = setUndrawn;
     let W = 0;
     let H = 0;
     let frame = 0;
@@ -281,7 +305,6 @@ export default function StageMap(props: Props) {
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
-    const painter = new StagePainter(canvas);
     // Levels arrive 30 times a second and the ring breathes slowly, so a resting map is looked
     // at 30 times a second (and drawn only if something in it changed); anything being moved,
     // by the user or by easing, 60 times a second. Not every frame: a 120 Hz screen would draw
@@ -321,6 +344,7 @@ export default function StageMap(props: Props) {
         lookDrag.current ||
         held.current.size > 0 ||
         now - poked.current < 150;
+      if (painter.lost) return;
       if (now - lastPaint < (moving ? movingFrameMs : restingFrameMs) - 4) return; // 4 ms: frames don't arrive exactly on time
       lastPaint = now;
       // The window moved to a screen with another pixel ratio: no resize event tells us.
@@ -402,7 +426,7 @@ export default function StageMap(props: Props) {
 
   const startGesture = (key: NodeKey) =>
     key === "listener"
-      ? beginGesture(selfId, ["listenerX", "listenerY"])
+      ? beginGesture(latest.current.selfId, ["listenerX", "listenerY"])
       : beginGesture(key, ["playerX", "playerY"]);
 
   const move = (key: NodeKey, gesture: Gesture, p: Point) => {
@@ -457,13 +481,14 @@ export default function StageMap(props: Props) {
     const group = selection.length > 1 && selection.includes(key) ? selection : [key];
     if (group.length === 1) onSelect([key]);
     endKeyGesture(); // the same node's parameters can't be in two gestures
+    if (group.includes("listener")) endWalk();
     e.currentTarget.style.cursor = "grabbing";
     drag.current = {
       pointerId: e.pointerId,
       key,
       from: pointerMetres(e),
       moved: false,
-      nodes: new Map(group.map((k) => [k, { gesture: startGesture(k), start: placeOf(k) }])),
+      nodes: new Map(group.map((k) => [k, { gesture: null, start: placeOf(k) }])),
     };
   };
 
@@ -493,7 +518,10 @@ export default function StageMap(props: Props) {
       d.moved = true;
       const starts = new Map([...d.nodes].map(([k, n]) => [k, n.start]));
       const places = moveAll(starts, { x: at.x - d.from.x, y: at.y - d.from.y }, stage.room / 2);
-      for (const [k, p] of places) move(k, d.nodes.get(k)!.gesture, p);
+      for (const [k, p] of places) {
+        const node = d.nodes.get(k)!;
+        move(k, (node.gesture ??= startGesture(k)), p);
+      }
       return;
     }
 
@@ -587,7 +615,7 @@ export default function StageMap(props: Props) {
 
     const d = drag.current;
     if (d?.pointerId === e.pointerId) {
-      d.nodes.forEach((n) => n.gesture.end());
+      d.nodes.forEach((n) => n.gesture?.end());
       drag.current = null;
       // A click on one of several selected: that one alone.
       if (!d.moved && d.nodes.size > 1 && e.type === "pointerup") onSelect([d.key]);
@@ -678,6 +706,7 @@ export default function StageMap(props: Props) {
     const id = selection.join();
     if (keyGesture.current?.id !== id) {
       endKeyGesture();
+      if (selection.includes("listener")) endWalk();
       keyGesture.current = { id, gestures: new Map(selection.map((k) => [k, startGesture(k)])) };
     }
     const step = e.shiftKey ? 1 : 0.1;
@@ -713,6 +742,15 @@ export default function StageMap(props: Props) {
         onKeyUp={onKeyUp}
         onBlur={endAll}
       />
+      {undrawn && (
+        <div className={styles.mapNotice} role="status">
+          <span className={styles.label}>The map can't be drawn</span>
+          <p className={styles.elsewhereText}>
+            It needs WebGL, which this host or this computer isn't providing right now. Sound, the players list and the
+            settings work as usual.
+          </p>
+        </div>
+      )}
       {box && <div className={styles.box} style={{ left: box.x0, top: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 }} />}
       {in3d && (
         <div className={styles.keys}>

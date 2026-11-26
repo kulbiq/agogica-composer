@@ -6,12 +6,25 @@
 
 namespace
 {
-juce::var getBuildInfo (const juce::AudioProcessor& processor)
+juce::String hostName()
+{
+    return juce::File::getSpecialLocation (juce::File::hostApplicationPath).getFileNameWithoutExtension();
+}
+
+juce::String formatName (const juce::AudioProcessor& processor)
+{
+    return juce::AudioProcessor::getWrapperTypeDescription (processor.wrapperType);
+}
+
+juce::var getBuildInfo (const ComposerProcessor& processor)
 {
     auto info = std::make_unique<juce::DynamicObject>();
     info->setProperty ("version", COMPOSER_VERSION_DISPLAY); // with "-beta.1" or "-dev", see CMakeLists.txt
-    info->setProperty ("format", juce::AudioProcessor::getWrapperTypeDescription (processor.wrapperType));
-    info->setProperty ("host", juce::File::getSpecialLocation (juce::File::hostApplicationPath).getFileNameWithoutExtension());
+    info->setProperty ("format", formatName (processor));
+    info->setProperty ("host", hostName());
+
+    if (const auto id = processor.telemetry->installId(); id.isNotEmpty())
+        info->setProperty ("installId", id); // shown in "About & privacy" while sharing is on
     info->setProperty ("credits", "Binaural HRTF: SADIE II database, KU100 (University of York), Apache License 2.0");
    #if JUCE_DEBUG
     info->setProperty ("debug", true); // the footer shows the DSP load
@@ -145,8 +158,25 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
+                    .withNativeFunction (page::setTelemetry, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 1 && args[0].isBool())
+                                                 composer.telemetry->setConsent ((bool) args[0]);
+
+                                             complete ({});
+                                         })
+                    .withNativeFunction (page::reportError, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 3 && args[0].isString() && args[1].isString() && args[2].isString())
+                                                 composer.telemetry->reportError (args[0].toString(), args[1].toString(), args[2].toString());
+
+                                             complete ({});
+                                         })
                     .withResourceProvider (web::uiResource, resourceOrigin) }
 {
+    // A window: this host process is a session now (scans and renders open none).
+    composer.telemetry->editorOpened (COMPOSER_VERSION_DISPLAY, formatName (composer), hostName());
+
     addAndMakeVisible (browser);
 
     setResizable (true, false);
@@ -220,6 +250,8 @@ void ComposerEditor::timerCallback()
                 ++tracks;
             }
         });
+        noteUsage (all, tracks);
+
         auto event = std::make_unique<juce::DynamicObject>();
         event->setProperty ("self", reading (self).release());
         auto everyone = reading (all);
@@ -243,6 +275,47 @@ void ComposerEditor::timerCallback()
         lastStage = std::move (json);
         browser.emitEventIfBrowserIsVisible (page::stage, stage);
     }
+}
+
+// What the session's summary is made of (telemetry/Telemetry.h; nothing happens without a yes).
+void ComposerEditor::noteUsage (const LoadMeter::Reading& load, int tracks)
+{
+    if (composer.telemetry->consent() != telemetry::Consent::on)
+        return;
+
+    telemetry::Usage usage;
+    usage.instances = tracks;
+    usage.binaural = composer.getParam (params::outputMode) > 0.5f;
+    usage.roomSize = composer.getParam (params::roomSize);
+    usage.headTracking = composer.headTracking->isLive() && composer.isHeadTrackingOn();
+    usage.sampleRate = composer.getSampleRate();
+    usage.blockSize = composer.getBlockSize();
+    usage.loadAverage = (float) load.average;
+    usage.loadPeak = (float) load.peak;
+    usage.overruns = (int) load.overruns;
+
+    composer.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+    {
+        juce::StringArray scenes, players;
+
+        for (auto* p : members)
+        {
+            scenes.addArray (p->getStoredScenes());
+            scenes.add (p->getScene());
+
+            if (const auto key = p->getPlayerKey(); key.isNotEmpty())
+                players.add (key);
+        }
+
+        scenes.removeDuplicates (false);
+        usage.scenes = scenes.size();
+        usage.tracksInLargestPlayer = 1;
+
+        for (const auto& key : players)
+            usage.tracksInLargestPlayer = std::max (usage.tracksInLargestPlayer, (int) std::count (players.begin(), players.end(), key));
+    });
+
+    composer.telemetry->noteUsage (usage);
 }
 
 void ComposerEditor::resized()

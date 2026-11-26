@@ -55,6 +55,8 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     room: Number(new URLSearchParams(location.search).get("room") ?? 20), // ?room=50: another size
     listener: { x: 0, y: 0, yaw: 0 },
     audience: sampleAudience(),
+    // ?telemetry=ask (or on, off): the usage-data question and its switch; else the build has none.
+    telemetry: (new URLSearchParams(location.search).get("telemetry") ?? "unavailable") as "unavailable" | "ask" | "on" | "off",
     // `own`: the track's name; `playerName`: the player's, when it has one (see setName).
     players: seats.map(([own, colour, x, y, player], i) => ({
       id: i, own, playerName: player ?? "", colour, icon: "", player: player?.toLowerCase() ?? "", self: i === 2, x, y,
@@ -93,7 +95,18 @@ if (import.meta.env.DEV && !window.__JUCE__) {
 
   const handlers: Record<string, (...args: never[]) => unknown> = {
     getStage: () => snapshot(),
-    getBuildInfo: () => ({ version: "0.1.0", format: "Browser", host: "Mock", credits: "Binaural HRTF: SADIE II" }),
+    getBuildInfo: () => ({
+      version: "0.1.0",
+      format: "Browser",
+      host: "Mock",
+      credits: "Binaural HRTF: SADIE II",
+      installId: scene.telemetry === "on" ? "00000000-mock-0000-0000-000000000000" : undefined,
+    }),
+    setTelemetry: (on: boolean) => {
+      scene.telemetry = on ? "on" : "off";
+      emitStageSoon();
+    },
+    reportError: (message: string, stack: string, where: string) => console.warn("reportError", where, message, stack),
     edit: (e: Edit) => {
       gestures.record(e.phase, e.target, e.param);
       if (e.phase !== "change") return;
@@ -169,6 +182,14 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       setTimeout(() => emit("__juce__complete", { promiseId: payload.resultId, result }));
     },
   };
+
+  // ?nowebgl: a host that gives the page no WebGL (the map says so, the rest works).
+  if (location.search.includes("nowebgl")) {
+    const real = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...rest: unknown[]) {
+      return kind === "webgl" ? null : (real as (...a: unknown[]) => unknown).call(this, kind, ...rest);
+    } as typeof real;
+  }
 
   // ?azimuth and ?allnames set the map preferences (before the app reads them).
   if (location.search.includes("azimuth")) localStorage.setItem("mapView", "azimuth");

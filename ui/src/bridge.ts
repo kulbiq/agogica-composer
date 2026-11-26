@@ -28,6 +28,9 @@ export type Stage = {
   // event (degrees clockwise).
   headTracking: { live: boolean; canStart: boolean; on: boolean };
   audience: string; // where the audience sits (audience.ts), "" = nobody
+  // Anonymous usage data (PRIVACY.md), one answer per user of this computer: "ask" = not
+  // answered yet, "unavailable" = this build never asks and never sends.
+  telemetry: "unavailable" | "ask" | "on" | "off";
   alone: boolean;
   openElsewhere?: string; // name of another track whose Composer window is open
   room: number;
@@ -38,7 +41,8 @@ export type Stage = {
 export type Param = "roomSize" | "listenerX" | "listenerY" | "listenerYaw" | "playerX" | "playerY" | "outputMode"
   | "proDistanceLaw" | "proDelayFrom" | "proDelayTo";
 
-export type BuildInfo = { version: string; format: string; host: string; credits?: string; debug?: boolean };
+// installId: the random id usage data is sent under, only while sharing is on.
+export type BuildInfo = { version: string; format: string; host: string; credits?: string; debug?: boolean; installId?: string };
 
 // Development monitoring (Source/dsp/LoadMeter.h): processBlock's share of one core, this
 // track and all Composer tracks in this host process.
@@ -65,6 +69,11 @@ export const setAudience = getNativeFunction("setAudience") as (seats: string) =
 export const startTracker = getNativeFunction("startTracker") as () => Promise<boolean>;
 export const getBuildInfo = getNativeFunction("getBuildInfo") as () => Promise<BuildInfo>;
 export const setEditorSize = getNativeFunction("setEditorSize") as (width: number, height: number) => Promise<void>;
+// The user's answer about anonymous usage data, for every Composer on this computer.
+export const setTelemetry = getNativeFunction("setTelemetry") as (on: boolean) => Promise<void>;
+// An error of this page (`where`: "render", "window", "promise", "map"). C++ decides whether it
+// goes anywhere (only with sharing on) and cuts it to size.
+export const reportError = getNativeFunction("reportError") as (message: string, stack: string, where: string) => Promise<void>;
 
 // Events the editor sends, and what each carries.
 type Events = {

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import styles from "./App.module.css";
-import { getBuildInfo, setParams, useEvent, type BuildInfo, type Load, type Stage } from "./bridge";
+import { getBuildInfo, setParams, setTelemetry, useEvent, type BuildInfo, type Load, type Stage } from "./bridge";
 import ParamSlider from "./ParamSlider";
 import type { MapNames } from "./stagePainter";
+import { neverShared, whatIsShared } from "./TelemetryConsent";
 
 // The defaults of Source/Parameters.h: proDistanceLaw 0..20·log10(2) dB per doubling (2.5);
 // proDelayFrom / proDelayTo, the physical delay stretched 1..4 times (1 and 3, dsp/DelayStretch.h).
@@ -34,9 +35,10 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
     Math.abs(stretchTo - defaults.proDelayTo) < 1e-3 &&
     names === "selected";
 
+  const sharing = stage.telemetry === "on";
   useEffect(() => {
     void getBuildInfo().then(setInfo);
-  }, []);
+  }, [sharing]); // the id it shows comes and goes with the answer
   useEvent("load", setLoad);
 
   // Closes on Escape and on a press anywhere outside (the settings button toggles by itself).
@@ -97,6 +99,20 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
         </div>
       </div>
 
+      {stage.telemetry !== "unavailable" && (
+        // One answer per user of this computer, not a setting of the project: Reset leaves it alone.
+        <div className={`${styles.popoverSection} ${styles.row}`}>
+          <span className={styles.label}>Share usage data</span>
+          <div className={styles.segments} role="radiogroup" aria-label="Share anonymous usage data">
+            {([false, true] as const).map((on) => (
+              <button key={String(on)} className={`${styles.chip} ${styles.segment}`} role="radio" aria-checked={sharing === on} onClick={() => void setTelemetry(on)}>
+                {on ? "On" : "Off"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={styles.popoverSection}>
         <button
           className={styles.ghost}
@@ -116,6 +132,27 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
           {info ? `v${info.version} · ${info.format} · ${info.host}` : " "}
         </span>
         {info?.credits && <span className={styles.note}>{info.credits}</span>}
+        <details className={styles.about}>
+          <summary className={styles.label}>About &amp; privacy</summary>
+          <p>
+            Composer by Agogica is free software under the GNU Affero General Public License, version 3. Its source, and the
+            licences of what it contains, come with it (LICENSE, THIRD_PARTY_NOTICES).
+          </p>
+          {stage.telemetry === "unavailable" ? (
+            <p>This build sends nothing anywhere.</p>
+          ) : (
+            <>
+              <p>{sharing ? "Anonymous usage data is shared:" : "Nothing is sent. With sharing on, it would be:"}</p>
+              <ul>
+                {whatIsShared.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <p>{neverShared}</p>
+              {sharing && info?.installId && <p>Sent under the random id {info.installId}; turning sharing off deletes it from this computer.</p>}
+            </>
+          )}
+        </details>
         {(info?.debug || showLoad) && load && (
           <span className={styles.label} title="processBlock's share of one core: this track / all Composer tracks (peak = the worst block)">
             DSP {percent(load.self.average)} · peak {percent(load.self.peak)} · {load.all.tracks}{" "}

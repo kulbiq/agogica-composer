@@ -1195,3 +1195,108 @@ button.status:focus-visible {
 .grip:hover path {
   stroke: var(--ink-lighter);
 }
+
+/* ---- States of the whole window: waiting, the map can't be drawn ---- */
+
+.waiting {
+  align-self: center;
+}
+
+.mapNotice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 max(24px, calc(50% - 200px));
+  background: var(--paper);
+}
+
+/* ---- Usage data: the question (TelemetryConsent) and "About & privacy" in the settings ---- */
+
+.consent {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 9; /* under the settings popover */
+  width: min(440px, calc(100% - 40px));
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 16px 40px rgba(var(--ink-rgb), 0.14);
+}
+
+.consentTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.consentText,
+.consentDetails p,
+.consentDetails li,
+.about p,
+.about li {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-light);
+}
+
+.consentDetails ul,
+.about ul {
+  margin: 8px 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.consentDetails summary,
+.about summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.consentDetails summary:focus-visible,
+.about summary:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.consentButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.consentButtons .ghost {
+  align-self: center;
+  height: 40px;
+  padding: 0 16px;
+}
+
+.about {
+  margin-top: 6px;
+}
+
+.about p + p {
+  margin-top: 8px;
+}
+
+.about p,
+.about li {
+  font-size: 12px;
+}

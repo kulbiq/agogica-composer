@@ -96,6 +96,15 @@ juce::var snapshot (ComposerProcessor& self)
             pro->setProperty (id, self.getParam (id));
     o->setProperty ("pro", pro.release());
     o->setProperty ("room", roomSize);
+    // Anonymous usage data: whether to ask, and the answer (one per user of this computer).
+    switch (self.telemetry->consent())
+    {
+        case telemetry::Consent::unavailable: o->setProperty ("telemetry", "unavailable"); break;
+        case telemetry::Consent::ask:         o->setProperty ("telemetry", "ask"); break;
+        case telemetry::Consent::on:          o->setProperty ("telemetry", "on"); break;
+        case telemetry::Consent::off:         o->setProperty ("telemetry", "off"); break;
+    }
+
     auto listenerObject = point (listener);
     listenerObject.getDynamicObject()->setProperty ("yaw", self.getParam (params::listenerYaw));
     o->setProperty ("listener", listenerObject);

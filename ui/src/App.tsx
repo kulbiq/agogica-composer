@@ -5,6 +5,7 @@ import { seat } from "./players";
 import PlayersPanel from "./PlayersPanel";
 import { useNumberPref, usePref } from "./prefs";
 import ResizeGrip from "./ResizeGrip";
+import TelemetryConsent from "./TelemetryConsent";
 import StageMap, { type MapNames, type MapView, type NodeKey, type SeatTool, type Tool } from "./StageMap";
 import TopBar from "./TopBar";
 
@@ -191,11 +192,15 @@ export default function App() {
                   </div>
                 )}
               </div>
+              {stage.telemetry === "ask" && <TelemetryConsent />}
             </div>
           </div>
         </>
       ) : (
-        <div className={styles.body} />
+        // Until the plugin has answered (a moment), or while a new track is taking its seat.
+        <div className={`${styles.body} ${styles.elsewhere}`} role="status">
+          <span className={`${styles.label} ${styles.waiting}`}>Connecting to Composer…</span>
+        </div>
       )}
       <ResizeGrip className={styles.grip} />
     </div>

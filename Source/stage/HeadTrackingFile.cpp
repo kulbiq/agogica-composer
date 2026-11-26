@@ -1,4 +1,5 @@
 #include "HeadTrackingFile.h"
+#include "AgogicaFolder.h"
 
 #include <cstring>
 
@@ -45,12 +46,7 @@ juce::File defaultFile()
     if (const auto overridden = juce::SystemStats::getEnvironmentVariable ("AGOGICA_HEAD_TRACKING_FILE", {}); overridden.isNotEmpty())
         return juce::File (overridden);
 
-   #if JUCE_WINDOWS
-    const auto base = juce::File::getSpecialLocation (juce::File::windowsLocalAppData);
-   #else
-    const auto base = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Application Support");
-   #endif
-    return base.getChildFile ("Agogica").getChildFile ("head-tracking");
+    return agogicaFolder().getChildFile ("head-tracking");
 }
 
 Writer::Writer (const juce::File& file)
