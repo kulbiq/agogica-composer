@@ -328,6 +328,7 @@ function NameField({ name, label, onCommit, onDone }: { name: string; label: str
     <input
       className={styles.nameInput}
       aria-label={label}
+      maxLength={64} // what C++ keeps (Source/stage/StateRules.h)
       autoFocus
       value={draft}
       onFocus={(e) => e.currentTarget.select()}

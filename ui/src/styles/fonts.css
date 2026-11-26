@@ -1,4 +1,6 @@
-/* Bundled offline - weights mirror the Agogica website app/layout.tsx. */
+/* Bundled offline - weights mirror the Agogica website app/layout.tsx. Latin and Latin Extended: track
+   and player names are the user's (ł, ą, ę, ő, ř…); each file is fetched only when one of its
+   characters is on screen. */
 @import "@fontsource/space-grotesk/latin-400.css";
 @import "@fontsource/space-grotesk/latin-500.css";
 @import "@fontsource/space-grotesk/latin-600.css";
@@ -9,3 +11,13 @@
 @import "@fontsource/jetbrains-mono/latin-400.css";
 @import "@fontsource/jetbrains-mono/latin-500.css";
 @import "@fontsource/jetbrains-mono/latin-700.css";
+@import "@fontsource/space-grotesk/latin-ext-400.css";
+@import "@fontsource/space-grotesk/latin-ext-500.css";
+@import "@fontsource/space-grotesk/latin-ext-600.css";
+@import "@fontsource/space-grotesk/latin-ext-700.css";
+@import "@fontsource/hanken-grotesk/latin-ext-400.css";
+@import "@fontsource/hanken-grotesk/latin-ext-500.css";
+@import "@fontsource/hanken-grotesk/latin-ext-600.css";
+@import "@fontsource/jetbrains-mono/latin-ext-400.css";
+@import "@fontsource/jetbrains-mono/latin-ext-500.css";
+@import "@fontsource/jetbrains-mono/latin-ext-700.css";

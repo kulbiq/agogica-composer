@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import styles from "./App.module.css";
 import { getBuildInfo, setParams, setTelemetry, useEvent, type BuildInfo, type Load, type Stage } from "./bridge";
 import ParamSlider from "./ParamSlider";
+import { usePref } from "./prefs";
 import type { MapNames } from "./stagePainter";
 import { neverShared, whatIsShared } from "./TelemetryConsent";
 
@@ -25,7 +26,7 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
   const [info, setInfo] = useState<BuildInfo>();
   const [load, setLoad] = useState<Load>();
   // For us only: always in Debug builds; in Release, Alt+click the version to toggle.
-  const [showLoad, setShowLoad] = useState(() => localStorage.getItem(loadKey) === "1");
+  const [showLoad, setShowLoad] = usePref(loadKey, "0", ["0", "1"] as const);
   const law = stage.pro.proDistanceLaw ?? defaults.proDistanceLaw;
   const stretchFrom = stage.pro.proDelayFrom ?? defaults.proDelayFrom;
   const stretchTo = stage.pro.proDelayTo ?? defaults.proDelayTo;
@@ -58,8 +59,7 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
 
   const toggleLoad = (e: MouseEvent) => {
     if (!e.altKey) return;
-    localStorage.setItem(loadKey, showLoad ? "0" : "1");
-    setShowLoad(!showLoad);
+    setShowLoad(showLoad === "1" ? "0" : "1");
   };
 
   return (
@@ -153,7 +153,7 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
             </>
           )}
         </details>
-        {(info?.debug || showLoad) && load && (
+        {(info?.debug || showLoad === "1") && load && (
           <span className={styles.label} title="processBlock's share of one core: this track / all Composer tracks (peak = the worst block)">
             DSP {percent(load.self.average)} · peak {percent(load.self.peak)} · {load.all.tracks}{" "}
             {load.all.tracks === 1 ? "track" : "tracks"} {percent(load.all.average)}
