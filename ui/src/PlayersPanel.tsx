@@ -5,12 +5,14 @@ import EditPlayer from "./EditPlayer";
 import { Icon, playerIcon } from "./icons";
 import LevelMeter from "./LevelMeter";
 import type { Seat, SeatedStage } from "./players";
+import { toggle } from "./mapEdits";
 import type { NodeKey } from "./stagePainter";
 
 type Props = {
   stage: SeatedStage;
-  selected: NodeKey | null;
-  onSelect: (key: NodeKey) => void;
+  selected: NodeKey | null; // the one that leads
+  selection: readonly NodeKey[]; // all selected, the leading one last
+  onSelect: (keys: NodeKey[]) => void;
 };
 
 // What is being dragged: a whole player (all its tracks) or one of its tracks.
@@ -26,12 +28,15 @@ const joinAll = async (tracks: number[], into: number) => {
 // - "Edit player" under the selected row opens its name, icon and tracks.
 // - A player with several tracks shows how many; the arrow lists them.
 // - Drag a player (or one of its tracks) onto another to make them one player; drag a track
-//   out of its player to make it a player of its own. "Select" merges several at once.
-export default function PlayersPanel({ stage, selected, onSelect }: Props) {
+//   out of its player to make it a player of its own.
+// - Shift, Cmd or Ctrl and a click selects several (on the map too); with two players or more
+//   selected they can be merged. "Select" does the same with plain clicks.
+export default function PlayersPanel({ stage, selected, selection, onSelect }: Props) {
   const [renaming, setRenaming] = useState<number>();
   const [editing, setEditing] = useState<number>(); // a track of the player being edited
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
-  const [picking, setPicking] = useState<number[]>(); // seat ids, while selecting players to merge
+  const [picking, setPicking] = useState(false); // plain clicks add to the selection, to merge
+  const chosen = selection.filter((k): k is number => k !== "listener"); // the selected players
   const [drag, setDrag] = useState<Drag>();
   const dragged = useRef(false); // a drag just ended: the click that follows is not a click
 
@@ -65,7 +70,7 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
       setTimeout(() => (dragged.current = false));
       if (typeof current.over === "number") {
         void joinAll(current.tracks, current.over);
-        onSelect(current.over);
+        onSelect([current.over]);
       } else if (current.over === "out") void splitPlayer(current.tracks[0]);
       setDrag(undefined);
     };
@@ -79,8 +84,8 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
   const merge = async (ids: number[]) => {
     const [into, ...rest] = seats.filter((s) => ids.includes(s.id)); // in list order
     for (const s of rest) await joinAll(s.tracks.map((t) => t.id), into.id);
-    setPicking(undefined);
-    onSelect(into.id);
+    setPicking(false);
+    onSelect([into.id]);
   };
 
   const tick = (colour: string) => <span className={styles.tick} style={colour ? { background: colour } : undefined} />;
@@ -115,7 +120,13 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
             Only this track
           </span>
         ) : (
-          <button className={styles.mini} onClick={() => setPicking(picking ? undefined : [])}>
+          <button
+            className={styles.mini}
+            onClick={() => {
+              if (!picking) onSelect(chosen); // the listener can't be merged
+              setPicking(!picking);
+            }}
+          >
             {picking ? "Cancel" : "Select"}
           </button>
         )}
@@ -124,7 +135,11 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
       <ul className={styles.list}>
         {!picking && (
           <li>
-            <button className={styles.item} aria-pressed={selected === "listener"} onClick={() => onSelect("listener")}>
+            <button
+              className={styles.item}
+              aria-pressed={selection.includes("listener")}
+              onClick={(e) => onSelect(e.shiftKey || e.metaKey || e.ctrlKey ? toggle(selection, "listener") : ["listener"])}
+            >
               <span className={styles.tick} />
               <svg className={styles.itemIcon} width="16" height="16" viewBox="-8 -8 16 16" aria-hidden>
                 <path d="M0 -6L4.1 4.5L0 2.2L-4.1 4.5Z" fill="currentColor" />
@@ -138,14 +153,14 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
           <SeatRow
             key={s.id}
             seat={s}
-            selected={selected === s.id}
+            selected={selection.includes(s.id)}
+            leads={selected === s.id && selection.length === 1} // several selected: the Merge bar instead
             picking={picking}
             renaming={renaming === s.id}
             open={expanded.has(s.id)}
             drag={drag}
             tick={tick}
-            onPick={(on) => picking && setPicking(on ? [...picking, s.id] : picking.filter((id) => id !== s.id))}
-            onSelect={() => !dragged.current && onSelect(s.id)}
+            onSelect={(extend) => !dragged.current && onSelect(picking || extend ? toggle(selection, s.id) : [s.id])}
             onRename={(on) => setRenaming(on ? s.id : undefined)}
             onToggle={() => {
               const next = new Set(expanded);
@@ -158,14 +173,14 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
         ))}
       </ul>
 
-      {picking && (
+      {(picking || chosen.length > 1) && (
         <div className={styles.mergeBar}>
           <p className={styles.note}>
-            {picking.length < 2
+            {chosen.length < 2
               ? "Pick the players that play as one: their tracks will stand in one place."
-              : `${picking.length} players become one, with the first one's place, name and icon.`}
+              : `${chosen.length} players become one, with the first one's place, name and icon.`}
           </p>
-          <button className={styles.primary} disabled={picking.length < 2} onClick={() => void merge(picking)}>
+          <button className={styles.primary} disabled={chosen.length < 2} onClick={() => void merge(chosen)}>
             Merge
           </button>
         </div>
@@ -183,13 +198,13 @@ export default function PlayersPanel({ stage, selected, onSelect }: Props) {
 type RowProps = {
   seat: Seat;
   selected: boolean;
-  picking: number[] | undefined;
+  leads: boolean; // the selected one that "Edit player" opens
+  picking: boolean;
   renaming: boolean;
   open: boolean;
   drag: Drag | undefined;
   tick: (colour: string) => ReactNode;
-  onPick: (on: boolean) => void;
-  onSelect: () => void;
+  onSelect: (extend: boolean) => void; // extend: add or take out, keeping the others
   onRename: (on: boolean) => void;
   onToggle: () => void;
   onEdit: () => void;
@@ -198,10 +213,9 @@ type RowProps = {
 
 // One player: its row, the list of its tracks when it has several and is open, and the
 // actions under it when selected.
-function SeatRow({ seat: s, selected, picking, renaming, open, drag, tick, onPick, onSelect, onRename, onToggle, onEdit, onDragStart }: RowProps) {
+function SeatRow({ seat: s, selected, leads, picking, renaming, open, drag, tick, onSelect, onRename, onToggle, onEdit, onDragStart }: RowProps) {
   const several = s.tracks.length > 1;
   const ids = s.tracks.map((t) => t.id);
-  const isPicked = picking?.includes(s.id) ?? false;
   const [renamingTrack, setRenamingTrack] = useState<number>();
   const count = several && <span className={styles.count}>{s.tracks.length}</span>;
 
@@ -213,14 +227,14 @@ function SeatRow({ seat: s, selected, picking, renaming, open, drag, tick, onPic
       data-dragged={(drag?.over !== undefined && drag.from === s.id && drag.tracks.length === s.tracks.length) || undefined}
     >
       {picking ? (
-        <button className={styles.item} aria-pressed={isPicked} onClick={() => onPick(!isPicked)}>
+        <button className={styles.item} aria-pressed={selected} onClick={() => onSelect(true)}>
           <span className={styles.check} aria-hidden>
             <svg width="10" height="10" viewBox="0 0 10 10">
               <path d="M2 5.2L4.2 7.4L8 2.8" />
             </svg>
           </span>
           <Icon icon={playerIcon(s)} className={styles.itemIcon} />
-          <span className={styles.itemName}>{s.name}</span>
+          <span className={styles.itemName} title={s.name}>{s.name}</span>
           {count}
         </button>
       ) : renaming ? (
@@ -234,14 +248,14 @@ function SeatRow({ seat: s, selected, picking, renaming, open, drag, tick, onPic
           className={styles.item}
           aria-pressed={selected}
           title="Double-click to rename. Drag onto another player to join them."
-          onClick={onSelect}
+          onClick={(e) => onSelect(e.shiftKey || e.metaKey || e.ctrlKey)}
           onDoubleClick={() => onRename(true)}
           onKeyDown={(e) => e.key === "F2" && onRename(true)}
           onPointerDown={(e) => onDragStart(e, { tracks: ids, from: s.id, label: s.name })}
         >
           {tick(s.colour)}
           <Icon icon={playerIcon(s)} className={styles.itemIcon} />
-          <span className={styles.itemName}>{s.name}</span>
+          <span className={styles.itemName} title={s.name}>{s.name}</span>
           {s.self && <span className={styles.you}>This track</span>}
           {count}
           <LevelMeter ids={ids} className={styles.listMeter} />
@@ -279,7 +293,7 @@ function SeatRow({ seat: s, selected, picking, renaming, open, drag, tick, onPic
               {renamingTrack === t.id ? (
                 <NameField name={t.track} label="Track name" onCommit={(n) => void setTrackName(t.id, n)} onDone={() => setRenamingTrack(undefined)} />
               ) : (
-                <span className={styles.itemName}>{t.track}</span>
+                <span className={styles.itemName} title={t.track}>{t.track}</span>
               )}
               {t.self && <span className={styles.you}>This track</span>}
               <LevelMeter ids={[t.id]} className={styles.listMeter} />
@@ -288,7 +302,7 @@ function SeatRow({ seat: s, selected, picking, renaming, open, drag, tick, onPic
         </ul>
       )}
 
-      {selected && !picking && !renaming && (
+      {leads && !picking && !renaming && (
         <div className={styles.selBar}>
           <button className={styles.mini} onClick={onEdit}>
             Edit player

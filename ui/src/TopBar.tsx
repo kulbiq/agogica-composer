@@ -1,6 +1,6 @@
 import { useState } from "react";
 import styles from "./App.module.css";
-import { setParams, setScene, startTracker, type Stage } from "./bridge";
+import { setHeadTracking, setParams, setScene, startTracker, type Stage } from "./bridge";
 import type { MapNames } from "./stagePainter";
 import SettingsPopover from "./SettingsPopover";
 
@@ -112,15 +112,22 @@ export default function TopBar({ stage, selfId, names, onNames }: Props) {
   );
 }
 
-// Head tracking status; while it isn't running, the same chip starts Agogica Tracker.
-function HeadTracking({ live, canStart }: { live: boolean; canStart: boolean }) {
+// Head tracking: while Agogica Tracker runs, a switch (does the head turn the sound and the 3D
+// view?); while it doesn't, the same chip starts it.
+function HeadTracking({ live, canStart, on }: { live: boolean; canStart: boolean; on: boolean }) {
   const [failed, setFailed] = useState(false);
 
   if (live)
     return (
-      <span className={styles.status} data-status="live" title="Head tracking is live">
-        <span className={styles.statusText}>Tracking</span>
-      </span>
+      <button
+        className={styles.status}
+        data-status={on ? "live" : "soon"}
+        aria-pressed={on}
+        title={on ? "Your head turns the sound. Click to stop following it" : "Head tracking is off. Click to follow your head"}
+        onClick={() => void setHeadTracking(!on)}
+      >
+        <span className={styles.statusText}>{on ? "Tracking on" : "Tracking off"}</span>
+      </button>
     );
 
   // Windows: Composer can't start the tracker yet (start it by hand).
@@ -136,7 +143,12 @@ function HeadTracking({ live, canStart }: { live: boolean; canStart: boolean }) 
       className={styles.status}
       data-status="soon"
       title={failed ? "Agogica Tracker isn't installed (~/Applications)" : "Start Agogica Tracker"}
-      onClick={() => void startTracker().then((ok) => setFailed(!ok))}
+      onClick={() =>
+        void startTracker().then((ok) => {
+          setFailed(!ok);
+          if (ok && !on) void setHeadTracking(true); // starting it means following the head
+        })
+      }
     >
       <span className={styles.statusText}>{failed ? "Tracker not found" : "Start tracking"}</span>
     </button>

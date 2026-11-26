@@ -594,8 +594,8 @@ TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends
     p.processBlockBypassed (buffer, midi);
     for (int i = 0; i < 256; ++i)
     {
-        REQUIRE (buffer.getSample (0, i) == dry.getSample (0, i));
-        REQUIRE (buffer.getSample (1, i) == dry.getSample (0, i)); // not left-only
+        REQUIRE (juce::exactlyEqual (buffer.getSample (0, i), dry.getSample (0, i)));
+        REQUIRE (juce::exactlyEqual (buffer.getSample (1, i), dry.getSample (0, i))); // not left-only
     }
 
     // Back on, with a silent input: what was in the delay before the bypass is not heard now.
@@ -603,7 +603,7 @@ TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends
     {
         buffer.clear();
         p.processBlock (buffer, midi);
-        REQUIRE (buffer.getMagnitude (0, 256) == 0.0f);
+        REQUIRE (juce::exactlyEqual (buffer.getMagnitude (0, 256), 0.0f));
     }
 }
 
@@ -665,6 +665,8 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK_THAT (p.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
         CHECK (p.getDisplayName() == "Viola");
         CHECK (p.getIcon().isEmpty()); // saved before icons: automatic
+        CHECK (p.isHeadTrackingOn()); // saved before the switch: on
+        CHECK (p.getAudience().isEmpty()); // saved before the audience was painted: none
         CHECK_THAT (p.getParam ("listenerYaw"), WithinAbs (0.0, 1e-4)); // saved before it existed: ahead
         CHECK (p.getScene() == "D");
         CHECK (p.isPlaced());

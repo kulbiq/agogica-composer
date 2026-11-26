@@ -1,0 +1,50 @@
+/* The 3D room's materials (ui/src/room/scene.ts): Composer's own, not from the website.
+   Warm floorboards, panelled walls, a beamed ceiling, muted so the slate UI and the icons stay
+   on top; the fog is the paper of each theme. Colours as "r, g, b" for the canvas. */
+
+:root {
+  --room-wood-1: 208, 198, 183;
+  --room-wood-2: 201, 191, 175;
+  --room-wood-3: 213, 204, 190;
+  --room-wood-4: 195, 184, 167;
+  --room-wood-5: 204, 194, 179;
+  --room-seam: 163, 150, 131;
+  --room-wall-1: 222, 227, 233;
+  --room-wall-2: 214, 220, 228;
+  --room-wainscot: 186, 194, 205;
+  --room-skirting: 139, 150, 164;
+  --room-ceiling: 176, 185, 197;
+  --room-beam: 158, 168, 182;
+  --room-door: 146, 132, 114;
+  --room-glass: 225, 232, 240;
+  --room-seat: 120, 130, 144;
+  --room-seat-back: 99, 109, 124;
+  --room-fog: 234, 238, 243;
+  --room-shade-rgb: 0, 0, 0; /* shadows under the players, the vignette */
+  --room-shadow: 0.2;
+  --room-vignette: 0.16;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --room-wood-1: 46, 40, 35;
+    --room-wood-2: 42, 37, 32;
+    --room-wood-3: 50, 44, 38;
+    --room-wood-4: 39, 34, 30;
+    --room-wood-5: 48, 42, 36;
+    --room-seam: 27, 23, 20;
+    --room-wall-1: 24, 33, 52;
+    --room-wall-2: 27, 37, 57;
+    --room-wainscot: 19, 27, 43;
+    --room-skirting: 12, 18, 31;
+    --room-ceiling: 12, 18, 30;
+    --room-beam: 17, 24, 39;
+    --room-door: 40, 34, 29;
+    --room-glass: 36, 50, 78;
+    --room-seat: 38, 48, 68;
+    --room-seat-back: 29, 38, 56;
+    --room-fog: 11, 17, 32;
+    --room-shadow: 0.35;
+    --room-vignette: 0.4;
+  }
+}

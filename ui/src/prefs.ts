@@ -13,3 +13,16 @@ export function usePref<T extends string>(key: string, initial: T, allowed: read
   };
   return [value, set] as const;
 }
+
+// The same for a number (a size in pixels): anything stored outside [min, max] is the initial.
+export function useNumberPref(key: string, initial: number, min: number, max: number) {
+  const [value, setValue] = useState(() => {
+    const stored = Number(localStorage.getItem(key) ?? NaN);
+    return stored >= min && stored <= max ? stored : initial;
+  });
+  const set = (next: number) => {
+    localStorage.setItem(key, String(next));
+    setValue(next);
+  };
+  return [value, set] as const;
+}

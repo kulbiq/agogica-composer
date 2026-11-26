@@ -2,6 +2,7 @@
 // Inside the plugin, JUCE injects window.__JUCE__ before any script runs, so this stays inert.
 // Must be imported before anything that imports @juce-framework/webview.
 
+import { emptyAudience, encodeAudience, setSeat } from "./audience";
 import { GestureLedger } from "./gestureLedger";
 
 type Invoke = { name: string; params: unknown[]; resultId: number };
@@ -30,7 +31,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   const scene = {
     scene: "A",
     scenes: ["A", "B"],
-    headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true },
+    headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true, on: true },
     pro: {
       proDistanceLaw: 6.0206 / 3,
     } as Record<string, number>,
@@ -38,8 +39,9 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     alone: false,
     // ?elsewhere: another track's window is open (the "open here anyway" screen).
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
-    room: 20,
+    room: Number(new URLSearchParams(location.search).get("room") ?? 20), // ?room=50: another size
     listener: { x: 0, y: 0, yaw: 0 },
+    audience: sampleAudience(),
     // `own`: the track's name; `playerName`: the player's, when it has one (see setName).
     players: seats.map(([own, colour, x, y, player], i) => ({
       id: i, own, playerName: player ?? "", colour, icon: "", player: player?.toLowerCase() ?? "", self: i === 2, x, y,
@@ -105,6 +107,14 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       emitStageSoon();
     },
     startTracker: () => true,
+    setAudience: (seats: string) => {
+      scene.audience = seats;
+      emitStageSoon();
+    },
+    setHeadTracking: (on: boolean) => {
+      scene.headTracking = { ...scene.headTracking, on };
+      emitStageSoon();
+    },
     setScene: (name: string) => {
       scene.scene = name;
       if (!scene.scenes.includes(name)) scene.scenes = [...scene.scenes, name].sort();
@@ -161,8 +171,8 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   if (location.search.includes("azimuth")) localStorage.setItem("mapView", "azimuth");
   if (location.search.includes("allnames")) localStorage.setItem("mapNames", "all");
 
-  // ?settings opens the settings popover, ?edit edits this track's player (for screenshots;
-  // nothing to click in headless Chrome).
+  // ?settings opens the settings popover, ?edit edits this track's player, ?3d walks into the
+  // room (for screenshots; nothing to click in headless Chrome).
   const clickOnce = (find: () => HTMLButtonElement | undefined) =>
     new MutationObserver((_, observer) => {
       const button = find();
@@ -174,13 +184,27 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   const buttons = () => [...document.querySelectorAll("button")];
   if (location.search.includes("settings")) clickOnce(() => buttons().find((b) => b.ariaLabel === "Settings"));
   if (location.search.includes("edit")) clickOnce(() => buttons().find((b) => b.textContent === "Edit player"));
+  if (location.search.includes("3d")) clickOnce(() => buttons().find((b) => b.textContent === "3D"));
 
   // A little fake input level per player (the timpani stays silent).
+  // ?still: levels that don't move (for comparing screenshots).
   setInterval(() => {
-    const t = performance.now();
+    const t = location.search.includes("still") ? 0 : performance.now();
     const levels: Record<string, number> = {};
     for (const p of scene.players) levels[p.id] = p.own === "Timpani" ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
     emit("levels", levels);
     emit("headYaw", location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0);
   }, 33);
+}
+
+// Rows behind the stage's centre with a middle aisle (?noaudience: nobody).
+function sampleAudience() {
+  const seats = emptyAudience();
+  if (!location.search.includes("noaudience"))
+    for (let j = -4; j >= -11; j--)
+      for (let i = 2; i <= 9; i++) {
+        setSeat(seats, i, j, true);
+        setSeat(seats, -i, j, true);
+      }
+  return encodeAudience(seats);
 }

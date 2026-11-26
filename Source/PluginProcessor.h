@@ -76,6 +76,14 @@ public:
     // Instrument icon key (ui/src/icons.tsx), empty = picked from the name by the page.
     juce::String getIcon() const                        { return state.state.getProperty ("icon").toString(); }
     void setIcon (const juce::String& key)              { setStateProperty ("icon", key); }
+    // Whether the tracked head turns this track's sound (Binaural, realtime only). The same on
+    // every track (stage::setHeadTracking); saved, on unless turned off.
+    bool isHeadTrackingOn() const noexcept              { return headTrackingOn.load (std::memory_order_relaxed); }
+    void setHeadTrackingOn (bool on);
+    // Where the audience sits (ui/src/audience.ts: a grid of seats as base64, empty = none).
+    // The same on every track (stage::setAudience); only drawn.
+    juce::String getAudience() const                    { return state.state.getProperty ("audience").toString(); }
+    void setAudience (const juce::String& seats)        { setStateProperty ("audience", seats); }
     // Host track name, or empty (the player's name may differ: see getDisplayName).
     juce::String getTrackName() const                   { return trackName; }
 
@@ -159,6 +167,9 @@ private:
     double preparedRate = 0; // from prepareToPlay (the load meter's block length)
 
     juce::String trackName, trackColour;
+
+    std::atomic<bool> headTrackingOn { true }; // the "headTracking" state property, for the audio thread
+    static_assert (std::atomic<bool>::is_always_lock_free);
 
     std::atomic<float> inputPeak { 0.0f };
     static_assert (std::atomic<float>::is_always_lock_free);

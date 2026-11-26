@@ -227,7 +227,7 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     {
         acoustics.headYaw = audioParams.listenerYaw->load();
 
-        if (! isNonRealtime())
+        if (! isNonRealtime() && headTrackingOn.load (std::memory_order_relaxed))
             acoustics.headYaw += headTracking->yaw();
     }
 
@@ -312,7 +312,14 @@ void ComposerProcessor::setStateInformation (const void* data, int sizeInBytes)
     {
         const juce::ScopedLock lock (stateTreeLock);
         state.replaceState (juce::ValueTree::fromXml (*xml));
+        headTrackingOn = (bool) state.state.getProperty ("headTracking", true);
     }
+}
+
+void ComposerProcessor::setHeadTrackingOn (bool on)
+{
+    setStateProperty ("headTracking", on);
+    headTrackingOn = on;
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

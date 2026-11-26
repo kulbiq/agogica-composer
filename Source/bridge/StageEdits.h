@@ -39,6 +39,13 @@ void setTrackName (ComposerProcessor& self, int id, const juce::String& name);
 // Anything else is ignored.
 void setIcon (ComposerProcessor& self, int id, const juce::String& key);
 
+// Whether the tracked head turns the sound, on every track (a monitoring aid: never in exports).
+void setHeadTracking (ComposerProcessor& self, bool on);
+
+// Where the audience sits, on every track: empty, or the grid of ui/src/audience.ts as base64
+// (anything else is ignored).
+void setAudience (ComposerProcessor& self, const juce::String& seats);
+
 // Players with several tracks. A player's tracks share a key (ComposerProcessor::getPlayerKey):
 // position edits (with their gestures), names and icons sent to any of them go to all of them.
 // joinPlayer: track `trackId` becomes one of the tracks of `intoId`'s player, taking its place

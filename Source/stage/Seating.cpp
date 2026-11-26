@@ -73,6 +73,9 @@ void join (ComposerProcessor& self)
 
             for (const auto& paramId : params::ofStage)
                 self.writeParam (paramId, source->getParam (paramId));
+
+            self.setHeadTrackingOn (source->isHeadTrackingOn());
+            self.setAudience (source->getAudience());
         }
 
         if (source != nullptr)

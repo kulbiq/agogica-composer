@@ -24,7 +24,10 @@ export type Stage = {
   scenes: string[]; // scenes that hold a layout (the active one included)
   outputMode: "stereo" | "binaural";
   pro: Record<string, number>; // Pro panel parameter values (project-wide)
-  headTracking: { live: boolean; canStart: boolean }; // the yaw comes as its own "headYaw" event (degrees clockwise)
+  // on: whether the head turns the sound (and the 3D view); the yaw comes as its own "headYaw"
+  // event (degrees clockwise).
+  headTracking: { live: boolean; canStart: boolean; on: boolean };
+  audience: string; // where the audience sits (audience.ts), "" = nobody
   alone: boolean;
   openElsewhere?: string; // name of another track whose Composer window is open
   room: number;
@@ -57,6 +60,8 @@ export const setIcon = getNativeFunction("setIcon") as (id: number, icon: string
 export const joinPlayer = getNativeFunction("joinPlayer") as (trackId: number, intoId: number) => Promise<void>;
 export const splitPlayer = getNativeFunction("splitPlayer") as (trackId: number) => Promise<void>;
 export const setScene = getNativeFunction("setScene") as (scene: string) => Promise<void>;
+export const setHeadTracking = getNativeFunction("setHeadTracking") as (on: boolean) => Promise<void>;
+export const setAudience = getNativeFunction("setAudience") as (seats: string) => Promise<void>; // ui/src/audience.ts
 export const startTracker = getNativeFunction("startTracker") as () => Promise<boolean>;
 export const getBuildInfo = getNativeFunction("getBuildInfo") as () => Promise<BuildInfo>;
 export const setEditorSize = getNativeFunction("setEditorSize") as (width: number, height: number) => Promise<void>;

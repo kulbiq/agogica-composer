@@ -51,7 +51,7 @@ void setScene (ComposerProcessor& self, const juce::String& scene)
             if (const auto key = p->getPlayerKey(); key.isNotEmpty())
                 if (const auto [it, isFirst] = first.emplace (key, p); ! isFirst)
                     for (const auto& paramId : params::ofPlayer)
-                        if (p->getParam (paramId) != it->second->getParam (paramId))
+                        if (! juce::exactlyEqual (p->getParam (paramId), it->second->getParam (paramId)))
                             p->writeParam (paramId, it->second->getParam (paramId));
     });
 }

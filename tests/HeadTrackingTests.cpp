@@ -355,7 +355,7 @@ TEST_CASE ("head tracking: live only in binaural, never in exports", "[integrati
     CHECK (std::abs (leftToRight (false)) < 1.0); // stereo: tracking ignored
 }
 
-TEST_CASE ("listener yaw: turns the binaural scene, live and in exports, on top of the tracked head", "[integration]")
+TEST_CASE ("listener yaw: turns the binaural scene, live and in exports, on top of the tracked head unless tracking is off", "[integration]")
 {
     const auto file = tempFile ("listener-yaw");
     Writer writer (file);
@@ -396,6 +396,20 @@ TEST_CASE ("listener yaw: turns the binaural scene, live and in exports, on top 
     REQUIRE (p.headTracking->isLive());
     CHECK (std::abs (leftToRight (false)) < 3.0);
     CHECK (leftToRight (true) > 6.0);
+
+    // Tracking switched off: the head no longer counts, and the project remembers it.
+    REQUIRE (p.isHeadTrackingOn());
+    p.setHeadTrackingOn (false);
+    CHECK (leftToRight (false) > 6.0);
+    {
+        juce::MemoryBlock saved;
+        p.getStateInformation (saved);
+        ComposerProcessor reloaded;
+        reloaded.setStateInformation (saved.getData(), (int) saved.getSize());
+        CHECK_FALSE (reloaded.isHeadTrackingOn());
+    }
+    p.setHeadTrackingOn (true);
+    CHECK (std::abs (leftToRight (false)) < 3.0);
 
     set (p, "outputMode", 0.0f);
     CHECK (std::abs (leftToRight (true)) < 1.0); // stereo: speakers don't turn

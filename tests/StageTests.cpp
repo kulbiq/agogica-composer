@@ -602,6 +602,46 @@ TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room
     CHECK_THAT (restored.getParam (id), WithinAbs (perScene ? first : second, 1e-4));
 }
 
+TEST_CASE ("stage-wide data outside parameters: head tracking switch and audience shared, shown, adopted, saved", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    juce::MemoryBlock saved;
+    const auto seats = juce::String::repeatedString ("AB+/", 177); // the length of ui/src/audience.ts's grid
+
+    {
+        ComposerProcessor a, b;
+        a.markPlaced();
+        CHECK (b.isHeadTrackingOn()); // on unless turned off
+
+        stage::setHeadTracking (b, false);
+        CHECK_FALSE (a.isHeadTrackingOn()); // shared
+        CHECK (stage::snapshot (a)["headTracking"]["on"] == juce::var (false));
+
+        ComposerProcessor c;
+        stage::join (c);
+        CHECK_FALSE (c.isHeadTrackingOn()); // adopted
+
+        CHECK (b.getAudience().isEmpty()); // none until painted
+        stage::setAudience (b, seats);
+        CHECK (a.getAudience() == seats); // shared
+        CHECK (stage::snapshot (a)["audience"] == juce::var (seats));
+        stage::setAudience (b, seats.dropLastCharacters (4)); // not a whole grid
+        stage::setAudience (b, seats.replaceCharacter ('A', '-')); // not base64
+        CHECK (a.getAudience() == seats); // both ignored
+
+        ComposerProcessor d;
+        stage::join (d);
+        CHECK (d.getAudience() == seats); // adopted
+
+        a.getStateInformation (saved);
+    }
+
+    ComposerProcessor restored;
+    restored.setStateInformation (saved.getData(), (int) saved.getSize());
+    CHECK_FALSE (restored.isHeadTrackingOn()); // saved
+    CHECK (restored.getAudience() == juce::String::repeatedString ("AB+/", 177));
+}
+
 TEST_CASE ("snapshot names another instance whose editor is open", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;

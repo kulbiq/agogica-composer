@@ -113,7 +113,8 @@
   color: var(--ink-faint);
 }
 
-.chip[aria-checked="true"] {
+.chip[aria-checked="true"],
+.chip[aria-pressed="true"] {
   border-color: var(--ink);
   background: var(--ink);
   color: var(--paper);
@@ -419,8 +420,34 @@ button.status:focus-visible {
 
 /* ---- Players (left) ---- */
 
+/* The panel's right edge, to drag: no width of its own, a 7 px grip over the border. */
+.panelEdge {
+  position: relative;
+  z-index: 2;
+  width: 0;
+  flex-shrink: 0;
+  outline: none;
+}
+
+.panelEdge::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panelEdge:hover::before,
+.panelEdge:focus-visible::before,
+.panelEdge:active::before {
+  background: linear-gradient(to right, transparent 3px, var(--ink-faint) 3px, var(--ink-faint) 4px, transparent 4px);
+}
+
 .players {
-  width: 240px;
+  width: clamp(200px, var(--panel, 240px), min(480px, 50vw));
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -707,7 +734,7 @@ button.status:focus-visible {
   bottom: 0;
   left: 0;
   z-index: 10;
-  width: min(420px, calc(100% - 48px));
+  width: min(max(420px, var(--panel, 240px)), calc(100% - 48px));
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -1020,14 +1047,92 @@ button.status:focus-visible {
   outline-offset: -1px;
 }
 
-.viewSwitch {
+/* Over the map's top edge: the view switch, Move / Spectate, the audience brush, Fit. A narrow
+   window wraps them onto a second row (the map leaves room for it). */
+.mapTools {
   position: absolute;
   top: 12px;
   left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  pointer-events: none; /* the map under the gaps stays live */
+}
+
+.mapTools > * {
+  pointer-events: auto;
+}
+
+/* In the room the minimap holds the top-right corner (stagePainter.ts: 16 % of the width,
+   72-112 px, 14 px from the edge). */
+.mapToolsRoom {
+  right: calc(clamp(72px, 16%, 112px) + 22px);
+}
+
+.viewSwitch {
   padding: 3px;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
+}
+
+/* Painting the audience: the brush, in the map's bottom-right corner (clear of the resize grip). */
+.brushBar {
+  position: absolute;
+  right: 24px;
+  bottom: 12px;
+}
+
+/* Shift-drag on the map: the rectangle that selects. */
+.box {
+  position: absolute;
+  border: 1px dashed var(--ink-lighter);
+  background: rgba(var(--ink-rgb), 0.04);
+  pointer-events: none;
+}
+
+/* 3D: the keys, along the bottom of the room. */
+.keys {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink-light);
+}
+
+.keyButton {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.keyButton:hover {
+  border-color: var(--ink-lighter);
+}
+
+.key b {
+  margin-right: 6px;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 /* ---- Open in another window ---- */

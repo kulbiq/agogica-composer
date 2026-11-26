@@ -85,6 +85,20 @@ ComposerEditor::ComposerEditor (ComposerProcessor& p)
 
                                              complete ({});
                                          })
+                    .withNativeFunction (page::setHeadTracking, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 1 && args[0].isBool())
+                                                 stage::setHeadTracking (composer, (bool) args[0]);
+
+                                             complete ({});
+                                         })
+                    .withNativeFunction (page::setAudience, [this] (const juce::Array<juce::var>& args, auto complete)
+                                         {
+                                             if (args.size() == 1 && args[0].isString())
+                                                 stage::setAudience (composer, args[0].toString());
+
+                                             complete ({});
+                                         })
                     .withNativeFunction (page::joinPlayer, [this] (const juce::Array<juce::var>& args, auto complete)
                                          {
                                              if (args.size() == 2 && args[0].isInt() && args[1].isInt())

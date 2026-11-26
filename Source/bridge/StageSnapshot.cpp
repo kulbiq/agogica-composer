@@ -84,12 +84,14 @@ juce::var snapshot (ComposerProcessor& self)
     });
 
     o->setProperty ("scene", self.getScene());
+    o->setProperty ("audience", self.getAudience());
     o->setProperty ("outputMode", self.getParam (params::outputMode) > 0.5f ? "binaural" : "stereo");
 
     // The yaw itself changes every tick while tracking: it goes out as its own "headYaw"
     // event (ComposerEditor), so the stage stays quiet.
     auto tracking = std::make_unique<juce::DynamicObject>();
     tracking->setProperty ("live", self.headTracking->isLive());
+    tracking->setProperty ("on", self.isHeadTrackingOn());
    #if JUCE_MAC
     tracking->setProperty ("canStart", true); // the editor can start Agogica Tracker
    #else

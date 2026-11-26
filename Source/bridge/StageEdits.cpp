@@ -172,6 +172,33 @@ void setIcon (ComposerProcessor& self, int id, const juce::String& key)
     });
 }
 
+void setHeadTracking (ComposerProcessor& self, bool on)
+{
+    self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+    {
+        for (auto* p : members)
+            p->setHeadTrackingOn (on);
+    });
+}
+
+void setAudience (ComposerProcessor& self, const juce::String& seats)
+{
+    // ui/src/audience.ts: 65 x 65 seats, one bit each, 529 bytes in base64 (audience.test.ts
+    // checks this number against the page).
+    constexpr int audienceLength = 708;
+
+    if (seats.isNotEmpty()
+        && (seats.length() != audienceLength
+            || ! seats.containsOnly ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")))
+        return;
+
+    self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+    {
+        for (auto* p : members)
+            p->setAudience (seats);
+    });
+}
+
 void joinPlayer (ComposerProcessor& self, int trackId, int intoId)
 {
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
