@@ -187,7 +187,7 @@ void TrackerWindow::menuItemSelected (int itemId, int)
         page.showAbout();
     else if (juce::isPositiveAndBelow (itemId - firstCameraItem, static_cast<int> (camerasInMenu.size())))
     {
-        const auto chosen = camerasInMenu[itemId - firstCameraItem]; // the list the user clicked in
+        const auto chosen = camerasInMenu[static_cast<size_t> (itemId - firstCameraItem)]; // the list the user clicked in
         settings.setCameraId (chosen.id);
         camera.choose (chosen);
         menuItemsChanged();
