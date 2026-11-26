@@ -37,7 +37,7 @@ namespace
 std::atomic<std::thread::id> countingThread {};
 std::atomic<int> allocations { 0 };
 
-void countAllocation() noexcept
+[[maybe_unused]] void countAllocation() noexcept // unused in sanitizer builds
 {
     if (countingThread.load (std::memory_order_relaxed) == std::this_thread::get_id())
         allocations.fetch_add (1, std::memory_order_relaxed);
@@ -785,33 +785,60 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
     }
 }
 
-TEST_CASE ("state: a host may save from another thread while the stage is being edited", "[integration]")
+TEST_CASE ("state: a host may save and load from another thread while the stage is edited and drawn", "[integration]")
 {
     // Under the tsan preset this fails on a data race; elsewhere it at least must not crash.
     juce::ScopedJuceInitialiser_GUI juce;
-    ComposerProcessor p;
+    ComposerProcessor p, other;
     std::atomic<bool> done { false };
 
-    std::thread host ([&]
+    SECTION ("saving")
     {
-        juce::MemoryBlock saved;
-        while (! done)
+        std::thread host ([&]
         {
-            saved.reset();
-            p.getStateInformation (saved);
-        }
-    });
+            juce::MemoryBlock saved;
+            while (! done)
+            {
+                saved.reset();
+                p.getStateInformation (saved);
+            }
+        });
 
-    for (int i = 0; i < 2000; ++i)
-    {
-        p.setNameOverride ("Viola " + juce::String (i));
-        p.setActiveScene (i % 2 == 0 ? "A" : "B");
-        p.storeScene();
-        p.markPlaced();
+        for (int i = 0; i < 2000; ++i)
+        {
+            p.setNameOverride ("Viola " + juce::String (i));
+            p.setActiveScene (i % 2 == 0 ? "A" : "B");
+            p.storeScene();
+            p.markPlaced();
+        }
+
+        done = true;
+        host.join();
     }
 
-    done = true;
-    host.join();
+    SECTION ("loading, while every window reads the stage 30 times a second")
+    {
+        const auto project = savedProject();
+
+        std::thread host ([&]
+        {
+            while (! done)
+                p.setStateInformation (project.getData(), (int) project.getSize());
+        });
+
+        for (int i = 0; i < 300; ++i)
+        {
+            // What an editor's timer and the page's edits read, of this track and of another's.
+            juce::ignoreUnused (stage::snapshot (other), p.getStoredScenes(), p.getPlayerLabel(), p.isPlaced());
+            other.copyScenePlaces (p);
+            p.setNameOverride ("Viola " + juce::String (i));
+            p.storeScene();
+        }
+
+        done = true;
+        host.join();
+    }
+
     SUCCEED();
 }
 

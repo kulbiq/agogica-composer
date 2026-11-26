@@ -62,14 +62,14 @@ public:
     }
     // Scenes A-H: alternative layouts of the whole ensemble. The parameters hold the
     // active scene; the others are stored in the state tree. See stage::setScene.
-    juce::String getScene() const                       { return state.state.getProperty ("scene", "A"); }
+    juce::String getScene() const                       { return stateProperty ("scene", "A"); }
     void storeScene();                                  // parameters -> active scene's slot
     bool recallScene (const juce::String& scene);       // that scene's slot -> parameters; false if never stored
     juce::StringArray getStoredScenes() const;
 
     // False for a brand-new insert until it has joined the stage (copied the shared
     // room/listener and scene, taken a seat). Saved, so a reloaded project never re-joins.
-    bool isPlaced() const                               { return state.state.getProperty ("placed", false); }
+    bool isPlaced() const                               { return stateProperty ("placed", false); }
     void markPlaced()                                   { setStateProperty ("placed", true); }
     void setActiveScene (const juce::String& scene)     { setStateProperty ("scene", scene); }
     // Two names. The track's: its own override, else the host track name, else empty.
@@ -77,11 +77,11 @@ public:
     // several tracks or was named while it had; else the track's name is the player's.
     juce::String getDisplayName() const;                // the track's name
     void setNameOverride (const juce::String& name)     { setStateProperty ("name", name.trim()); }
-    juce::String getPlayerName() const                  { return state.state.getProperty ("playerName").toString(); }
+    juce::String getPlayerName() const                  { return stateProperty ("playerName").toString(); }
     void setPlayerName (const juce::String& name)       { setStateProperty ("playerName", name.trim()); }
     juce::String getPlayerLabel() const                 { return getPlayerName().isNotEmpty() ? getPlayerName() : getDisplayName(); }
     // Instrument icon key (ui/src/icons.tsx), empty = picked from the name by the page.
-    juce::String getIcon() const                        { return state.state.getProperty ("icon").toString(); }
+    juce::String getIcon() const                        { return stateProperty ("icon").toString(); }
     void setIcon (const juce::String& key)              { setStateProperty ("icon", key); }
     // Whether the tracked head turns this track's sound (Binaural, realtime only). The same on
     // every track (stage::setHeadTracking); saved, on unless turned off.
@@ -89,14 +89,12 @@ public:
     void setHeadTrackingOn (bool on);
     // Where the audience sits (ui/src/audience.ts: a grid of seats as base64, empty = none).
     // The same on every track (stage::setAudience); only drawn.
-    juce::String getAudience() const                    { return state.state.getProperty ("audience").toString(); }
+    juce::String getAudience() const                    { return stateProperty ("audience").toString(); }
     void setAudience (const juce::String& seats)        { setStateProperty ("audience", seats); }
-    // Host track name, or empty (the player's name may differ: see getDisplayName).
-    juce::String getTrackName() const                   { return trackName; }
 
     // A player with several tracks: its tracks share this key (saved; empty = a player of its
     // own) and stand in one place with one name and icon (bridge/StageEdits: joinPlayer).
-    juce::String getPlayerKey() const                   { return state.state.getProperty ("player").toString(); }
+    juce::String getPlayerKey() const                   { return stateProperty ("player").toString(); }
     void setPlayerKey (const juce::String& key)         { setStateProperty ("player", key); }
     // This track's place in every stored scene becomes `other`'s; where `other` has none,
     // it keeps its current place there too.
@@ -132,13 +130,24 @@ public:
 private:
     std::map<juce::String, std::set<const void*>> gesturesOpen; // parameter ids and their owners, message thread only
 
-    // The state tree is written on the message thread, but a host may save (copy it) from
-    // any thread: every write and the copy hold this. Never taken on the audio thread.
-    juce::CriticalSection stateTreeLock;
+    // The state tree is read and written on the message thread, but a host may save (copy it)
+    // and load (replace it) from any thread: every access holds this, and what a reader gets
+    // is a copy. Never taken on the audio thread, and never held while the host is called.
+    mutable juce::CriticalSection stateTreeLock;
+    juce::var stateProperty (const juce::Identifier& name, const juce::var& fallback = {}) const
+    {
+        const juce::ScopedLock lock (stateTreeLock);
+        return state.state.getProperty (name, fallback);
+    }
     void setStateProperty (const juce::Identifier& name, const juce::var& value)
     {
         const juce::ScopedLock lock (stateTreeLock);
         state.state.setProperty (name, value, nullptr);
+    }
+    juce::ValueTree copyOfScenes() const
+    {
+        const juce::ScopedLock lock (stateTreeLock);
+        return state.state.getChildWithName ("scenes").createCopy();
     }
 
     // A parameter for the audio thread: cached (looking up by name would allocate a String),

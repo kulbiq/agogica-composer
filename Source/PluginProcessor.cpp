@@ -42,7 +42,7 @@ ComposerProcessor::~ComposerProcessor()
 
 juce::String ComposerProcessor::getDisplayName() const
 {
-    if (const auto name = state.state.getProperty ("name").toString(); name.isNotEmpty())
+    if (const auto name = stateProperty ("name").toString(); name.isNotEmpty())
         return name;
 
     return trackName;
@@ -88,8 +88,8 @@ void ComposerProcessor::endGestures (const juce::StringArray& paramIds)
 
 void ComposerProcessor::copyScenePlaces (const ComposerProcessor& other)
 {
+    const auto theirs = other.copyOfScenes(); // under the other track's lock, before our own
     const juce::ScopedLock lock (stateTreeLock);
-    const auto theirs = other.state.state.getChildWithName ("scenes");
 
     for (auto slot : state.state.getChildWithName ("scenes"))
     {
@@ -109,7 +109,7 @@ void ComposerProcessor::storeScene()
 {
     const juce::ScopedLock lock (stateTreeLock);
     auto scenes = state.state.getOrCreateChildWithName ("scenes", nullptr);
-    auto slot = scenes.getOrCreateChildWithName (getScene(), nullptr);
+    auto slot = scenes.getOrCreateChildWithName (state.state.getProperty ("scene", "A").toString(), nullptr);
 
     for (const auto& paramId : params::ofScene)
         slot.setProperty (paramId, getParam (paramId), nullptr);
@@ -117,7 +117,7 @@ void ComposerProcessor::storeScene()
 
 bool ComposerProcessor::recallScene (const juce::String& scene)
 {
-    const auto slot = state.state.getChildWithName ("scenes").getChildWithName (scene);
+    const auto slot = copyOfScenes().getChildWithName (scene); // a copy: writing parameters calls the host
 
     if (! slot.isValid())
         return false;
@@ -132,6 +132,8 @@ bool ComposerProcessor::recallScene (const juce::String& scene)
 juce::StringArray ComposerProcessor::getStoredScenes() const
 {
     juce::StringArray names;
+
+    const juce::ScopedLock lock (stateTreeLock); // read in place: every window asks 30 times a second
 
     for (const auto& slot : state.state.getChildWithName ("scenes"))
         names.add (slot.getType().toString());
@@ -330,7 +332,7 @@ void ComposerProcessor::getStateInformation (juce::MemoryBlock& destData)
 
 void ComposerProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (state.state.getType()))
+    if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (state.state.getType())) // the type never changes
     {
         auto tree = juce::ValueTree::fromXml (*xml);
         stage::sanitise (tree);
