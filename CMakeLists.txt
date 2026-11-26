@@ -165,27 +165,32 @@ target_link_libraries(Composer
         juce::juce_recommended_warning_flags)
 
 # --- Tests ------------------------------------------------------------------
-include(FetchContent)
-FetchContent_Declare(Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG v3.16.0
-    GIT_SHALLOW TRUE)
-FetchContent_MakeAvailable(Catch2)
+# On by default (the release workflow tests what it ships); off, nothing is fetched from the network.
+option(COMPOSER_BUILD_TESTS "Build ComposerTests (fetches Catch2)" ON)
 
-# Tests link the plugin's shared code (which already contains the JUCE modules)
-# and borrow its include paths and definitions instead of compiling JUCE again.
-add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp
-    tracker/vision/ImageTensor.cpp) # the tracker's pure code, tested here (the app itself needs ONNX Runtime)
-target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
-target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
-target_compile_definitions(ComposerTests PRIVATE COMPOSER_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
-target_link_libraries(ComposerTests PRIVATE Composer Catch2::Catch2WithMain)
+if(COMPOSER_BUILD_TESTS)
+    include(FetchContent)
+    FetchContent_Declare(Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG v3.16.0
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(Catch2)
 
-include(CTest)
-include(Catch)
-# The fast set (ctest -LE slow) and the slow cases (labelled "slow"); hidden [.x] cases are manual.
-catch_discover_tests(ComposerTests TEST_SPEC "~[slow]")
-catch_discover_tests(ComposerTests TEST_SPEC "[slow]" PROPERTIES LABELS slow)
+    # Tests link the plugin's shared code (which already contains the JUCE modules)
+    # and borrow its include paths and definitions instead of compiling JUCE again.
+    add_executable(ComposerTests tests/ProcessorTests.cpp tests/GeometryTests.cpp tests/StageTests.cpp tests/DirectPathTests.cpp tests/BlockDspTests.cpp tests/ProTests.cpp tests/HeadTrackingTests.cpp tests/TrackerTests.cpp tests/ListenerPoseTests.cpp
+        tracker/vision/ImageTensor.cpp) # the tracker's pure code, tested here (the app itself needs ONNX Runtime)
+    target_include_directories(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(ComposerTests PRIVATE $<TARGET_PROPERTY:Composer,COMPILE_DEFINITIONS>)
+    target_compile_definitions(ComposerTests PRIVATE COMPOSER_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    target_link_libraries(ComposerTests PRIVATE Composer Catch2::Catch2WithMain)
+
+    include(CTest)
+    include(Catch)
+    # The fast set (ctest -LE slow) and the slow cases (labelled "slow"); hidden [.x] cases are manual.
+    catch_discover_tests(ComposerTests TEST_SPEC "~[slow]")
+    catch_discover_tests(ComposerTests TEST_SPEC "[slow]" PROPERTIES LABELS slow)
+endif()
 
 # --- Agogica Tracker (head tracking companion app): tracker/CMakeLists.txt ----
 if(APPLE OR WIN32)
