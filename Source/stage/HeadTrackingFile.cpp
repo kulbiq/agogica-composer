@@ -1,5 +1,7 @@
 #include "HeadTrackingFile.h"
 
+#include <cstring>
+
 #if JUCE_WINDOWS
  #ifndef WIN32_LEAN_AND_MEAN
   #define WIN32_LEAN_AND_MEAN
@@ -8,6 +10,10 @@
   #define NOMINMAX
  #endif
  #include <windows.h>
+#else
+ #include <fcntl.h>
+ #include <sys/file.h>
+ #include <unistd.h>
 #endif
 
 namespace headtracking
@@ -61,6 +67,13 @@ Writer::Writer (const juce::File& file)
             return;
     }
 
+   #if ! JUCE_WINDOWS
+    lockedFile = ::open (file.getFullPathName().toRawUTF8(), O_RDWR | O_CLOEXEC);
+
+    if (lockedFile == -1 || ::flock (lockedFile, LOCK_EX | LOCK_NB) != 0)
+        return; // another writer has it
+   #endif
+
     map = std::make_unique<juce::MemoryMappedFile> (file, juce::MemoryMappedFile::readWrite, false);
 
     if (map->getData() == nullptr || map->getSize() < (size_t) fileSize)
@@ -69,6 +82,14 @@ Writer::Writer (const juce::File& file)
     record = static_cast<Record*> (map->getData());
     record->version.store (version, std::memory_order_relaxed);
     std::memcpy (record->magic, "AGHT", 4);
+}
+
+Writer::~Writer()
+{
+   #if ! JUCE_WINDOWS
+    if (lockedFile != -1)
+        ::close (lockedFile); // lets the lock go
+   #endif
 }
 
 void Writer::write (const Pose& pose) noexcept
@@ -92,8 +113,22 @@ void Writer::write (const Pose& pose) noexcept
 }
 
 Reader::Reader (juce::File f, juce::uint32 checkEvery) : file (std::move (f)), checkEveryMs (checkEvery) {}
+Reader::~Reader() { close(); }
 
-void Reader::remapIfNeeded (juce::uint32 now)
+void Reader::close()
+{
+    if (handle == -1)
+        return;
+
+   #if JUCE_WINDOWS
+    CloseHandle ((HANDLE) handle);
+   #else
+    ::close ((int) handle);
+   #endif
+    handle = -1;
+}
+
+void Reader::reopenIfNeeded (juce::uint32 now)
 {
     if (checked && now - checkedAt < checkEveryMs)
         return;
@@ -103,57 +138,78 @@ void Reader::remapIfNeeded (juce::uint32 now)
     const auto newIdentity = fileIdentity (file);
     const auto newSize = file.getSize();
 
-    // Nothing new to look at - unless the last mapping failed: that one is tried again.
-    if (record != nullptr && newIdentity == identity && newSize == size)
+    // Nothing new to look at - unless the last open failed: that one is tried again.
+    if (handle != -1 && newIdentity == identity && newSize == size)
         return;
 
-    record = nullptr;
-    map.reset();
+    close();
     identity = newIdentity;
     size = newSize;
 
     if (! file.existsAsFile() || size < fileSize)
         return;
 
-    // Windows: JUCE opens a read-only mapping without FILE_SHARE_WRITE, which fails while the
-    // tracker holds the file for writing; a read-write mapping shares it. Nothing is written here.
+    // Full sharing on Windows: the tracker holds the file open for writing, and may replace it.
    #if JUCE_WINDOWS
-    constexpr auto mode = juce::MemoryMappedFile::readWrite;
+    const auto h = CreateFileW (file.getFullPathName().toWideCharPointer(), GENERIC_READ,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    handle = h == INVALID_HANDLE_VALUE ? -1 : (std::intptr_t) h;
    #else
-    constexpr auto mode = juce::MemoryMappedFile::readOnly;
+    handle = ::open (file.getFullPathName().toRawUTF8(), O_RDONLY | O_CLOEXEC);
    #endif
-    map = std::make_unique<juce::MemoryMappedFile> (file, mode, false);
+}
 
-    if (map->getData() != nullptr && map->getSize() >= (size_t) fileSize)
-        record = static_cast<const Record*> (map->getData());
+bool Reader::copyOut (char* bytes) const
+{
+   #if JUCE_WINDOWS
+    OVERLAPPED fromTheStart {};
+    DWORD got = 0;
+    return ReadFile ((HANDLE) handle, bytes, (DWORD) fileSize, &got, &fromTheStart) && got == (DWORD) fileSize;
+   #else
+    return ::pread ((int) handle, bytes, (size_t) fileSize, 0) == (ssize_t) fileSize;
+   #endif
 }
 
 std::optional<Pose> Reader::read (juce::uint32 nowMs)
 {
-    remapIfNeeded (nowMs);
+    reopenIfNeeded (nowMs);
 
-    // Checked on every read: a new file gets its magic just after it appears.
-    if (record == nullptr || std::memcmp (record->magic, "AGHT", 4) != 0 || record->version.load() != version)
+    if (handle == -1)
         return lastRead = std::nullopt;
+
+    const auto at = [] (const char* bytes, size_t offset, auto& value) { std::memcpy (&value, bytes + offset, sizeof (value)); };
 
     for (int attempt = 0; attempt < 8; ++attempt)
     {
-        const auto before = record->sequence.load (std::memory_order_acquire);
+        // Two copies. A copy isn't taken in one instant, so the writer may change the file
+        // under it; but when both show the same even count, no write began between the
+        // moments the two counts were copied - and all of the first copy was taken in between.
+        char first[fileSize], second[fileSize];
 
-        if ((before & 1u) != 0)
-            continue; // a write is in progress
+        if (! copyOut (first) || ! copyOut (second))
+            return lastRead = std::nullopt; // shorter than it was: emptied by something else
+
+        // Checked on every read: a new file gets its magic just after it appears.
+        std::uint32_t fileVersion = 0, before = 0, after = 0, flags = 0;
+        at (first, offsetof (Record, version), fileVersion);
+
+        if (std::memcmp (first, "AGHT", 4) != 0 || fileVersion != version)
+            return lastRead = std::nullopt;
+
+        at (first, offsetof (Record, sequence), before);
+        at (second, offsetof (Record, sequence), after);
+
+        if ((before & 1u) != 0 || before != after)
+            continue; // a write is in progress, or one came in between
 
         Pose pose;
-        pose.yaw = record->yaw.load (std::memory_order_relaxed);
-        pose.pitch = record->pitch.load (std::memory_order_relaxed);
-        pose.roll = record->roll.load (std::memory_order_relaxed);
-        pose.timestampMs = record->timestampMs.load (std::memory_order_relaxed);
-        pose.face = (record->flags.load (std::memory_order_relaxed) & faceFound) != 0;
-
-        std::atomic_thread_fence (std::memory_order_acquire);
-
-        if (record->sequence.load (std::memory_order_relaxed) != before)
-            continue;
+        at (first, offsetof (Record, yaw), pose.yaw);
+        at (first, offsetof (Record, pitch), pose.pitch);
+        at (first, offsetof (Record, roll), pose.roll);
+        at (first, offsetof (Record, timestampMs), pose.timestampMs);
+        at (first, offsetof (Record, flags), flags);
+        pose.face = (flags & faceFound) != 0;
 
         // Angles that aren't numbers (a tracker gone wrong) are no head at all: a NaN would
         // go all the way to the audio and never ease away.

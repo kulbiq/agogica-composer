@@ -45,6 +45,14 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         REQUIRE (read.has_value());
         CHECK_THAT (read->yaw, WithinAbs (12.5, 0.0));
         CHECK (read->face);
+
+       #if ! JUCE_WINDOWS
+        // One writer at a time: a second one on the same file doesn't open, and changes nothing.
+        Writer second (file);
+        CHECK_FALSE (second.isOpen());
+        second.write (pose (99.0f));
+        CHECK_THAT (reader.read()->yaw, WithinAbs (12.5, 0.0));
+       #endif
     }
 
     SECTION ("a file replaced under the reader is picked up")
@@ -126,6 +134,25 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         const auto read = reader.read (1050);
         REQUIRE (read.has_value());
         CHECK_THAT (read->yaw, WithinAbs (7.0, 0.0));
+    }
+
+    SECTION ("a file emptied under the reader (a sync tool, a stray shell redirect) is no head, not a crash")
+    {
+        const auto file = tempFile ("emptied");
+        Writer writer (file);
+        writer.write (pose (30.0f));
+        Reader reader (file, 10000); // between two looks at the file: it still believes in it
+        REQUIRE (reader.read (1000).has_value());
+
+        {
+            juce::FileOutputStream out (file); // in place: the same file, now 0 bytes long
+            REQUIRE (out.openedOk());
+            out.setPosition (0);
+            out.truncate();
+        }
+        REQUIRE (file.getSize() == 0);
+
+        CHECK_FALSE (reader.read (1001).has_value());
     }
 
     SECTION ("missing, short and foreign files are ignored")

@@ -11,6 +11,12 @@ The file is created once at its final size by an atomic rename and then only wri
 import argparse
 import math
 import mmap
+import sys
+
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
 import os
 import pathlib
 import struct
@@ -37,6 +43,12 @@ def open_record(path: pathlib.Path) -> mmap.mmap:
         temp.write_bytes(bytes(SIZE))
         os.replace(temp, path)  # atomic rename
     f = open(path, "r+b")
+    if fcntl:  # one writer at a time, like the app (Source/stage/HeadTrackingFile.h); held until exit
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            sys.exit(f"{path} already has a writer (Agogica Tracker, or another fake tracker)")
+        open_record.locked = f
     m = mmap.mmap(f.fileno(), SIZE)
     struct.pack_into("<I", m, OFFSETS["version"], 1)
     m[0:4] = b"AGHT"

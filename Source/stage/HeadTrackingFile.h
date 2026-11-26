@@ -6,12 +6,14 @@
 #include <optional>
 
 // Head orientation shared by the Agogica Tracker app with every Composer instance, through
-// a 64-byte memory-mapped file - no network, no sockets.
+// a 64-byte file - no network, no sockets.
 //
 // Protocol (version 1), see tracker/:
 // - The writer creates the file once at its final size (temp file + atomic rename) and
-//   afterwards only overwrites it in place. It never truncates or recreates it while
-//   running: a mapped file shrinking under a reader is a crash inside the host.
+//   afterwards only overwrites it in place (it maps it). It never truncates or recreates it
+//   while running: plugins shipped before the reader stopped mapping the file would crash
+//   their host when it shrinks. Today's reader copies the 64 bytes out with an ordinary read,
+//   so a file emptied by anything else is just "no head".
 // - Seqlock: `sequence` is odd while a write is in progress.
 // - yaw is in degrees, clockwise = head turned right (towards +x on the map).
 namespace headtracking
@@ -56,26 +58,35 @@ struct Pose
 };
 
 // Writes poses into the file (the tracker app; tests; tools/fake_tracker.py does the same).
+// One writer at a time: two would spoil each other's count. On macOS a second one on the same
+// file doesn't open (an advisory lock held as long as the writer lives); on Windows the app
+// allows one instance of itself (ponytail: no lock there - a byte-range lock is mandatory on
+// Windows and must not get in a reader's way; add one past the end of the file if a second
+// kind of writer ever appears).
 class Writer
 {
 public:
     explicit Writer (const juce::File&);
+    ~Writer();
     bool isOpen() const noexcept { return record != nullptr; }
     void write (const Pose&) noexcept;
 
 private:
     std::unique_ptr<juce::MemoryMappedFile> map;
     Record* record = nullptr;
+    int lockedFile = -1;
 };
 
-// Reads the latest pose from the file (message thread). Tolerates a missing, short or
-// foreign file and a file replaced under it (re-maps when its identity changes).
+// Reads the latest pose from the file (message thread). Tolerates a missing, short, emptied
+// or foreign file and a file replaced under it (opens it again when its identity changes).
 // The file itself is looked at (exists? replaced?) at most every `checkEveryMs`: reads come
-// 100 times a second on the host's message thread, and each look is a few system calls.
+// 100 times a second on the host's message thread, and each look is a few system calls; the
+// reads in between are two small positional reads of the open file.
 class Reader
 {
 public:
     explicit Reader (juce::File, juce::uint32 checkEveryMs = 500);
+    ~Reader();
 
     // The latest consistent pose (the previous one while a write is in progress), or nothing
     // if there's no valid file.
@@ -83,11 +94,12 @@ public:
     std::optional<Pose> read (juce::uint32 nowMs); // the clock handed in (tests)
 
 private:
-    void remapIfNeeded (juce::uint32 nowMs);
+    void reopenIfNeeded (juce::uint32 nowMs);
+    void close();
+    bool copyOut (char* bytes) const; // the file's 64 bytes as they are now; false if it has fewer
 
     juce::File file;
-    std::unique_ptr<juce::MemoryMappedFile> map;
-    const Record* record = nullptr;
+    std::intptr_t handle = -1; // a file descriptor, or a Windows HANDLE
     std::optional<Pose> lastRead;
     juce::uint64 identity = 0;
     juce::int64 size = 0;
