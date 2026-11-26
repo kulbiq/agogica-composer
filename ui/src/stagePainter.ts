@@ -1,4 +1,4 @@
-import { seatPitch, seatsIn, type Audience } from "./audience";
+import { hasSeat, seatPitch, seatsIn, type Audience } from "./audience";
 import type { Point } from "./bridge";
 import { easeToward } from "./ease";
 import { averageWood, buildRoom, buildSeats } from "./gl/roomMesh";
@@ -23,9 +23,8 @@ export type Hit = { key: NodeKey; x: number; y: number; r: number };
 // `flat`; and the clickable nodes, nearest first.
 export type View = { cx: number; cy: number; scale: number; flat: boolean; hits: Hit[] };
 
-// The 3D view: on or off (the camera swoops between), which way the eyes look, seated or standing;
-// `at`: where a spectator stands (the camera walks without the listener), else at the listener.
-export type Look = { on: boolean; yaw: number; pitch: number; standing: boolean; at?: Point };
+// The 3D view: on or off (the camera swoops between), which way the eyes look, seated or standing.
+export type Look = { on: boolean; yaw: number; pitch: number; standing: boolean };
 
 export type MapFrame = {
   width: number; // CSS pixels
@@ -37,6 +36,7 @@ export type MapFrame = {
   selection: readonly NodeKey[]; // every selected node, the leading one included
   zoom: Zoom; // the map's (the room's view starts from it)
   audience: Audience; // where the audience sits
+  picked?: Audience; // seats picked while editing the audience (drawn stronger)
   painting: boolean; // the audience is being painted: its seats show stronger on the map
   top: number; // px clear above the room on the map (the tools over it)
   overrides: ReadonlyMap<NodeKey, Point>; // nodes the user is moving, in metres
@@ -75,7 +75,6 @@ type Minimap = {
   players: [number, number, boolean][]; // x, y (metres), selected
   viewer: [number, number];
   yaw: number;
-  listener?: [number, number];
   eyes: number;
   alpha: number;
 };
@@ -245,7 +244,7 @@ export class StagePainter {
       shown.set(player.id, easeToward(shown.get(player.id) ?? 0, seatLevel(frame.levels, player.tracks.map((t) => t.id)), 0.35, dt));
 
     const listener = drawn.get("listener")!;
-    const viewer = look.at ?? listener; // where the eyes are in the room
+    const viewer = listener; // where the eyes are in the room
     // In the room, straight ahead is the middle of the view below the tools (a second row of
     // them, in a narrow window, would cover the nearest names).
     const below = H + top - margin.top;
@@ -289,6 +288,7 @@ export class StagePainter {
       shotKey, W, H, this.rose, e, zoom.k, zoom.x, zoom.y, frame.ink, materialsId(M), frame.painting, selected, look.yaw,
       [...drawn].map(([k, p]) => `${k}:${p.x},${p.y}`).join(";"),
       bytesKey(frame.audience),
+      frame.picked ? bytesKey(frame.picked) : 0,
     ].join("|");
     if (passKey !== this.passKey) {
       this.passKey = passKey;
@@ -389,12 +389,18 @@ export class StagePainter {
       if (dash > 0.001 && sel && selected !== "listener")
         strokeOnce(after, 1, [ink[0], ink[1], ink[2], 0.35 * dash], (p) => cam.seg(p, [listener.x, listener.y, 0], [sel.x, sel.y, 0]), [2, 3]);
 
-      // The audience on the map: a square for each seat (stronger while it is being painted).
+      // The audience on the map: a square for each seat (stronger while it is being edited,
+      // strongest when picked).
       if (e < 0.5) {
-        const colour: RGBA = [ink[0], ink[1], ink[2], (frame.painting ? 0.16 : 0.07) * (1 - 2 * e)];
+        const fade = 1 - 2 * e;
+        const colour: RGBA = [ink[0], ink[1], ink[2], (frame.painting ? 0.16 : 0.07) * fade];
+        const strong: RGBA = [ink[0], ink[1], ink[2], 0.5 * fade];
         const s = seatPitch * 0.35;
-        for (const p of audience)
-          if (cam.poly(path.reset(), [[p.x - s, p.y - s, 0], [p.x + s, p.y - s, 0], [p.x + s, p.y + s, 0], [p.x - s, p.y + s, 0]])) path.fill(after, colour);
+        const picked = frame.picked;
+        for (const p of audience) {
+          const on = picked && hasSeat(picked, Math.round(p.x / seatPitch), Math.round(p.y / seatPitch));
+          if (cam.poly(path.reset(), [[p.x - s, p.y - s, 0], [p.x + s, p.y - s, 0], [p.x + s, p.y + s, 0], [p.x - s, p.y + s, 0]])) path.fill(after, on ? strong : colour);
+        }
       }
     }
     const texts: Text[] = [...this.passTexts];
@@ -512,7 +518,7 @@ export class StagePainter {
     players.depth = 0;
 
     // The listener's arrow fades out as the camera comes down. In the room it would lie on the
-    // floor (user decision, 2026-11-26): a spectator finds the listener on the minimap.
+    // floor (user decision, 2026-11-26); the minimap shows where it stands.
     if (e < 0.999) {
       const p = cam.screen([listener.x, listener.y, 0], 0.1);
       if (p) {
@@ -536,7 +542,6 @@ export class StagePainter {
         }),
         viewer: [viewer.x, viewer.y],
         yaw: look.yaw,
-        listener: look.at ? [listener.x, listener.y] : undefined,
         eyes,
         alpha: mini,
       });
@@ -822,7 +827,6 @@ export class StagePainter {
     }
     t.polygon(xs, ys, c(0.1));
     for (const [x, y, selected] of m.players) t.disc(mx(x), my(y), selected ? 3 : 2, c(selected ? 0.9 : 0.5));
-    if (m.listener) t.ring(mx(m.listener[0]), my(m.listener[1]), 3.5, 1, c(0.9));
     this.arrow(t, mx(vx), my(vy), m.yaw, alpha, ink, 0.7);
   }
 

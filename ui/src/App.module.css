@@ -1083,18 +1083,20 @@ button.status:focus-visible {
   right: calc(clamp(72px, 16%, 112px) + 22px);
 }
 
-.viewSwitch {
-  padding: 3px;
+/* The tools sit straight on the map, each on the paper (the map's lines and the room stay
+   behind them); the audience's go to the right end. */
+.mapTools .chip:not([aria-checked="true"]):not([aria-pressed="true"]) {
   background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-chip);
 }
 
-/* Painting the audience: the brush, in the map's bottom-right corner (clear of the resize grip). */
-.brushBar {
-  position: absolute;
-  right: 24px;
-  bottom: 12px;
+.mapTools .chip:disabled {
+  color: var(--ink-faint);
+  border-color: var(--line);
+  cursor: default;
+}
+
+.toolsEnd {
+  margin-left: auto;
 }
 
 /* Shift-drag on the map: the rectangle that selects. */
