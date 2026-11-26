@@ -75,18 +75,12 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
           selfId={selfId}
         />
         <p className={styles.note}>How much quieter a player gets each time its distance doubles.</p>
-        <button className={styles.ghost} disabled={!changed} onClick={() => setParams(selfId, { proDistanceLaw: lawNeutral })}>
-          Reset
-        </button>
       </div>
 
       <div className={styles.popoverSection}>
         <ParamSlider param="proDelayFrom" label="Delay stretch from" value={stretchFrom} min={1} max={stretchMax} step={0.01} format={formatStretch} selfId={selfId} />
         <ParamSlider param="proDelayTo" label="Delay stretch to" value={stretchTo} min={1} max={stretchMax} step={0.01} format={formatStretch} selfId={selfId} />
         <p className={styles.note}>Far players arrive later than physics says: nearby places stretch alike, each player anew after a pause.</p>
-        <button className={styles.ghost} disabled={!stretched} onClick={() => setParams(selfId, { proDelayFrom: 1, proDelayTo: 1 })}>
-          Reset
-        </button>
       </div>
 
       <div className={`${styles.popoverSection} ${styles.row}`}>
