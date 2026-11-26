@@ -26,12 +26,16 @@ juce::var player (const ComposerProcessor& p, int index, bool self, float roomSi
     derived->setProperty ("delayMs", geometry::delayMs (pos, listener));
     derived->setProperty ("levelDb", 20.0f * std::log10 (geometry::distanceGain (geometry::distance (pos, listener), lawExponent)));
 
-    const auto name = p.getDisplayName();
+    const auto name = p.getPlayerLabel();
+    const auto track = p.getDisplayName();
 
     auto o = std::make_unique<juce::DynamicObject>();
     o->setProperty ("id", p.id);
     o->setProperty ("name", name.isNotEmpty() ? name : "Player " + juce::String (index + 1));
     o->setProperty ("colour", p.getTrackColour());
+    o->setProperty ("icon", p.getIcon());
+    o->setProperty ("player", p.getPlayerKey());
+    o->setProperty ("track", track.isNotEmpty() ? track : "Track " + juce::String (index + 1));
     o->setProperty ("x", pos.x);
     o->setProperty ("y", pos.y);
     o->setProperty ("self", self);
@@ -80,12 +84,14 @@ juce::var snapshot (ComposerProcessor& self)
     });
 
     o->setProperty ("scene", self.getScene());
+    o->setProperty ("audience", self.getAudience());
     o->setProperty ("outputMode", self.getParam (params::outputMode) > 0.5f ? "binaural" : "stereo");
 
     // The yaw itself changes every tick while tracking: it goes out as its own "headYaw"
     // event (ComposerEditor), so the stage stays quiet.
     auto tracking = std::make_unique<juce::DynamicObject>();
     tracking->setProperty ("live", self.headTracking->isLive());
+    tracking->setProperty ("on", self.isHeadTrackingOn());
    #if JUCE_MAC
     tracking->setProperty ("canStart", true); // the editor can start Agogica Tracker
    #else
@@ -100,7 +106,9 @@ juce::var snapshot (ComposerProcessor& self)
             pro->setProperty (id, self.getParam (id));
     o->setProperty ("pro", pro.release());
     o->setProperty ("room", roomSize);
-    o->setProperty ("listener", point (listener));
+    auto listenerObject = point (listener);
+    listenerObject.getDynamicObject()->setProperty ("yaw", self.getParam (params::listenerYaw));
+    o->setProperty ("listener", listenerObject);
     return o.release();
 }
 } // namespace stage

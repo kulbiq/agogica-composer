@@ -11,8 +11,11 @@ export type Player = Point & {
   id: number;
   name: string;
   colour: string; // host track colour "#rrggbb", or ""
+  icon: string; // a key from icons.tsx, or "" = picked from the name
+  player: string; // tracks with the same key are one player (players.ts), "" = a player of its own
+  track: string; // the track's own name (set in Composer, else the host's), or "Track N"
+  // (`name` is the player's: the same on all its tracks)
   self: boolean;
-  derived: { distance: number; azimuth: number; pan: number; delayMs: number; levelDb: number };
 };
 
 // What stage::snapshot (Source/bridge/StageSnapshot.cpp) sends.
@@ -21,16 +24,19 @@ export type Stage = {
   scenes: string[]; // scenes that hold a layout (the active one included)
   outputMode: "stereo" | "binaural";
   pro: Record<string, number>; // Pro panel parameter values (project-wide)
-  headTracking: { live: boolean; canStart: boolean }; // the yaw comes as its own "headYaw" event (degrees clockwise)
+  // on: whether the head turns the sound (and the 3D view); the yaw comes as its own "headYaw"
+  // event (degrees clockwise).
+  headTracking: { live: boolean; canStart: boolean; on: boolean };
+  audience: string; // where the audience sits (audience.ts), "" = nobody
   alone: boolean;
   openElsewhere?: string; // name of another track whose Composer window is open
   room: number;
-  listener: Point;
+  listener: Point & { yaw: number }; // yaw: degrees clockwise it faces (Binaural; listenerYaw)
   players: Player[];
 };
 
-export type Param = "roomSize" | "listenerX" | "listenerY" | "playerX" | "playerY" | "outputMode"
-  | "proDistanceLaw";
+export type Param = "roomSize" | "listenerX" | "listenerY" | "listenerYaw" | "playerX" | "playerY" | "outputMode"
+  | "proDistanceLaw" | "proDelayFrom" | "proDelayTo";
 
 export type BuildInfo = { version: string; format: string; host: string; credits?: string; debug?: boolean };
 
@@ -47,8 +53,15 @@ type Edit = { phase: "begin" | "change" | "end"; target: number; param: Param; v
 // Functions the page calls.
 const getStage = getNativeFunction("getStage") as () => Promise<Stage>;
 const edit = getNativeFunction("edit") as (edit: Edit) => Promise<void>;
+// The player's name ("" = its track's name), and one track's ("" = the host's).
 export const setName = getNativeFunction("setName") as (id: number, name: string) => Promise<void>;
+export const setTrackName = getNativeFunction("setTrackName") as (id: number, name: string) => Promise<void>;
+export const setIcon = getNativeFunction("setIcon") as (id: number, icon: string) => Promise<void>;
+export const joinPlayer = getNativeFunction("joinPlayer") as (trackId: number, intoId: number) => Promise<void>;
+export const splitPlayer = getNativeFunction("splitPlayer") as (trackId: number) => Promise<void>;
 export const setScene = getNativeFunction("setScene") as (scene: string) => Promise<void>;
+export const setHeadTracking = getNativeFunction("setHeadTracking") as (on: boolean) => Promise<void>;
+export const setAudience = getNativeFunction("setAudience") as (seats: string) => Promise<void>; // ui/src/audience.ts
 export const startTracker = getNativeFunction("startTracker") as () => Promise<boolean>;
 export const getBuildInfo = getNativeFunction("getBuildInfo") as () => Promise<BuildInfo>;
 export const setEditorSize = getNativeFunction("setEditorSize") as (width: number, height: number) => Promise<void>;

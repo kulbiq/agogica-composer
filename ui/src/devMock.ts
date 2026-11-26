@@ -2,35 +2,59 @@
 // Inside the plugin, JUCE injects window.__JUCE__ before any script runs, so this stays inert.
 // Must be imported before anything that imports @juce-framework/webview.
 
+import { emptyAudience, encodeAudience, setSeat } from "./audience";
 import { GestureLedger } from "./gestureLedger";
 
 type Invoke = { name: string; params: unknown[]; resultId: number };
 type Edit = { phase: string; target: number; param: string; value: number };
 
 if (import.meta.env.DEV && !window.__JUCE__) {
-  const names = ["Violin I", "Violin II", "Viola", "Cello", "Flute", "Horn"];
-  const colours = ["#d1495b", "#edae49", "#00798c", "#30638e", "#66a182", ""];
+  // An orchestra in front of the listener (the design canvas's stage): one track per player,
+  // except the horns and the piano (two tracks each, see players.ts).
+  const seats: [string, string, number, number, string?][] = [
+    ["Violin I", "#d1495b", -5, 2.5],
+    ["Violin II", "#edae49", -3, 4.5],
+    ["Viola", "#00798c", -1.2, 3],
+    ["Cello", "#30638e", 1.5, 3.2],
+    ["Bass", "#30638e", 4.5, 3.5],
+    ["Flute", "#66a182", -1.5, 6],
+    ["Clarinet", "#66a182", 1.5, 6],
+    ["Horn 1", "#edae49", -4.5, 7, "Horns"],
+    ["Horn 2", "#edae49", -4.5, 7, "Horns"],
+    ["Trumpet", "#edae49", 4.5, 7],
+    ["Timpani", "", 0, 8.5],
+    ["Harp", "#d1495b", -7, 4.5],
+    ["Piano RH", "", 7, 5, "Piano"],
+    ["Piano LH", "", 7, 5, "Piano"],
+  ];
+  const names = seats.map(([name]) => name);
   const scene = {
     scene: "A",
     scenes: ["A", "B"],
-    headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true },
+    headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true, on: true },
     pro: {
-      proDistanceLaw: 6.0206 / 3,
+      proDistanceLaw: 2.5,
+      proDelayFrom: 1,
+      proDelayTo: 3,
     } as Record<string, number>,
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
     // ?elsewhere: another track's window is open (the "open here anyway" screen).
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
-    room: 20,
-    listener: { x: 0, y: -4 },
-    players: names.map((name, i) => ({ id: i, name, colour: colours[i], self: i === 2, x: (i - 2.5) * 2.4, y: 3 + (i % 2) * 2 })),
+    room: Number(new URLSearchParams(location.search).get("room") ?? 20), // ?room=50: another size
+    listener: { x: 0, y: 0, yaw: 0 },
+    audience: sampleAudience(),
+    // `own`: the track's name; `playerName`: the player's, when it has one (see setName).
+    players: seats.map(([own, colour, x, y, player], i) => ({
+      id: i, own, playerName: player ?? "", colour, icon: "", player: player?.toLowerCase() ?? "", self: i === 2, x, y,
+    })),
   };
 
   // Rough stand-in for Source/dsp/Geometry.h; only so the panel shows plausible numbers.
   const snapshot = () => {
     const half = scene.room / 2;
     const clamp = (v: number) => Math.min(half, Math.max(-half, v));
-    const l = { x: clamp(scene.listener.x), y: clamp(scene.listener.y) };
+    const l = { x: clamp(scene.listener.x), y: clamp(scene.listener.y), yaw: scene.listener.yaw };
     return {
       ...scene,
       listener: l,
@@ -47,7 +71,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
           delayMs: (distance / 343) * 1000,
           levelDb: distance <= 1 ? 0 : (-20 / 3) * Math.log10(distance),
         };
-        return { ...p, x, y, derived };
+        return { ...p, name: p.playerName || p.own, track: p.own, x, y, derived };
       }),
     };
   };
@@ -57,6 +81,14 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   // The plugin sends the stage from a timer, after the call that changed it has returned.
   const emitStageSoon = () => setTimeout(() => emit("stage", snapshot()), 33);
   const gestures = new GestureLedger();
+  const tracksOf = (id: number) => {
+    const key = scene.players.find((p) => p.id === id)?.player;
+    return scene.players.filter((p) => p.id === id || (key && p.player === key));
+  };
+  const dropLoneKeys = () =>
+    scene.players.forEach((p) => {
+      if (p.player && scene.players.filter((q) => q.player === p.player).length === 1) p.player = "";
+    });
 
   const handlers: Record<string, (...args: never[]) => unknown> = {
     getStage: () => snapshot(),
@@ -65,24 +97,65 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       gestures.record(e.phase, e.target, e.param);
       if (e.phase !== "change") return;
       const p = scene.players.find((pl) => pl.id === e.target);
+      const tracks = tracksOf(e.target);
       if (e.param === "roomSize") scene.room = e.value;
       if (e.param.startsWith("pro")) scene.pro = { ...scene.pro, [e.param]: e.value };
       if (e.param === "outputMode") scene.outputMode = e.value > 0.5 ? "binaural" : "stereo";
       if (e.param === "listenerX") scene.listener.x = e.value;
       if (e.param === "listenerY") scene.listener.y = e.value;
-      if (p && e.param === "playerX") p.x = e.value;
-      if (p && e.param === "playerY") p.y = e.value;
+      if (e.param === "listenerYaw") scene.listener.yaw = e.value;
+      if (p && e.param === "playerX") tracks.forEach((t) => (t.x = e.value));
+      if (p && e.param === "playerY") tracks.forEach((t) => (t.y = e.value));
       emitStageSoon();
     },
     startTracker: () => true,
+    setAudience: (seats: string) => {
+      scene.audience = seats;
+      emitStageSoon();
+    },
+    setHeadTracking: (on: boolean) => {
+      scene.headTracking = { ...scene.headTracking, on };
+      emitStageSoon();
+    },
     setScene: (name: string) => {
       scene.scene = name;
       if (!scene.scenes.includes(name)) scene.scenes = [...scene.scenes, name].sort();
       emitStageSoon();
     },
+    // Like stage::setName / setTrackName (Source/bridge/StageEdits.cpp).
     setName: (id: number, name: string) => {
       const p = scene.players.find((pl) => pl.id === id);
-      if (p) p.name = name || names[id];
+      if (p && !p.player) Object.assign(p, { own: name || names[id], playerName: "" });
+      else tracksOf(id).forEach((t) => (t.playerName = name));
+      emitStageSoon();
+    },
+    setTrackName: (id: number, name: string) => {
+      const p = scene.players.find((pl) => pl.id === id);
+      if (p) p.own = name || names[id];
+      emitStageSoon();
+    },
+    setIcon: (id: number, icon: string) => {
+      tracksOf(id).forEach((t) => (t.icon = icon));
+      emitStageSoon();
+    },
+    // Like stage::joinPlayer / splitPlayer (Source/bridge/StageEdits.cpp).
+    joinPlayer: (trackId: number, intoId: number) => {
+      const track = scene.players.find((p) => p.id === trackId);
+      const into = scene.players.find((p) => p.id === intoId);
+      if (!track || !into || track === into || (into.player && track.player === into.player)) return;
+      if (!track.player && track.playerName) track.own = track.playerName;
+      into.player ||= `p${intoId}`;
+      Object.assign(track, { player: into.player, x: into.x, y: into.y });
+      const playerName = into.playerName || into.own;
+      tracksOf(intoId).forEach((t) => Object.assign(t, { playerName, icon: into.icon }));
+      dropLoneKeys();
+      emitStageSoon();
+    },
+    splitPlayer: (trackId: number) => {
+      const track = scene.players.find((p) => p.id === trackId);
+      if (!track?.player) return;
+      Object.assign(track, { player: "", playerName: "", icon: "" });
+      dropLoneKeys();
       emitStageSoon();
     },
   };
@@ -96,22 +169,44 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     },
   };
 
-  // ?pro opens the Pro section (for screenshots; nothing to click in headless Chrome).
-  if (location.search.includes("pro"))
+  // ?azimuth and ?allnames set the map preferences (before the app reads them).
+  if (location.search.includes("azimuth")) localStorage.setItem("mapView", "azimuth");
+  if (location.search.includes("allnames")) localStorage.setItem("mapNames", "all");
+
+  // ?settings opens the settings popover, ?edit edits this track's player, ?3d walks into the
+  // room (for screenshots; nothing to click in headless Chrome).
+  const clickOnce = (find: () => HTMLButtonElement | undefined) =>
     new MutationObserver((_, observer) => {
-      const details = document.querySelector("details");
-      if (details) {
-        details.open = true;
+      const button = find();
+      if (button) {
+        button.click();
         observer.disconnect();
       }
     }).observe(document, { childList: true, subtree: true });
+  const buttons = () => [...document.querySelectorAll("button")];
+  if (location.search.includes("settings")) clickOnce(() => buttons().find((b) => b.ariaLabel === "Settings"));
+  if (location.search.includes("edit")) clickOnce(() => buttons().find((b) => b.textContent === "Edit player"));
+  if (location.search.includes("3d")) clickOnce(() => buttons().find((b) => b.textContent === "3D"));
 
-  // A little fake input level per player (one stays silent).
+  // A little fake input level per player (the timpani stays silent).
+  // ?still: levels that don't move (for comparing screenshots).
   setInterval(() => {
-    const t = performance.now();
+    const t = location.search.includes("still") ? 0 : performance.now();
     const levels: Record<string, number> = {};
-    for (const p of scene.players) levels[p.id] = p.id === 4 ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
+    for (const p of scene.players) levels[p.id] = p.own === "Timpani" ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
     emit("levels", levels);
     emit("headYaw", location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0);
   }, 33);
+}
+
+// Rows behind the stage's centre with a middle aisle (?noaudience: nobody).
+function sampleAudience() {
+  const seats = emptyAudience();
+  if (!location.search.includes("noaudience"))
+    for (let j = -4; j >= -11; j--)
+      for (let i = 2; i <= 9; i++) {
+        setSeat(seats, i, j, true);
+        setSeat(seats, -i, j, true);
+      }
+  return encodeAudience(seats);
 }

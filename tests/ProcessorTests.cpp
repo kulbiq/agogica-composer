@@ -234,6 +234,7 @@ TEST_CASE ("processBlock: position from parameters, clamped to the room", "[inte
     set (p, "roomSize", 10.0f);
     set (p, "playerX", 20.0f); // clamped to the edge: x = 5
     set (p, "playerY", 5.0f);
+    set (p, "proDelayTo", 1.0f); // the physical delay
 
     constexpr double sampleRate = 48000.0;
     p.setPlayConfigDetails (2, 2, sampleRate, 512);
@@ -309,6 +310,13 @@ TEST_CASE ("processBlock never allocates (both modes, Pro, moves and mode switch
     set (p, "proDistanceLaw", 6.0f);
     play (2);
 
+    set (p, "proDelayTo", 4.0f); // stretched: a new multiplier after a pause, the delay jumps
+    play (2);
+    buffer.clear();
+    for (int b = 0; b < 100; ++b)
+        total += allocationsDuring ([&] { p.processBlock (buffer, midi); });
+    play (2);
+
     set (p, "outputMode", 1.0f); // a mode switch mid-stream
     play (2);
 
@@ -321,11 +329,14 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
     ComposerProcessor p;
     juce::MidiBuffer midi;
 
-    SECTION ("the longest delay (opposite corners of the largest room) is never cut")
+    SECTION ("the longest delay (opposite corners of the largest room, stretched the most) is never cut")
     {
-        // The direct sound alone: the output ends with the longest delay (70.7 m, 0.21 s), well
-        // inside the 0.5 s the track keeps processing after its input stops.
+        // The direct sound alone: the output ends with the longest delay (70.7 m, 0.21 s, up to
+        // 4x stretched: 0.82 s), inside the 0.85 s the track keeps processing after its input stops.
         constexpr double sampleRate = 48000.0;
+        const auto stretch = GENERATE (1.0f, 4.0f);
+        set (p, "proDelayFrom", stretch);
+        set (p, "proDelayTo", stretch);
         set (p, "roomSize", 50.0f);
         set (p, "playerX", 25.0f);
         set (p, "playerY", 25.0f);
@@ -345,7 +356,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
             left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
         }
 
-        const auto arrival = std::hypot (50.0, 50.0) / 343.0 * sampleRate;
+        const auto arrival = std::hypot (50.0, 50.0) / 343.0 * sampleRate * stretch;
         REQUIRE (arrival < ComposerProcessor::tailSeconds * sampleRate);
         CHECK (std::abs ((double) peakIndex (left) - arrival) <= 1.0);
         CHECK (std::abs (left[peakIndex (left)]) > 0.01f);
@@ -354,6 +365,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
     SECTION ("a silent track skips its work and resumes at the current position, without allocating")
     {
         constexpr double sampleRate = 48000.0;
+        set (p, "proDelayTo", 1.0f); // the physical delay
         p.setPlayConfigDetails (2, 2, sampleRate, 480);
         p.prepareToPlay (sampleRate, 480);
 
@@ -362,7 +374,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
         buffer.setSample (0, 0, 1.0f);
         p.processBlock (buffer, midi);
 
-        for (int block = 0; block < 100; ++block) // 1 s of silence (longer than the 0.5 s tail)
+        for (int block = 0; block < 100; ++block) // 1 s of silence (longer than the 0.85 s tail)
         {
             buffer.clear();
             p.processBlock (buffer, midi);
@@ -542,6 +554,7 @@ TEST_CASE ("a project saved in Binaural starts in Binaural: no fade from the ste
         set (p, "outputMode", 1.0f);
         set (p, "playerX", 0.0f);
         set (p, "playerY", 0.5f); // 0.5 m: the sound arrives within the first block
+        set (p, "proDelayTo", 1.0f); // no stretch: it would differ with the song's time
         p.prepareToPlay (48000.0, 256);
 
         juce::MidiBuffer midi;
@@ -594,8 +607,8 @@ TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends
     p.processBlockBypassed (buffer, midi);
     for (int i = 0; i < 256; ++i)
     {
-        REQUIRE (buffer.getSample (0, i) == dry.getSample (0, i));
-        REQUIRE (buffer.getSample (1, i) == dry.getSample (0, i)); // not left-only
+        REQUIRE (juce::exactlyEqual (buffer.getSample (0, i), dry.getSample (0, i)));
+        REQUIRE (juce::exactlyEqual (buffer.getSample (1, i), dry.getSample (0, i))); // not left-only
     }
 
     // Back on, with a silent input: what was in the delay before the bypass is not heard now.
@@ -603,7 +616,7 @@ TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends
     {
         buffer.clear();
         p.processBlock (buffer, midi);
-        REQUIRE (buffer.getMagnitude (0, 256) == 0.0f);
+        REQUIRE (juce::exactlyEqual (buffer.getMagnitude (0, 256), 0.0f));
     }
 }
 
@@ -664,6 +677,12 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK_THAT (p.getParam ("playerY"), WithinAbs (4.0, 1e-4));
         CHECK_THAT (p.getParam ("outputMode"), WithinAbs (1.0, 1e-4));
         CHECK (p.getDisplayName() == "Viola");
+        CHECK (p.getIcon().isEmpty()); // saved before icons: automatic
+        CHECK (p.isHeadTrackingOn()); // saved before the switch: on
+        CHECK (p.getAudience().isEmpty()); // saved before the audience was painted: none
+        CHECK_THAT (p.getParam ("proDistanceLaw"), WithinAbs (params::legacyDistanceLaw, 1e-4)); // as saved
+        CHECK_THAT (p.getParam ("proDelayTo"), WithinAbs (1.0, 1e-4)); // saved before the stretch: none (not today's 3x)
+        CHECK_THAT (p.getParam ("listenerYaw"), WithinAbs (0.0, 1e-4)); // saved before it existed: ahead
         CHECK (p.getScene() == "D");
         CHECK (p.isPlaced());
 
@@ -686,6 +705,14 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
 
         CHECK_THAT (p.getParam ("outputMode"), WithinAbs (0.0, 1e-4));
         CHECK_THAT (p.getParam ("roomSize"), WithinAbs (35.0, 1e-4));
+
+        // Saved before the distance law was a parameter: the law that was built in then, not
+        // today's default.
+        xml->removeChildElement (xml->getChildByAttribute ("id", "proDistanceLaw"), true);
+        juce::MemoryBlock oldest;
+        juce::AudioProcessor::copyXmlToBinary (*xml, oldest);
+        load (p, oldest);
+        CHECK_THAT (p.getParam ("proDistanceLaw"), WithinAbs (params::legacyDistanceLaw, 1e-4));
     }
 
     SECTION ("empty, garbage, truncated or foreign data leaves the state untouched")
