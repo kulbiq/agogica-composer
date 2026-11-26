@@ -54,6 +54,8 @@ export class SpriteAtlas {
 
   dispose() {
     this.scratch.canvas.remove();
+    this.gl.deleteTexture(this.texture);
+    this.gl.deleteTexture(this.icons);
   }
 
   // The sprite for `key`, drawn by `draw` the first time: a canvas `width` x `height` CSS px,

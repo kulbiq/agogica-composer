@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { beginGesture, type Gesture, type Param } from "./bridge";
 import styles from "./App.module.css";
 
@@ -28,8 +28,21 @@ export default function ParamSlider({ param, label, value, min, max, step, forma
   const end = () => {
     gesture.current?.end();
     gesture.current = undefined;
-    setDragging(undefined);
   };
+
+  // After the release the local value stays until C++ reports its own (a frame later), so the
+  // thumb doesn't jump back for that frame; half a second is the latest it lets go.
+  useEffect(() => {
+    if (dragging === undefined || gesture.current) return;
+    const timer = setTimeout(() => setDragging(undefined), 500);
+    return () => clearTimeout(timer);
+  });
+  useEffect(() => {
+    if (!gesture.current) setDragging(undefined);
+  }, [value]);
+
+  // Closed in the middle of a change (Escape closes the settings): the host still gets its end.
+  useEffect(() => () => gesture.current?.end(), []);
 
   return (
     <label className={styles.field}>

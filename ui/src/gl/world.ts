@@ -450,9 +450,16 @@ export class WorldRenderer {
     this.counts.seats = seats.length / faceStride;
   }
 
-  // The page's part of it (the atlas's scratch canvas); the GPU's goes with the context.
+  // Everything this made, given back: the page's part (the atlas's scratch canvas) and the
+  // GPU's. The context itself lives as long as its canvas, and a canvas has only ever one, so
+  // without this every map that was ever shown would keep its buffers and its atlas (16 MB).
   dispose() {
+    const { gl } = this;
     this.atlas.dispose();
+    for (const p of [this.faces, this.lines, this.tris, this.vignette, this.figures, this.overlayProgram, this.blit]) gl.deleteProgram(p.program);
+    for (const b of [this.figureVertices, this.figureOrder, this.roomFaces, this.roomCeiling, this.roomLines, this.seats, this.trisBuffer, this.quad])
+      gl.deleteBuffer(b);
+    gl.deleteTexture(this.still.texture);
   }
 
   setFigures(data: Float32Array) {
@@ -739,9 +746,10 @@ function program(gl: WebGLRenderingContext, vertex: string, fragment: string): P
     return s;
   };
   const p = gl.createProgram()!;
-  gl.attachShader(p, shader(gl.VERTEX_SHADER, vertex));
-  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fragment));
+  const shaders = [shader(gl.VERTEX_SHADER, vertex), shader(gl.FRAGMENT_SHADER, fragment)];
+  for (const s of shaders) gl.attachShader(p, s);
   gl.linkProgram(p);
+  for (const s of shaders) gl.deleteShader(s); // the linked program keeps what it needs; they go with it
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`program: ${gl.getProgramInfoLog(p)}`);
   const attributes: Record<string, number> = {};
   for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES); i++) {

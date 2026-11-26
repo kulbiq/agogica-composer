@@ -182,10 +182,23 @@ export class StagePainter {
 
   // A lost context (the GPU was reset, the computer slept) takes everything on the GPU with it:
   // once it is back, all of it is built again.
-  private onLost = (e: Event) => e.preventDefault(); // or it never comes back
+  // `lost`: nothing is drawn meanwhile (the map says so, see StageMap); `onChange` tells it.
+  lost = false;
+  onLostChange?: (lost: boolean) => void;
+  private onLost = (e: Event) => {
+    e.preventDefault(); // or it never comes back
+    this.lost = true;
+    this.onLostChange?.(true);
+  };
   private onRestored = () => {
     this.world.dispose();
-    this.world = new WorldRenderer(this.canvas);
+    try {
+      this.world = new WorldRenderer(this.canvas);
+    } catch {
+      return; // still no drawing: the notice stays
+    }
+    this.lost = false;
+    this.onLostChange?.(false);
     this.roomFor = undefined;
     this.figures = undefined;
     this.seatsBase = undefined;
