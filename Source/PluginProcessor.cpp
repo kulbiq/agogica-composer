@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "stage/Seating.h"
+#include "stage/StateRules.h"
 #include "dsp/Geometry.h"
 
 namespace
@@ -225,28 +226,28 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     // Audio depends only on this instance's own parameters (never on UI pushes or other
     // instances), so offline bounces and ahead-of-time rendering stay correct.
     Acoustics acoustics;
-    const auto roomSize = audioParams.roomSize->load();
-    acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX->load(), audioParams.listenerY->load() }, roomSize);
-    acoustics.player = geometry::clampToRoom ({ audioParams.playerX->load(), audioParams.playerY->load() }, roomSize);
-    acoustics.mode = audioParams.outputMode->load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
+    const auto roomSize = audioParams.roomSize.load();
+    acoustics.listener = geometry::clampToRoom ({ audioParams.listenerX.load(), audioParams.listenerY.load() }, roomSize);
+    acoustics.player = geometry::clampToRoom ({ audioParams.playerX.load(), audioParams.playerY.load() }, roomSize);
+    acoustics.mode = audioParams.outputMode.load() > 0.5f ? OutputMode::binaural : OutputMode::stereo;
 
     // Which way the listener faces, in Binaural only (stereo speakers don't turn): the stage's
     // direction, a parameter (so exports and automation have it), plus the tracked head, a
     // live monitoring aid that never reaches an export.
     if (acoustics.mode == OutputMode::binaural)
     {
-        acoustics.headYaw = audioParams.listenerYaw->load();
+        acoustics.headYaw = audioParams.listenerYaw.load();
 
         if (! isNonRealtime() && headTrackingOn.load (std::memory_order_relaxed))
             acoustics.headYaw += headTracking->yaw();
     }
 
     auto& adjust = acoustics.adjust;
-    adjust.distanceExponent = audioParams.proDistanceLaw->load() / params::dbPerDoublingFreeField;
+    adjust.distanceExponent = audioParams.proDistanceLaw.load() / params::dbPerDoublingFreeField;
 
     // The delay stretched (dsp/DelayStretch.h); a new multiplier only after a pause, and then
     // the delay jumps to it.
-    const auto stretchFrom = audioParams.proDelayFrom->load(), stretchTo = audioParams.proDelayTo->load();
+    const auto stretchFrom = audioParams.proDelayFrom.load(), stretchTo = audioParams.proDelayTo.load();
     const auto heldScale = delayStretch.multiplier (stretchFrom, stretchTo);
     const auto took = delayStretch.update (peak, buffer.getNumSamples(), acoustics.player, songSeconds,
                                            geometry::delayMs (acoustics.player, acoustics.listener) / 1000.0f, stretchFrom, stretchTo);
@@ -332,6 +333,7 @@ void ComposerProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (state.state.getType()))
     {
         auto tree = juce::ValueTree::fromXml (*xml);
+        stage::sanitise (tree);
 
         // Saved before a parameter whose default has changed: what it had then.
         for (const auto& [paramId, value] : params::asBeforeTheyExisted)

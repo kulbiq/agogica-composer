@@ -127,7 +127,7 @@ void setName (ComposerProcessor& self, int id, const juce::String& name)
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
     {
         auto* target = memberWithId (members, id);
-        const auto cut = name.trim().substring (0, maxNameLength);
+        const auto cut = cutName (name);
 
         if (target == nullptr)
             return;
@@ -150,16 +150,12 @@ void setName (ComposerProcessor& self, int id, const juce::String& name)
 
 void setTrackName (ComposerProcessor& self, int id, const juce::String& name)
 {
-    self.registry->withMember (id, [&] (ComposerProcessor& p) { p.setNameOverride (name.trim().substring (0, maxNameLength)); });
+    self.registry->withMember (id, [&] (ComposerProcessor& p) { p.setNameOverride (cutName (name)); });
 }
 
 void setIcon (ComposerProcessor& self, int id, const juce::String& key)
 {
-    // The same keys as ui/src/icons.tsx (iconKeys); "" = automatic.
-    static const juce::StringArray known { "", "violin", "cello", "flute", "reed", "horn", "trumpet", "timpani",
-                                           "drum", "piano", "organ", "harp", "voice", "other" };
-
-    if (! known.contains (key))
+    if (! isIcon (key))
         return;
 
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
@@ -183,13 +179,7 @@ void setHeadTracking (ComposerProcessor& self, bool on)
 
 void setAudience (ComposerProcessor& self, const juce::String& seats)
 {
-    // ui/src/audience.ts: 65 x 65 seats, one bit each, 529 bytes in base64 (audience.test.ts
-    // checks this number against the page).
-    constexpr int audienceLength = 708;
-
-    if (seats.isNotEmpty()
-        && (seats.length() != audienceLength
-            || ! seats.containsOnly ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")))
+    if (! isAudience (seats))
         return;
 
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)

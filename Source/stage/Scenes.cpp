@@ -1,4 +1,5 @@
 #include "Scenes.h"
+#include "StateRules.h"
 
 #include <map>
 
@@ -6,7 +7,7 @@ namespace stage
 {
 void setScene (ComposerProcessor& self, const juce::String& scene)
 {
-    if (scene.length() != 1 || ! juce::String ("ABCDEFGH").contains (scene))
+    if (! isScene (scene))
         return;
 
     self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)

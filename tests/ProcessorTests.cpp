@@ -715,6 +715,55 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK_THAT (p.getParam ("proDistanceLaw"), WithinAbs (params::legacyDistanceLaw, 1e-4));
     }
 
+    SECTION ("a project file holding what the page could never have written is cleaned on load")
+    {
+        // The page's writes are checked (bridge/StageEdits); a project file is somebody else's
+        // bytes. Whatever it says, the state afterwards is one the page could have made.
+        const auto data = savedProject();
+        auto xml = juce::AudioProcessor::getXmlFromBinary (data.getData(), (int) data.getSize());
+        REQUIRE (xml != nullptr);
+        xml->setAttribute ("scene", "not a scene");
+        xml->setAttribute ("name", juce::String::repeatedString ("n", 500));
+        xml->setAttribute ("playerName", juce::String::repeatedString ("p", 500));
+        xml->setAttribute ("player", juce::String::repeatedString ("k", 5000));
+        xml->setAttribute ("icon", "<script>");
+        xml->setAttribute ("audience", juce::String::repeatedString ("!", 100000));
+        xml->getChildByAttribute ("id", "playerX")->setAttribute ("value", "nan");
+        xml->getChildByAttribute ("id", "listenerY")->setAttribute ("value", "inf");
+        auto* scenes = xml->getChildByName ("scenes");
+        REQUIRE (scenes != nullptr);
+        scenes->createNewChildElement ("Z")->setAttribute ("playerX", 1.0);
+        scenes->getChildByName ("A")->setAttribute ("playerY", "nan");
+
+        juce::MemoryBlock hostile;
+        juce::AudioProcessor::copyXmlToBinary (*xml, hostile);
+        load (p, hostile);
+
+        CHECK (p.getScene() == "A");
+        CHECK (p.getStoredScenes().contains ("A"));
+        CHECK_FALSE (p.getStoredScenes().contains ("Z"));
+        CHECK (p.getDisplayName() == juce::String::repeatedString ("n", stage::maxNameLength));
+        CHECK (p.getPlayerName() == juce::String::repeatedString ("p", stage::maxNameLength));
+        CHECK (p.getPlayerKey().length() <= stage::maxNameLength);
+        CHECK (p.getIcon().isEmpty());
+        CHECK (p.getAudience().isEmpty());
+        CHECK (std::isfinite (p.getParam ("playerX")));
+        CHECK (std::isfinite (p.getParam ("listenerY")));
+        CHECK_THAT (p.getParam ("roomSize"), WithinAbs (35.0, 1e-4)); // what was fine is kept
+
+        // The scene's bad value is gone: recalling it keeps a place that is a number.
+        stage::setScene (p, "A");
+        CHECK (std::isfinite (p.getParam ("playerY")));
+
+        // And the cleaned state saves and loads again as it is.
+        juce::MemoryBlock saved;
+        p.getStateInformation (saved);
+        ComposerProcessor q;
+        load (q, saved);
+        CHECK (q.getDisplayName() == p.getDisplayName());
+        CHECK (q.getStoredScenes() == p.getStoredScenes());
+    }
+
     SECTION ("empty, garbage, truncated or foreign data leaves the state untouched")
     {
         set (p, "roomSize", 15.0f);
@@ -826,6 +875,39 @@ TEST_CASE ("output stays finite for any parameter values (fuzz)", "[slow][integr
         for (int ch = 0; ch < 2; ++ch)
             for (int i = 0; i < 256; ++i)
                 REQUIRE (std::isfinite (buffer.getSample (ch, i)));
+    }
+
+    // A host that hands over a value that isn't a number (one parameter at a time, then all,
+    // in both output modes): the sound stays a number then, and nothing of it is left once
+    // the values are good again.
+    const auto play = [&]
+    {
+        for (int i = 0; i < 256; ++i)
+            buffer.setSample (0, i, rng.nextFloat() * 2.0f - 1.0f), buffer.setSample (1, i, rng.nextFloat() * 2.0f - 1.0f);
+
+        p.processBlock (buffer, midi);
+
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 256; ++i)
+                REQUIRE (std::isfinite (buffer.getSample (ch, i)));
+    };
+
+    for (const auto mode : { 0.0f, 1.0f })
+    {
+        for (int bad = 0; bad <= ids.size(); ++bad)
+        {
+            for (int i = 0; i < ids.size(); ++i)
+                p.state.getParameter (ids[i])->setValueNotifyingHost (i == bad || bad == ids.size() ? std::numeric_limits<float>::quiet_NaN() : 0.5f);
+
+            for (int block = 0; block < 4; ++block)
+                play();
+
+            for (const auto& id : ids)
+                p.state.getParameter (id)->setValueNotifyingHost (id == "outputMode" ? mode : 0.5f);
+
+            for (int block = 0; block < 400; ++block) // past the longest delay and every fade
+                play();
+        }
     }
 }
 

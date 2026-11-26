@@ -53,7 +53,13 @@ public:
     float readInputLevel (juce::uint32 nowMs);
 
     // Stage data (message thread). Positions are unclamped, in metres.
-    float getParam (const juce::String& paramId) const  { return state.getRawParameterValue (paramId)->load(); }
+    // Always a number: for a NaN from the host, the default (a NaN isn't JSON: the page would lose the whole stage).
+    float getParam (const juce::String& paramId) const
+    {
+        const auto v = state.getRawParameterValue (paramId)->load();
+        auto* param = state.getParameter (paramId);
+        return std::isfinite (v) ? v : param->convertFrom0to1 (param->getDefaultValue());
+    }
     // Scenes A-H: alternative layouts of the whole ensemble. The parameters hold the
     // active scene; the others are stored in the state tree. See stage::setScene.
     juce::String getScene() const                       { return state.state.getProperty ("scene", "A"); }
@@ -135,31 +141,34 @@ private:
         state.state.setProperty (name, value, nullptr);
     }
 
-    // Cached for the audio thread (looking up by name would allocate a String).
-    struct AudioParams
+    // A parameter for the audio thread: cached (looking up by name would allocate a String),
+    // and always a number - a host or a project file may hand over a NaN, which would go all
+    // the way to the sound and stay in the delays and fades; the default stands in for it.
+    struct AudioParam
     {
-        std::atomic<float>* roomSize;
-        std::atomic<float>* listenerX;
-        std::atomic<float>* listenerY;
-        std::atomic<float>* listenerYaw;
-        std::atomic<float>* playerX;
-        std::atomic<float>* playerY;
-        std::atomic<float>* outputMode;
-        std::atomic<float>* proDistanceLaw;
-        std::atomic<float>* proDelayFrom;
-        std::atomic<float>* proDelayTo;
+        AudioParam (juce::AudioProcessorValueTreeState& s, const char* paramId)
+            : value (s.getRawParameterValue (paramId)),
+              fallback (s.getParameter (paramId)->convertFrom0to1 (s.getParameter (paramId)->getDefaultValue())) {}
+
+        float load() const noexcept
+        {
+            const auto v = value->load (std::memory_order_relaxed);
+            return std::isfinite (v) ? v : fallback;
+        }
+
+        std::atomic<float>* value;
+        float fallback;
     };
 
-    const AudioParams audioParams { state.getRawParameterValue (params::roomSize),
-                                    state.getRawParameterValue (params::listenerX),
-                                    state.getRawParameterValue (params::listenerY),
-                                    state.getRawParameterValue (params::listenerYaw),
-                                    state.getRawParameterValue (params::playerX),
-                                    state.getRawParameterValue (params::playerY),
-                                    state.getRawParameterValue (params::outputMode),
-                                    state.getRawParameterValue (params::proDistanceLaw),
-                                    state.getRawParameterValue (params::proDelayFrom),
-                                    state.getRawParameterValue (params::proDelayTo) };
+    struct AudioParams
+    {
+        AudioParam roomSize, listenerX, listenerY, listenerYaw, playerX, playerY, outputMode, proDistanceLaw, proDelayFrom, proDelayTo;
+    };
+
+    const AudioParams audioParams { { state, params::roomSize },   { state, params::listenerX },      { state, params::listenerY },
+                                    { state, params::listenerYaw }, { state, params::playerX },       { state, params::playerY },
+                                    { state, params::outputMode }, { state, params::proDistanceLaw }, { state, params::proDelayFrom },
+                                    { state, params::proDelayTo } };
 
     // The player's mono input, and the sound's way from it to the listener's two ears.
     History history;

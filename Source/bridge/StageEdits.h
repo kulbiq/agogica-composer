@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../PluginProcessor.h"
+#include "../stage/StateRules.h"
 
 // How the page's edits land on parameters, across all instances in the process.
 namespace stage
@@ -29,9 +30,8 @@ private:
 
 // Renames the player of track `id`. A player of its own is its track, so that renames the
 // track (empty = back to the host track name); a player with several tracks gets a name of
-// its own (empty = its first track's). setTrackName renames one track. Longer names are cut:
-// names are saved with the project and sent to every window.
-constexpr int maxNameLength = 64;
+// its own (empty = its first track's). setTrackName renames one track. Longer names are cut
+// (stage/StateRules.h).
 void setName (ComposerProcessor& self, int id, const juce::String& name);
 void setTrackName (ComposerProcessor& self, int id, const juce::String& name);
 
