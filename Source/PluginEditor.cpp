@@ -9,7 +9,7 @@ namespace
 juce::var getBuildInfo (const juce::AudioProcessor& processor)
 {
     auto info = std::make_unique<juce::DynamicObject>();
-    info->setProperty ("version", JucePlugin_VersionString);
+    info->setProperty ("version", COMPOSER_VERSION_DISPLAY); // with "-beta.1" or "-dev", see CMakeLists.txt
     info->setProperty ("format", juce::AudioProcessor::getWrapperTypeDescription (processor.wrapperType));
     info->setProperty ("host", juce::File::getSpecialLocation (juce::File::hostApplicationPath).getFileNameWithoutExtension());
     info->setProperty ("credits", "Binaural HRTF: SADIE II database, KU100 (University of York), Apache License 2.0");

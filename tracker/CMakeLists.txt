@@ -10,6 +10,8 @@ option(COMPOSER_TRACKER_SKIP_MODELS "Build the Tracker without its models" OFF)
 # ponytail: macOS arm64 only - ONNX Runtime ships no universal macOS build; Intel Macs need a
 # source build.
 set(ONNXRUNTIME_VERSION 1.30.0)
+# That build of ONNX Runtime needs macOS 14, so the Tracker does too (the plugin: 11.0).
+set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0)
 include(FetchContent)
 if(APPLE)
     FetchContent_Declare(onnxruntime

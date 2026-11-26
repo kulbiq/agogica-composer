@@ -1,18 +1,40 @@
 cmake_minimum_required(VERSION 3.22)
 
-# Version comes from the latest vX.Y.Z git tag; untagged checkouts build as 0.1.0.
+# Version comes from the latest vX.Y.Z git tag, which may carry a pre-release suffix
+# (v0.2.0-beta.1). The plugin's own version stays numeric (hosts and bundles want X.Y.Z);
+# COMPOSER_VERSION_DISPLAY is what people read: with the suffix, and with "-dev" on any
+# commit that isn't the tagged one. Untagged checkouts build as 0.1.0-dev.
 execute_process(
     COMMAND git describe --tags --match "v[0-9]*" --abbrev=0
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     OUTPUT_VARIABLE COMPOSER_GIT_TAG
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET)
+execute_process(
+    COMMAND git describe --tags --match "v[0-9]*" --exact-match
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE COMPOSER_GIT_EXACT_TAG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
 
-if(COMPOSER_GIT_TAG MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)$")
+if(COMPOSER_GIT_TAG MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9A-Za-z.]+)?$")
     set(COMPOSER_VERSION ${CMAKE_MATCH_1})
+    set(COMPOSER_VERSION_DISPLAY ${CMAKE_MATCH_1}${CMAKE_MATCH_2})
 else()
     set(COMPOSER_VERSION 0.1.0)
+    set(COMPOSER_VERSION_DISPLAY 0.1.0)
 endif()
+
+if(NOT COMPOSER_GIT_EXACT_TAG OR NOT COMPOSER_GIT_EXACT_TAG STREQUAL COMPOSER_GIT_TAG)
+    string(APPEND COMPOSER_VERSION_DISPLAY "-dev")
+endif()
+message(STATUS "Composer ${COMPOSER_VERSION_DISPLAY} (plugin version ${COMPOSER_VERSION})")
+file(WRITE ${CMAKE_BINARY_DIR}/version.txt "${COMPOSER_VERSION_DISPLAY}\n") # scripts/release-macos.sh reads it
+
+# The oldest macOS the binaries load on (11.0 is the first for Apple Silicon). Without this
+# they only load on the build machine's own system or newer. Before project(): it sets the SDK
+# flags. FORCE: a build folder configured before this line existed has an empty value cached.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Oldest macOS the plugin loads on" FORCE)
 
 project(Composer VERSION ${COMPOSER_VERSION} LANGUAGES C CXX)
 
@@ -76,7 +98,8 @@ target_compile_definitions(Composer PUBLIC
     JUCE_WEB_BROWSER=1
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1)
+    JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
+    COMPOSER_VERSION_DISPLAY="${COMPOSER_VERSION_DISPLAY}")
 
 # Debug only: load the UI from `npm run dev` instead of the embedded zip.
 option(COMPOSER_UI_DEV_SERVER "Debug builds load the web UI from the Vite dev server" OFF)
