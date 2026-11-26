@@ -51,10 +51,15 @@ cmake --preset release && cmake --build --preset release --target ComposerTracke
 A full build installs per user, without admin rights: the plugins into `~/Library/Audio/Plug-Ins`, the tracker into `~/Applications` (target `ComposerTrackerInstall`).
 After rebuilding, quit the DAW completely (Dorico's audio engine keeps the old plugin loaded) and quit a running tracker before starting the new one.
 
-## Licences to resolve before a release
-- **HFHPE** (the tracker's head-pose model; code MIT): its weights carry no stated licence, so the author must confirm the terms before the tracker ships (`tracker/models/MODELS.md`).
-- The YOLOX head detector and the SADIE II HRTFs are Apache-2.0 (attribution shown in the UI).
-- Composer is free and open source under AGPLv3 (JUCE's open-source licence). The dependencies are compatible with AGPLv3, excluding the HFHPE weights, whose licence terms remain unconfirmed.
+## Licence
+
+Composer is free and open source under the GNU Affero General Public License, version 3 (`LICENSE`), JUCE's open-source licence.
+What the plugin contains from others, and under which terms, is listed in `THIRD_PARTY_NOTICES.md`; the release zips carry both files.
+The SADIE II HRTFs are Apache-2.0 (`Resources/hrir/`, attribution shown in the UI).
+
+To resolve before the tracker ships: the weights of **HFHPE** (the tracker's head-pose model; code MIT) carry no stated licence, so the author must confirm the terms first (`tracker/models/MODELS.md`).
+The YOLOX head detector is Apache-2.0.
+Until then the tracker is built for development only and is never part of a release.
 
 ## Roadmap
 
