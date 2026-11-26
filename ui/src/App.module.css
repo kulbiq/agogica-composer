@@ -1089,14 +1089,9 @@ button.status:focus-visible {
   background: var(--paper);
 }
 
-.mapTools .chip:disabled {
-  color: var(--ink-faint);
-  border-color: var(--line);
-  cursor: default;
-}
-
 .toolsEnd {
   margin-left: auto;
+  gap: 8px;
 }
 
 /* Shift-drag on the map: the rectangle that selects. */
