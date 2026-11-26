@@ -5,12 +5,13 @@ import { seat } from "./players";
 import PlayersPanel from "./PlayersPanel";
 import { useNumberPref, usePref } from "./prefs";
 import ResizeGrip from "./ResizeGrip";
-import StageMap, { type Brush, type MapNames, type MapView, type NodeKey } from "./StageMap";
+import StageMap, { type MapNames, type MapView, type NodeKey, type SeatTool, type Tool } from "./StageMap";
 import TopBar from "./TopBar";
 
 const views = ["grid", "azimuth"] as const satisfies readonly MapView[];
 const nameModes = ["selected", "all"] as const satisfies readonly MapNames[];
-const walkModes = ["move", "spectate"] as const;
+const pointerTools = ["select", "drag"] as const satisfies readonly Tool[];
+const seatTools = ["select", "paint", "erase"] as const satisfies readonly SeatTool[];
 
 export default function App() {
   const snapshot = useStage();
@@ -20,9 +21,10 @@ export default function App() {
   const [view, setView] = usePref<MapView>("mapView", "grid", views);
   const [names, setNames] = usePref<MapNames>("mapNames", "selected", nameModes);
   const [in3d, setIn3d] = useState(false); // not saved: the editor always opens on the map
-  const [brush, setBrush] = useState<Brush | null>(null); // painting the audience
-  // W A S D and turning: "move" moves the listener (the sound follows), "spectate" only the view.
-  const [walkMode, setWalkMode] = usePref("walkMode", "move", walkModes);
+  const [tool, setTool] = useState<Tool>("drag"); // not saved: the editor always opens on Drag
+  const [seatTool, setSeatTool] = useState<SeatTool | null>(null); // editing the audience, with what
+  const [seatsPicked, setSeatsPicked] = useState(0);
+  const [eraseRequest, setEraseRequest] = useState(0);
   const [zoomed, setZoomed] = useState(false);
   const [fitRequest, setFitRequest] = useState(0);
 
@@ -85,14 +87,16 @@ export default function App() {
                 names={names}
                 in3d={in3d}
                 onLeave3d={() => setIn3d(false)}
-                brush={brush}
-                spectate={walkMode === "spectate"}
+                tool={tool}
+                seatTool={seatTool}
+                eraseRequest={eraseRequest}
+                onSeatsPicked={setSeatsPicked}
                 top={toolsBottom + 10} // the gap the map has always had under one row
                 fitRequest={fitRequest}
                 onZoomed={setZoomed}
               />
               <div className={`${styles.mapTools} ${in3d ? styles.mapToolsRoom : ""}`} ref={tools}>
-                <div className={`${styles.segments} ${styles.viewSwitch}`} role="radiogroup" aria-label="View">
+                <div className={styles.segments} role="radiogroup" aria-label="View">
                   {views.map((v) => (
                     <button
                       key={v}
@@ -114,66 +118,79 @@ export default function App() {
                     title="Walk the room at the listener's eyes"
                     onClick={() => {
                       setIn3d(true);
-                      setBrush(null); // painting is for the map
+                      setSeatTool(null); // the audience is edited on the map
                     }}
                   >
                     3D
                   </button>
                 </div>
-                <div className={`${styles.segments} ${styles.viewSwitch}`} role="radiogroup" aria-label="W A S D">
-                  {walkModes.map((m) => (
-                    <button
-                      key={m}
-                      className={`${styles.chip} ${styles.segment}`}
-                      role="radio"
-                      aria-checked={walkMode === m}
-                      title={
-                        m === "move"
-                          ? "W A S D and turning move the listener: the sound follows"
-                          : "W A S D and turning move only your view: the sound stays"
-                      }
-                      onClick={() => setWalkMode(m)}
-                    >
-                      {m === "move" ? "Move" : "Spectate"}
-                    </button>
-                  ))}
-                </div>
+                {!in3d && !seatTool && (
+                  <div className={styles.segments} role="radiogroup" aria-label="Pointer">
+                    {pointerTools.map((t) => (
+                      <button
+                        key={t}
+                        className={`${styles.chip} ${styles.segment}`}
+                        role="radio"
+                        aria-checked={tool === t}
+                        title={
+                          t === "select"
+                            ? "Drag a rectangle to select the players inside it"
+                            : "Drag a player to move it, empty space to move the view"
+                        }
+                        onClick={() => setTool(t)}
+                      >
+                        {t === "select" ? "Select" : "Drag"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!in3d && zoomed && (
+                  <button className={`${styles.chip} ${styles.segment}`} title="Show the whole room" onClick={() => setFitRequest((n) => n + 1)}>
+                    Fit
+                  </button>
+                )}
                 {!in3d && (
-                  <div className={`${styles.segments} ${styles.viewSwitch}`}>
+                  <div className={`${styles.segments} ${styles.toolsEnd}`}>
+                    {seatTool && (
+                      // The audience's tools. With seats selected, Erase takes exactly those away
+                      // (and says how many); otherwise it is the brush that rubs seats out.
+                      <div className={styles.segments} role="radiogroup" aria-label="Audience tool">
+                        {seatTools.map((t) => {
+                          const eraseSelected = t === "erase" && seatsPicked > 0;
+                          return (
+                            <button
+                              key={t}
+                              className={`${styles.chip} ${styles.segment}`}
+                              role="radio"
+                              aria-checked={seatTool === t && !eraseSelected}
+                              title={
+                                t === "select"
+                                  ? "Drag a rectangle (or click) to select seats; Shift adds. Erase or Delete takes them away"
+                                  : t === "paint"
+                                    ? "Drag to seat the audience; Shift: a wider brush, Alt: rub out"
+                                    : eraseSelected
+                                      ? `Take away the ${seatsPicked} selected seats (Delete)`
+                                      : "Drag to take seats away; Shift: a wider brush"
+                              }
+                              onClick={() => (eraseSelected ? setEraseRequest((n) => n + 1) : setSeatTool(t))}
+                            >
+                              {t === "select" ? "Select" : t === "paint" ? "Paint" : eraseSelected ? `Erase ${seatsPicked}` : "Erase"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <button
                       className={`${styles.chip} ${styles.segment}`}
-                      aria-pressed={brush !== null}
-                      title={brush ? "Done painting the audience" : "Paint where the audience sits"}
-                      onClick={() => setBrush(brush ? null : "paint")}
+                      aria-pressed={seatTool !== null}
+                      title={seatTool ? "Done with the audience" : "Edit where the audience sits"}
+                      onClick={() => setSeatTool(seatTool ? null : "paint")}
                     >
                       Audience
                     </button>
                   </div>
                 )}
-                {!in3d && zoomed && (
-                  <div className={`${styles.segments} ${styles.viewSwitch}`}>
-                    <button className={`${styles.chip} ${styles.segment}`} title="Show the whole room" onClick={() => setFitRequest((n) => n + 1)}>
-                      Fit
-                    </button>
-                  </div>
-                )}
               </div>
-              {brush && !in3d && (
-                <div className={`${styles.segments} ${styles.viewSwitch} ${styles.brushBar}`} role="radiogroup" aria-label="Brush">
-                  {(["paint", "erase"] as const).map((b) => (
-                    <button
-                      key={b}
-                      className={`${styles.chip} ${styles.segment}`}
-                      role="radio"
-                      aria-checked={brush === b}
-                      title={b === "paint" ? "Drag to seat the audience; Shift: a wider brush, Alt: rub out" : "Drag to take seats away; Shift: a wider brush"}
-                      onClick={() => setBrush(b)}
-                    >
-                      {b === "paint" ? "Paint" : "Erase"}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </>

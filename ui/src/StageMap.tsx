@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { cellOf, decodeAudience, encodeAudience, seatPitch, setSeat, type Audience } from "./audience";
+import { cellOf, decodeAudience, emptyAudience, encodeAudience, hasSeat, seatPitch, setSeat, type Audience } from "./audience";
 import { beginGesture, setAudience, setParams, useEvent, type Gesture, type Point } from "./bridge";
 import type { SeatedStage } from "./players";
 import styles from "./App.module.css";
@@ -22,16 +22,27 @@ type Props = {
   names: MapNames;
   in3d: boolean; // the room at the listener's eyes instead of the map
   onLeave3d: () => void;
-  brush: Brush | null; // painting the audience: a drag paints seats or rubs them out
-  spectate: boolean; // W A S D and turning move only the view, never the listener
+  tool: Tool;
+  seatTool: SeatTool | null; // editing the audience (see SeatTool), or not
+  eraseRequest: number; // changes when the selected seats should go
+  onSeatsPicked: (count: number) => void;
   top: number; // px of tools over the map's top edge
   fitRequest: number; // changes when the whole room should be shown again
   onZoomed: (zoomed: boolean) => void;
 };
 
-export type Brush = "paint" | "erase";
+// What a drag on the map does to the players. Drag: a node moves (all of the selected, when it
+// is one of them), empty space pans, Shift draws a rectangle that selects. Select: a drag always
+// draws a rectangle that selects the players inside it; a click selects. Shift, Cmd or Ctrl add
+// to the selection in both.
+export type Tool = "drag" | "select";
 
-// On the map: W A S D (Shift faster) move the listener, or with `spectate` the view.
+// What a drag does while the audience is edited. Select: a rectangle (or a click) selects seats,
+// Shift, Cmd or Ctrl add; the selected ones go with Erase or Delete. Paint and Erase: brushes
+// that seat the audience or take seats away (Alt: the other one; Shift: 3 x 3 seats).
+export type SeatTool = "select" | "paint" | "erase";
+
+// On the map: W A S D (Shift faster) move the listener.
 const mapWalkKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight"]);
 
 const nudgeKeys: Record<string, Point> = {
@@ -51,16 +62,28 @@ const roomKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown"
 const turnDegreesPerSecond = 90;
 const lookDegreesPerPixel = 0.25;
 
-// A press on the map: on empty space it pans the view (Shift: draws a rectangle that selects);
-// a press on a selected node of several moves them all.
-type MapPress = { pointerId: number; kind: "pan" | "box"; x0: number; y0: number; x: number; y: number; moved: boolean; base: readonly NodeKey[] };
+// A press on the map: on empty space it pans the view, or draws a rectangle that selects
+// (Shift, or the Select tool); a press on a selected node of several moves them all.
+// `base` and `seatBase`: what was selected before (kept when adding), `hit`: the node under it.
+type MapPress = {
+  pointerId: number;
+  kind: "pan" | "box";
+  x0: number;
+  y0: number;
+  x: number;
+  y: number;
+  moved: boolean;
+  base: readonly NodeKey[];
+  seats: boolean; // the rectangle selects seats, not players
+  seatBase: Audience;
+  hit: NodeKey | null;
+};
 type Moving = { pointerId: number; key: NodeKey; from: Point; moved: boolean; nodes: Map<NodeKey, { gesture: Gesture; start: Point }> };
 type Box = { x0: number; y0: number; x1: number; y1: number };
 
 export default function StageMap(props: Props) {
-  const { stage, selfId, selected, selection, onSelect, view: mapView, names, in3d, onLeave3d, brush, spectate, top, fitRequest, onZoomed } = props;
+  const { stage, selfId, selected, selection, onSelect, view: mapView, names, in3d, onLeave3d, tool, seatTool, eraseRequest, onSeatsPicked, top, fitRequest, onZoomed } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const textCopyRef = useRef<HTMLCanvasElement>(null);
   const [standing, setStanding] = useState(false);
 
   // The rAF loop reads the latest props through refs instead of restarting.
@@ -72,8 +95,20 @@ export default function StageMap(props: Props) {
   if (painted.current && painted.current.sent === stage.audience) painted.current = null;
   const audience = stroke.current?.seats ?? painted.current?.seats ?? saved;
 
-  const latest = useRef({ stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: brush !== null, spectate, top });
-  latest.current = { stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: brush !== null, spectate, top };
+  // Seats selected while the audience is edited (drawn stronger; Erase or Delete takes them away).
+  const picked = useRef<Audience>(emptyAudience());
+  const pickedCount = useRef(0);
+  const pick = (seats: Audience) => {
+    picked.current = seats;
+    let n = 0;
+    for (const b of seats) for (let v = b; v; v &= v - 1) n++;
+    pickedCount.current = n;
+    onSeatsPicked(n);
+    poked.current = performance.now();
+  };
+
+  const latest = useRef({ stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top });
+  latest.current = { stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top };
 
   // Nodes the user is moving are drawn from here (exactly under the pointer)
   // until C++ reports the new position back.
@@ -97,7 +132,6 @@ export default function StageMap(props: Props) {
   // view doesn't jump back to the snapshot's older value.
   const turned = useRef<{ yaw: number; until: number } | null>(null);
   const walking = useRef<{ gesture: Gesture; at: Point } | null>(null);
-  const spectator = useRef<Point | null>(null); // where the eyes are while spectating in the room
   const held = useRef(new Set<string>()); // keys held down
   const lookDrag = useRef<{ pointerId: number; x: number; y: number; moved: boolean; hit: NodeKey | null } | null>(null);
   // Where the eyes look when nothing is written: up and down always, and left and right in
@@ -109,15 +143,13 @@ export default function StageMap(props: Props) {
   const headYaw = useRef(0); // degrees clockwise; its own event, so the stage doesn't change every frame
   useEvent("headYaw", (yaw) => (headYaw.current = yaw));
 
+  // Turning writes listenerYaw only in Binaural (stereo speakers don't turn); otherwise it turns the view.
   const binaural = () => latest.current.stage.outputMode === "binaural";
-  // Turning writes listenerYaw only in Binaural (stereo speakers don't turn) and not while
-  // spectating; otherwise it turns the view.
-  const turnsListener = () => binaural() && !latest.current.spectate;
 
-  // Turns the listener (or the view, see turnsListener). The angle adds up unrounded; only
-  // what is sent is rounded to the parameter's step.
+  // Turns the listener (or in Stereo the view). The angle adds up unrounded; only what is sent
+  // is rounded to the parameter's step.
   const turnBy = (degrees: number) => {
-    if (!turnsListener()) {
+    if (!binaural()) {
       look.current.yaw = wrap(look.current.yaw + degrees);
       return;
     }
@@ -143,7 +175,7 @@ export default function StageMap(props: Props) {
   // view's own direction.
   const faceFront = () => {
     look.current.pitch = 0;
-    if (turnsListener()) {
+    if (binaural()) {
       endTurn();
       setParams(selfId, { listenerYaw: 0 });
       turned.current = { yaw: 0, until: performance.now() + 1000 };
@@ -182,17 +214,14 @@ export default function StageMap(props: Props) {
     return endAll;
   }, [in3d]); // endAll touches refs only
 
-  // Spectating: the eyes start at the listener, looking where it looks, each time the room
-  // opens; back to moving, they are the listener's again.
+  // Selected seats stay selected only while the Select tool is on them.
   useEffect(() => {
-    if (!spectate) spectator.current = null;
-    else if (in3d) {
-      endWalk();
-      endTurn();
-      spectator.current = { ...(overrides.current.get("listener") ?? stage.listener) };
-      if (binaural()) look.current.yaw = wrap(yaw() + (stage.headTracking.on ? headYaw.current : 0));
-    }
-  }, [spectate, in3d]); // the rest is read once, when it starts
+    if (seatTool !== "select" && pickedCount.current) pick(emptyAudience());
+  }, [seatTool]);
+
+  useEffect(() => {
+    if (eraseRequest) erasePicked();
+  }, [eraseRequest]);
 
   useEffect(() => {
     if (fitRequest) zoomTo(fitted);
@@ -218,7 +247,6 @@ export default function StageMap(props: Props) {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
     let W = 0;
     let H = 0;
     let frame = 0;
@@ -240,26 +268,26 @@ export default function StageMap(props: Props) {
     theme.addEventListener("change", readTheme);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    let dpr = 0; // the pixel ratio the canvas was last sized for
+    let dpr = 0; // the pixel ratio the canvases are drawn for (the painter sizes them)
     let lastPaint = -Infinity;
     const resize = () => {
-      lastPaint = -Infinity; // sizing a canvas clears it: draw the next frame whatever the pace
+      lastPaint = -Infinity; // draw the next frame whatever the pace
       const r = canvas.getBoundingClientRect();
       dpr = window.devicePixelRatio || 1;
       W = r.width;
       H = r.height;
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
-    const painter = new StagePainter(textCopyRef.current!);
-    // Levels arrive 30 times a second and the ring breathes slowly, so a resting map is drawn
-    // 30 times a second; anything being moved, by the user or by easing, gets every frame.
+    const painter = new StagePainter(canvas);
+    // Levels arrive 30 times a second and the ring breathes slowly, so a resting map is looked
+    // at 30 times a second (and drawn only if something in it changed); anything being moved,
+    // by the user or by easing, 60 times a second. Not every frame: a 120 Hz screen would draw
+    // twice as many, for motion the eye can't tell apart, at twice the cost.
     const restingFrameMs = 1000 / 30;
+    const movingFrameMs = 1000 / 60;
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -267,26 +295,19 @@ export default function StageMap(props: Props) {
       const { stage: s, in3d: room } = latest.current;
 
       // Walking and turning with held keys: in the room once the camera is down there, along
-      // where it looks; on the map, W up the map. A spectator moves only the view.
+      // where it looks; on the map, W up the map.
       const keys = held.current;
-      const spect = latest.current.spectate;
       const forward = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
       const right = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
       const faster = keys.has("ShiftLeft") || keys.has("ShiftRight");
       if (room && painter.inRoom) {
         const turning = Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft"));
         if (turning) turnBy(turning * turnDegreesPerSecond * dt);
-        if (forward || right) {
-          if (spect && spectator.current) spectator.current = walk(spectator.current, { forward, right, faster }, look.current.yaw, dt, s.room);
-          else walkListener({ forward, right, faster }, yaw(), dt);
-        } else endWalk();
+        if (forward || right) walkListener({ forward, right, faster }, yaw(), dt);
+        else endWalk();
       } else if (!room && view.current.flat) {
-        if (forward || right) {
-          if (spect) {
-            const step = ((faster ? 900 : 400) * dt) / view.current.scale; // px per second, as metres
-            zoomTo(pan(zoom.current, -right * step, -forward * step, s.room / 2));
-          } else walkListener({ forward, right, faster }, 0, dt);
-        } else endWalk();
+        if (forward || right) walkListener({ forward, right, faster }, 0, dt);
+        else endWalk();
       }
 
       const moving =
@@ -300,18 +321,20 @@ export default function StageMap(props: Props) {
         lookDrag.current ||
         held.current.size > 0 ||
         now - poked.current < 150;
-      if (!moving && now - lastPaint < restingFrameMs - 4) return; // 4 ms: frames don't arrive exactly on time
+      if (now - lastPaint < (moving ? movingFrameMs : restingFrameMs) - 4) return; // 4 ms: frames don't arrive exactly on time
       lastPaint = now;
       // The window moved to a screen with another pixel ratio: no resize event tells us.
       if ((window.devicePixelRatio || 1) !== dpr) resize();
       const head = s.headTracking.on ? headYaw.current : 0;
       const heard = s.outputMode === "binaural" ? yaw() + head : 0; // what the ears face
-      view.current = painter.paint(ctx, {
+      view.current = painter.paint({
         width: W,
         height: H,
+        dpr,
         seconds: (now - t0) / 1000,
         ...latest.current,
         audience: stroke.current?.seats ?? painted.current?.seats ?? latest.current.audience, // the stroke as it goes
+        picked: pickedCount.current ? picked.current : undefined,
         overrides: overrides.current,
         zoom: zoom.current,
         levels: levels.current,
@@ -319,10 +342,9 @@ export default function StageMap(props: Props) {
         facing: heard,
         look: {
           on: room,
-          yaw: s.outputMode === "binaural" && !spect ? heard : look.current.yaw,
+          yaw: s.outputMode === "binaural" ? heard : look.current.yaw,
           pitch: look.current.pitch,
           standing: latest.current.standing,
-          at: (spect && spectator.current) || undefined,
         },
         ink,
         paper,
@@ -334,6 +356,7 @@ export default function StageMap(props: Props) {
 
     return () => {
       cancelAnimationFrame(frame);
+      painter.dispose();
       ro.disconnect();
       theme.removeEventListener("change", readTheme);
     };
@@ -391,10 +414,9 @@ export default function StageMap(props: Props) {
 
   // One drag at a time, with the primary button (or one finger): a right click, a second
   // finger or a second mouse button neither starts a drag nor ends the one in progress.
-  // On the map a drag moves a node (all of them, when it is one of several selected), or pans
-  // the view, or with Shift draws a rectangle that selects; Shift, Cmd or Ctrl and a click adds
-  // a node to the selection or takes it out. In the room (and while the camera swoops) a drag
-  // looks around, and a click on a badge selects it.
+  // On the map, see `Tool`; editing the audience, Drag paints seats instead (Alt rubs out,
+  // Shift a 3 x 3 brush). In the room (and while the camera swoops) a drag looks around, and a
+  // click on a badge selects it.
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0 || drag.current || lookDrag.current || press.current) return;
     const key = hitTest(e);
@@ -404,17 +426,28 @@ export default function StageMap(props: Props) {
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
-    if (brush) {
+    if (seatTool === "paint" || seatTool === "erase") {
       // Alt (Option) rubs out with the paint brush and paints with the eraser; Shift: 3 x 3 seats.
       const at = pointerMetres(e);
-      stroke.current = { pointerId: e.pointerId, seats: audience.slice(), on: (brush === "paint") !== e.altKey, big: e.shiftKey, last: at };
+      stroke.current = { pointerId: e.pointerId, seats: audience.slice(), on: (seatTool === "paint") !== e.altKey, big: e.shiftKey, last: at };
       paintTo(stroke.current, at);
       return;
     }
     const extend = e.shiftKey || e.metaKey || e.ctrlKey;
-    if (key === null) {
+    if (key === null || tool === "select" || seatTool === "select") {
       const at = { x: e.clientX, y: e.clientY };
-      press.current = { pointerId: e.pointerId, kind: e.shiftKey ? "box" : "pan", x0: at.x, y0: at.y, ...at, moved: false, base: extend ? selection : [] };
+      press.current = {
+        pointerId: e.pointerId,
+        kind: tool === "select" || seatTool === "select" || e.shiftKey ? "box" : "pan",
+        x0: at.x,
+        y0: at.y,
+        ...at,
+        moved: false,
+        base: extend ? selection : [],
+        seats: seatTool === "select",
+        seatBase: extend ? picked.current.slice() : emptyAudience(),
+        hit: key,
+      };
       return;
     }
     if (extend) {
@@ -477,15 +510,45 @@ export default function StageMap(props: Props) {
         const a = { x: p.x0 - r.left, y: p.y0 - r.top };
         const b = { x: e.clientX - r.left, y: e.clientY - r.top };
         setBox({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
-        const inside = within(view.current.hits, a, b);
-        onSelect([...p.base.filter((k) => !inside.includes(k as number)), ...inside]);
+        if (p.seats) pick(seatsWithin(p.seatBase, { clientX: p.x0, clientY: p.y0 }, e));
+        else {
+          const inside = within(view.current.hits, a, b);
+          onSelect([...p.base.filter((k) => !inside.includes(k as number)), ...inside]);
+        }
       }
       p.x = e.clientX;
       p.y = e.clientY;
       return;
     }
 
-    if (!in3d) e.currentTarget.style.cursor = brush ? "crosshair" : hitTest(e) !== null ? "grab" : "";
+    if (!in3d) e.currentTarget.style.cursor = seatTool || tool === "select" ? "crosshair" : hitTest(e) !== null ? "grab" : "";
+  };
+
+  // The seats between two pointer positions (a rectangle on the map), added to `base`.
+  const seatsWithin = (base: Audience, from: { clientX: number; clientY: number }, to: { clientX: number; clientY: number }) => {
+    const out = base.slice();
+    const a = pointerMetres(from);
+    const b = pointerMetres(to);
+    const i0 = Math.ceil(Math.min(a.x, b.x) / seatPitch - 0.5);
+    const i1 = Math.floor(Math.max(a.x, b.x) / seatPitch + 0.5);
+    const j0 = Math.ceil(Math.min(a.y, b.y) / seatPitch - 0.5);
+    const j1 = Math.floor(Math.max(a.y, b.y) / seatPitch + 0.5);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (hasSeat(audience, i, j)) setSeat(out, i, j, true);
+    return out;
+  };
+
+  // Takes the selected seats away (one edit), and none stays selected.
+  const erasePicked = () => {
+    if (!pickedCount.current) return;
+    const seats = audience.slice();
+    const gone = picked.current;
+    for (let k = 0; k < seats.length; k++) seats[k] &= ~gone[k];
+    pick(emptyAudience());
+    const sent = encodeAudience(seats);
+    if (sent !== (painted.current?.sent ?? stage.audience)) {
+      painted.current = { seats, sent };
+      void setAudience(sent);
+    }
   };
 
   // Paints (or rubs out) every seat the pointer passed over since the last move.
@@ -536,9 +599,18 @@ export default function StageMap(props: Props) {
     if (p?.pointerId === e.pointerId) {
       press.current = null;
       setBox(null);
-      // A click on empty space: back to the leading node alone.
-      if (!p.moved && p.base.length === 0 && e.type === "pointerup" && selected !== null) onSelect([selected]);
       e.currentTarget.style.cursor = "";
+      if (p.moved || e.type !== "pointerup") return;
+      const extend = e.shiftKey || e.metaKey || e.ctrlKey;
+      if (p.seats) {
+        // A click selects the seat under it (Shift, Cmd or Ctrl: adds it or takes it out); on no seat, none.
+        const cell = cellOf(pointerMetres(e));
+        const next = extend ? picked.current.slice() : emptyAudience();
+        if (cell && hasSeat(audience, cell[0], cell[1])) setSeat(next, cell[0], cell[1], !(extend && hasSeat(picked.current, cell[0], cell[1])));
+        pick(next);
+      } else if (p.hit !== null) onSelect(extend ? toggle(selection, p.hit) : [p.hit]); // the Select tool's click
+      // A click on empty space: back to the leading node alone.
+      else if (p.base.length === 0 && selected !== null) onSelect([selected]);
     }
   };
 
@@ -547,6 +619,18 @@ export default function StageMap(props: Props) {
       // The host's and the system's shortcuts. macOS sends no keyup for keys released while
       // Cmd is down, so nothing stays held.
       held.current.clear();
+      return;
+    }
+
+    // Delete or Backspace: the selected seats go; Escape: none selected.
+    if (!in3d && pickedCount.current && (e.code === "Delete" || e.code === "Backspace")) {
+      e.preventDefault();
+      erasePicked();
+      return;
+    }
+    if (!in3d && pickedCount.current && e.code === "Escape") {
+      e.preventDefault();
+      pick(emptyAudience());
       return;
     }
 
@@ -610,7 +694,6 @@ export default function StageMap(props: Props) {
 
   return (
     <>
-      <canvas ref={textCopyRef} hidden aria-hidden />
       <canvas
         ref={canvasRef}
         className={styles.map}
@@ -618,7 +701,7 @@ export default function StageMap(props: Props) {
         aria-label={
           in3d
             ? "The room at the listener's eyes. W A S D walk, Shift faster, drag or arrow keys to look around, R to face the front, Space to stand up or sit down, Escape for the map."
-            : "Stage map. W A S D move the listener (Spectate: the view), arrow keys move the selected nodes, Shift for 1 m steps. Shift-click selects several, Shift-drag selects in a rectangle, the wheel zooms. Q and E turn the listener in Binaural, R faces it front."
+            : "Stage map. W A S D move the listener, arrow keys move the selected nodes, Shift for 1 m steps. Shift-click selects several, Shift-drag or the Select tool selects in a rectangle (seats while editing the audience, Delete takes them away), the wheel zooms. Q and E turn the listener in Binaural, R faces it front."
         }
         style={in3d ? { cursor: "grab" } : undefined}
         onPointerDown={onPointerDown}
@@ -641,7 +724,7 @@ export default function StageMap(props: Props) {
           </span>
           <span className={styles.key}>
             <b>Drag</b>
-            {stage.outputMode === "binaural" && !spectate ? "Turn" : "Look around"}
+            {stage.outputMode === "binaural" ? "Turn" : "Look around"}
           </span>
           <button
             className={`${styles.key} ${styles.keyButton}`}

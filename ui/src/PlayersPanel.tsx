@@ -3,7 +3,7 @@ import styles from "./App.module.css";
 import { joinPlayer, setName, setTrackName, splitPlayer } from "./bridge";
 import EditPlayer from "./EditPlayer";
 import { Icon, playerIcon } from "./icons";
-import LevelMeter from "./LevelMeter";
+import LevelMeter, { MeterLayer } from "./LevelMeter";
 import type { Seat, SeatedStage } from "./players";
 import { toggle } from "./mapEdits";
 import type { NodeKey } from "./stagePainter";
@@ -92,6 +92,7 @@ export default function PlayersPanel({ stage, selected, selection, onSelect }: P
 
   return (
     <aside className={styles.players} data-drop={drag?.over === "out" || undefined}>
+      <MeterLayer />
       {edited && (
         <EditPlayer
           key={edited.id}

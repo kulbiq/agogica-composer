@@ -1017,14 +1017,21 @@ button.status:focus-visible {
   flex-shrink: 0;
 }
 
-.meterFill {
-  --level: 0;
+/* The meters' levels, drawn over the list (LevelMeter.tsx, MeterLayer): stuck to the top of the
+   scrolling list, taking no room, its canvas as big as the visible list. */
+.meterLayer {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.meterLayer canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
   display: block;
-  height: 100%;
-  background: var(--ink);
-  transform: scaleX(var(--level));
-  transform-origin: left;
-  will-change: transform; /* its own layer: 30 changes a second must not repaint the panel */
 }
 
 /* ---- Map ---- */
@@ -1076,18 +1083,15 @@ button.status:focus-visible {
   right: calc(clamp(72px, 16%, 112px) + 22px);
 }
 
-.viewSwitch {
-  padding: 3px;
+/* The tools sit straight on the map, each on the paper (the map's lines and the room stay
+   behind them); the audience's go to the right end. */
+.mapTools .chip:not([aria-checked="true"]):not([aria-pressed="true"]) {
   background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-chip);
 }
 
-/* Painting the audience: the brush, in the map's bottom-right corner (clear of the resize grip). */
-.brushBar {
-  position: absolute;
-  right: 24px;
-  bottom: 12px;
+.toolsEnd {
+  margin-left: auto;
+  gap: 8px;
 }
 
 /* Shift-drag on the map: the rectangle that selects. */
