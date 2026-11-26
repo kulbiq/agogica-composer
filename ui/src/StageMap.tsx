@@ -2,18 +2,20 @@ import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react"
 import { beginGesture, useEvent, type Gesture, type Point, type Stage } from "./bridge";
 import styles from "./App.module.css";
 import type { Levels } from "./level";
-import { nodesOf, StagePainter, type NodeKey, type View } from "./stagePainter";
+import { badgeRadius, nodesOf, StagePainter, type MapNames, type MapView, type NodeKey, type View } from "./stagePainter";
 
-export type { NodeKey };
+export type { MapNames, MapView, NodeKey };
 
 type Props = {
   stage: Stage;
   selfId: number;
   selected: NodeKey | null;
   onSelect: (key: NodeKey) => void;
+  view: MapView;
+  names: MapNames;
 };
 
-const hitRadius = 12; // px
+const hitRadius = badgeRadius + 2; // px
 const nudgeKeys: Record<string, Point> = {
   ArrowLeft: { x: -1, y: 0 },
   ArrowRight: { x: 1, y: 0 },
@@ -23,13 +25,13 @@ const nudgeKeys: Record<string, Point> = {
 
 const round = (v: number) => Math.round(v * 100) / 100;
 
-export default function StageMap({ stage, selfId, selected, onSelect }: Props) {
+export default function StageMap({ stage, selfId, selected, onSelect, view: mapView, names }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textCopyRef = useRef<HTMLCanvasElement>(null);
 
   // The rAF loop reads the latest props through refs instead of restarting.
-  const latest = useRef({ stage, selected });
-  latest.current = { stage, selected };
+  const latest = useRef({ stage, selected, view: mapView, names });
+  latest.current = { stage, selected, view: mapView, names };
 
   // Nodes the user is moving are drawn from here (exactly under the pointer)
   // until C++ reports the new position back.

@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
 import styles from "./App.module.css";
-import Footer from "./Footer";
 import { useStage } from "./bridge";
+import PlayersPanel from "./PlayersPanel";
+import { usePref } from "./prefs";
 import ResizeGrip from "./ResizeGrip";
-import SidePanel from "./SidePanel";
-import StageMap, { type NodeKey } from "./StageMap";
+import StageMap, { type MapNames, type MapView, type NodeKey } from "./StageMap";
+import TopBar from "./TopBar";
+
+const views = ["grid", "azimuth"] as const satisfies readonly MapView[];
+const nameModes = ["selected", "all"] as const satisfies readonly MapNames[];
 
 export default function App() {
   const stage = useStage();
   const selfId = stage?.players.find((p) => p.self)?.id;
   const [picked, setPicked] = useState<NodeKey | null>(null);
+  const [view, setView] = usePref<MapView>("mapView", "grid", views);
+  const [names, setNames] = usePref<MapNames>("mapNames", "selected", nameModes);
 
   // Own player is selected until the user picks something; a vanished player drops the selection.
   const exists = (key: NodeKey | null) => key === "listener" || stage?.players.some((p) => p.id === key);
   const selected = picked !== null && exists(picked) ? picked : (selfId ?? null);
-  const metered = stage?.players.find((p) => p.id === (typeof selected === "number" ? selected : selfId));
 
   // One Composer window is enough (each shows every track), but a plugin can't close host
   // windows. So a window opened while another is open steps aside until the user insists
@@ -39,14 +44,25 @@ export default function App() {
           </button>
         </div>
       ) : stage && selfId !== undefined && blocked === false ? (
-        <div className={styles.body}>
-          <StageMap stage={stage} selfId={selfId} selected={selected} onSelect={setPicked} />
-          <SidePanel stage={stage} selfId={selfId} selected={selected} onSelect={setPicked} />
-        </div>
+        <>
+          <TopBar stage={stage} selfId={selfId} names={names} onNames={setNames} />
+          <div className={styles.body}>
+            <PlayersPanel stage={stage} selected={selected} onSelect={setPicked} />
+            <div className={styles.mapArea}>
+              <StageMap stage={stage} selfId={selfId} selected={selected} onSelect={setPicked} view={view} names={names} />
+              <div className={`${styles.segments} ${styles.viewSwitch}`} role="radiogroup" aria-label="View">
+                {views.map((v) => (
+                  <button key={v} className={`${styles.chip} ${styles.segment}`} role="radio" aria-checked={view === v} onClick={() => setView(v)}>
+                    {v === "grid" ? "Grid" : "Azimuth"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       ) : (
         <div className={styles.body} />
       )}
-      <Footer player={metered} />
       <ResizeGrip className={styles.grip} />
     </div>
   );

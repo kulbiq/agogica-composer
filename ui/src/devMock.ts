@@ -8,8 +8,22 @@ type Invoke = { name: string; params: unknown[]; resultId: number };
 type Edit = { phase: string; target: number; param: string; value: number };
 
 if (import.meta.env.DEV && !window.__JUCE__) {
-  const names = ["Violin I", "Violin II", "Viola", "Cello", "Flute", "Horn"];
-  const colours = ["#d1495b", "#edae49", "#00798c", "#30638e", "#66a182", ""];
+  // An orchestra in front of the listener (the design canvas's stage).
+  const seats: [string, string, number, number][] = [
+    ["Violin I", "#d1495b", -5, 2.5],
+    ["Violin II", "#edae49", -3, 4.5],
+    ["Viola", "#00798c", -1.2, 3],
+    ["Cello", "#30638e", 1.5, 3.2],
+    ["Bass", "#30638e", 4.5, 3.5],
+    ["Flute", "#66a182", -1.5, 6],
+    ["Clarinet", "#66a182", 1.5, 6],
+    ["Horn", "#edae49", -4.5, 7],
+    ["Trumpet", "#edae49", 4.5, 7],
+    ["Timpani", "", 0, 8.5],
+    ["Harp", "#d1495b", -7, 4.5],
+    ["Piano", "", 7, 5],
+  ];
+  const names = seats.map(([name]) => name);
   const scene = {
     scene: "A",
     scenes: ["A", "B"],
@@ -22,8 +36,8 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     // ?elsewhere: another track's window is open (the "open here anyway" screen).
     openElsewhere: location.search.includes("elsewhere") ? "Violin I" : undefined,
     room: 20,
-    listener: { x: 0, y: -4 },
-    players: names.map((name, i) => ({ id: i, name, colour: colours[i], self: i === 2, x: (i - 2.5) * 2.4, y: 3 + (i % 2) * 2 })),
+    listener: { x: 0, y: 0 },
+    players: seats.map(([name, colour, x, y], i) => ({ id: i, name, colour, self: i === 2, x, y })),
   };
 
   // Rough stand-in for Source/dsp/Geometry.h; only so the panel shows plausible numbers.
@@ -96,21 +110,25 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     },
   };
 
-  // ?pro opens the Pro section (for screenshots; nothing to click in headless Chrome).
-  if (location.search.includes("pro"))
+  // ?azimuth and ?allnames set the map preferences (before the app reads them).
+  if (location.search.includes("azimuth")) localStorage.setItem("mapView", "azimuth");
+  if (location.search.includes("allnames")) localStorage.setItem("mapNames", "all");
+
+  // ?settings opens the settings popover (for screenshots; nothing to click in headless Chrome).
+  if (location.search.includes("settings"))
     new MutationObserver((_, observer) => {
-      const details = document.querySelector("details");
-      if (details) {
-        details.open = true;
+      const button = document.querySelector<HTMLButtonElement>('button[aria-label="Settings"]');
+      if (button) {
+        button.click();
         observer.disconnect();
       }
     }).observe(document, { childList: true, subtree: true });
 
-  // A little fake input level per player (one stays silent).
+  // A little fake input level per player (the timpani stays silent).
   setInterval(() => {
     const t = performance.now();
     const levels: Record<string, number> = {};
-    for (const p of scene.players) levels[p.id] = p.id === 4 ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
+    for (const p of scene.players) levels[p.id] = p.name === "Timpani" ? -60 : -24 + Math.sin(t / (500 + p.id * 170)) * 22;
     emit("levels", levels);
     emit("headYaw", location.search.includes("binaural") ? Number(new URLSearchParams(location.search).get("yaw") ?? 25) : 0);
   }, 33);

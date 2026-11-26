@@ -1,8 +1,11 @@
 import type { Point, Stage } from "./bridge";
 import { easeToward } from "./ease";
+import { autoIcon, drawIcon } from "./icons";
 import { levelOf, type Levels } from "./level";
 
 export type NodeKey = "listener" | number;
+export type MapView = "grid" | "azimuth";
+export type MapNames = "selected" | "all";
 
 // Where the room sits in CSS pixels, and where its markers were drawn in metres.
 export type View = { cx: number; cy: number; scale: number; drawn: ReadonlyMap<NodeKey, Point> };
@@ -16,13 +19,18 @@ export type MapFrame = {
   overrides: ReadonlyMap<NodeKey, Point>; // nodes the user is moving, in metres
   levels: Levels;
   headYaw: number; // degrees clockwise
+  view: MapView;
+  names: MapNames;
   ink: string; // "r,g,b"
   paper: string; // a CSS colour
 };
 
-const margin = 32; // px around the room square
+// px around the room square: room for the view switch above it, the scale bar below,
+// and the azimuth labels around it.
+const margin = { top: 56, side: 32, bottom: 40 };
+export const badgeRadius = 14; // px
 
-type Text = { text: string; x: number; y: number; opacity: number; halo: boolean };
+type Text = { text: string; x: number; y: number; opacity: number; halo: boolean; align: CanvasTextAlign };
 
 // Text drawn before a font has loaded is in a fallback font, so it is drawn again afterwards.
 let fontLoads = 0;
@@ -38,10 +46,11 @@ export function nodesOf(stage: Stage): Map<NodeKey, Point> {
 }
 
 // Draws the stage map, one frame at a time. It remembers only what eases between frames:
-// where each node is drawn and how high each level is shown.
+// where each node is drawn, how high each level is shown and how far the azimuth view is in.
 export class StagePainter {
   private drawn = new Map<NodeKey, Point>(); // eased positions in metres
   private shown = new Map<number, number>(); // eased input levels, 0..1
+  private rose = -1; // 0 grid .. 1 azimuth, eased; -1 until the first frame
 
   private copyKey = "";
   private lastSeconds: number | undefined;
@@ -62,26 +71,35 @@ export class StagePainter {
     this.lastSeconds = frame.seconds;
     this.settled = true;
     const half = stage.room / 2;
-    const side = Math.max(0, Math.min(W, H) - margin * 2);
+    const tall = H - margin.top - margin.bottom;
+    const side = Math.max(0, Math.min(W - margin.side * 2, tall));
     const scale = side / stage.room;
     const cx = W / 2;
-    const cy = H / 2;
+    const cy = margin.top + tall / 2;
+    const TAU = Math.PI * 2;
 
     // Snap hairlines to the pixel grid so they stay crisp at 1x.
     const px = (v: number) => Math.round(v) + 0.5;
     const sx = (x: number) => cx + x * scale;
     const sy = (y: number) => cy - y * scale;
 
+    // Grid <-> azimuth: a quick cross-fade, not a cut.
+    const roseGoal = frame.view === "azimuth" ? 1 : 0;
+    const rose = this.rose < 0 ? roseGoal : easeToward(this.rose, roseGoal, 0.2, dt);
+    this.rose = Math.abs(rose - roseGoal) < 0.002 ? roseGoal : rose;
+    if (this.rose !== roseGoal) this.settled = false;
+
     ctx.clearRect(0, 0, W, H);
     ctx.lineWidth = 1;
     ctx.lineJoin = "round";
 
-    // Grid: 1 m minor (skipped when too dense), 5 m major, counted from the centre.
+    // Grid: 1 m minor (skipped when too dense, gone in the azimuth view), 5 m major,
+    // counted from the centre.
     for (let m = -Math.floor(half); m <= half; m++) {
       if (Math.abs(m) >= half) continue; // the outline covers the edges
       const major = m % 5 === 0;
-      if (!major && scale < 6) continue;
-      ctx.strokeStyle = `rgba(${ink},${major ? 0.1 : 0.05})`;
+      if (!major && (scale < 6 || this.rose > 0.999)) continue;
+      ctx.strokeStyle = `rgba(${ink},${major ? 0.1 : 0.05 * (1 - this.rose)})`;
       ctx.beginPath();
       ctx.moveTo(px(sx(m)), sy(half));
       ctx.lineTo(px(sx(m)), sy(-half));
@@ -92,6 +110,50 @@ export class StagePainter {
 
     ctx.strokeStyle = `rgba(${ink},0.2)`;
     ctx.strokeRect(px(sx(-half)), px(sy(half)), px(sx(half)) - px(sx(-half)), px(sy(-half)) - px(sy(half)));
+
+    const texts: Text[] = [];
+
+    // Azimuth view: a circle inscribed in the room, ticks every 5 and 15 degrees (inwards),
+    // labels every 30. Angles as the DSP counts them: 0 ahead, +90 right.
+    if (this.rose > 0.001) {
+      const a = this.rose;
+      const R = half * scale;
+      const at = (deg: number, r: number) => [cx + Math.sin((deg * Math.PI) / 180) * r, cy - Math.cos((deg * Math.PI) / 180) * r];
+      ctx.strokeStyle = `rgba(${ink},${0.2 * a})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(${ink},${0.07 * a})`;
+      ctx.beginPath();
+      for (let deg = 30; deg < 180; deg += 30) {
+        const [x0, y0] = at(deg, R);
+        const [x1, y1] = at(deg + 180, R);
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(${ink},${0.14 * a})`;
+      ctx.beginPath();
+      ctx.moveTo(px(cx), cy - R);
+      ctx.lineTo(px(cx), cy + R);
+      ctx.stroke();
+      for (const [step, len, alpha] of [[5, 0.28, 0.25], [15, 0.55, 0.45]] as const) {
+        ctx.strokeStyle = `rgba(${ink},${alpha * a})`;
+        ctx.beginPath();
+        for (let deg = 0; deg < 360; deg += step) {
+          if (step === 5 && deg % 15 === 0) continue;
+          const [x0, y0] = at(deg, R);
+          const [x1, y1] = at(deg, R - len * scale);
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+        }
+        ctx.stroke();
+      }
+      for (let deg = -150; deg <= 180; deg += 30) {
+        const [x, y] = at(deg, R + 14); // outside the circle, clear of the players
+        texts.push({ text: deg < 0 ? `−${-deg}°` : `${deg}°`, x, y, opacity: (deg === 0 ? 0.8 : 0.5) * a, halo: false, align: "center" });
+      }
+    }
 
     // Scale bar: 5 m, under the bottom-left corner.
     const barY = px(sy(-half) + 16);
@@ -104,13 +166,7 @@ export class StagePainter {
     ctx.moveTo(px(sx(-half) + 5 * scale), barY - 3);
     ctx.lineTo(px(sx(-half) + 5 * scale), barY + 3);
     ctx.stroke();
-    const caption: Text = {
-      text: `5 M · ROOM ${stage.room} × ${stage.room} M`,
-      x: sx(-half) + 5 * scale + 10,
-      y: barY,
-      opacity: 0.55,
-      halo: false,
-    };
+    texts.push({ text: "5 M", x: sx(-half) + 5 * scale + 10, y: barY, opacity: 0.55, halo: false, align: "left" });
 
     // Nodes ease toward where C++ says they are; overridden ones sit under the pointer.
     const targets = nodesOf(stage);
@@ -130,43 +186,57 @@ export class StagePainter {
         if (typeof key === "number") shown.delete(key);
       }
 
-    // Selected node: a breathing ring.
+    // Azimuth view: a dashed line from the listener to the selected player.
+    const listener = drawn.get("listener")!;
     const sel = selected !== null ? drawn.get(selected) : undefined;
+    if (this.rose > 0.001 && sel && selected !== "listener") {
+      ctx.save();
+      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = `rgba(${ink},${0.35 * this.rose})`;
+      ctx.beginPath();
+      ctx.moveTo(sx(listener.x), sy(listener.y));
+      ctx.lineTo(sx(sel.x), sy(sel.y));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Selected node: a breathing ring.
     if (sel) {
       const b = breath(frame.seconds, 2.6);
+      const r = selected === "listener" ? 11 : badgeRadius;
       ctx.beginPath();
-      ctx.arc(sx(sel.x), sy(sel.y), 11 + b * 5, 0, Math.PI * 2);
+      ctx.arc(sx(sel.x), sy(sel.y), r * (1.3 + 0.35 * b), 0, TAU);
       ctx.strokeStyle = `rgba(${ink},${0.12 + 0.3 * (1 - b)})`;
       ctx.stroke();
     }
 
-    // Input level: a soft disc behind each player (30 Hz from C++, eased per frame).
+    // Input level: a soft halo around each badge (30 Hz from C++, eased per frame).
     for (const player of stage.players) {
       const p = drawn.get(player.id)!;
       const level = easeToward(shown.get(player.id) ?? 0, levelOf(frame.levels, player.id), 0.35, dt);
       shown.set(player.id, level);
       if (level < 0.01) continue;
       ctx.beginPath();
-      ctx.arc(sx(p.x), sy(p.y), 6 + level * 14, 0, Math.PI * 2);
+      ctx.arc(sx(p.x), sy(p.y), badgeRadius + level * 10, 0, TAU);
       ctx.fillStyle = `rgba(${ink},${0.04 + level * 0.12})`;
       ctx.fill();
     }
 
-    // Names with a paper halo, so they stay legible where players crowd (selected last).
-    // They go over the level discs and under the nodes, so a node is never hidden.
+    // Names under the badges, with a paper halo so they stay legible where players crowd.
+    // Only the selected one by default; drawn before the badges, so no badge is ever hidden.
     const byPriority = [...stage.players].sort((a, b) => Number(a.id === selected) - Number(b.id === selected));
-    const names = byPriority.map((player): Text => {
+    for (const player of byPriority) {
+      if (frame.names !== "all" && player.id !== selected) continue;
       const p = drawn.get(player.id)!;
-      return { text: player.name.toUpperCase(), x: sx(p.x) + 12, y: sy(p.y), opacity: player.id === selected ? 0.85 : 0.55, halo: true };
-    });
-    this.paintText(ctx, [caption, ...names], ink, paper);
+      texts.push({ text: player.name.toUpperCase(), x: sx(p.x), y: sy(p.y) + badgeRadius + 10, opacity: player.id === selected ? 0.85 : 0.55, halo: true, align: "center" });
+    }
+    this.paintText(ctx, texts, ink, paper);
 
     // Listener: an arrowhead facing +y (front), turned with the head when tracking. Slim and
     // notched so its direction reads at any angle (an equilateral triangle turned 25°
     // looks like it points left).
-    const l = drawn.get("listener")!;
     ctx.save();
-    ctx.translate(sx(l.x), sy(l.y));
+    ctx.translate(sx(listener.x), sy(listener.y));
     ctx.rotate((frame.headYaw * Math.PI) / 180);
     ctx.beginPath();
     ctx.moveTo(0, -8);
@@ -178,22 +248,24 @@ export class StagePainter {
     ctx.fill();
     ctx.restore();
 
+    // Players: a badge with the instrument's icon; the selected one (the one the panel shows) is filled.
     for (const player of byPriority) {
       const p = drawn.get(player.id)!;
+      const x = sx(p.x);
+      const y = sy(p.y);
+      const chosen = player.id === selected;
       ctx.beginPath();
-      ctx.arc(sx(p.x), sy(p.y), 6, 0, Math.PI * 2);
-      // The selected player (the one the side panel shows) is filled.
-      if (player.id === selected) {
+      ctx.arc(x, y, badgeRadius, 0, TAU);
+      if (chosen) {
         ctx.fillStyle = `rgba(${ink},0.9)`;
         ctx.fill();
       } else {
         ctx.fillStyle = paper;
         ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = `rgba(${ink},0.75)`;
+        ctx.strokeStyle = `rgba(${ink},0.35)`;
         ctx.stroke();
-        ctx.lineWidth = 1;
       }
+      drawIcon(ctx, autoIcon(player.name), x, y, badgeRadius * 1.3, chosen ? paper : `rgb(${ink})`);
     }
 
     return { cx, cy, scale, drawn };
@@ -212,7 +284,7 @@ export class StagePainter {
       fontLoads,
       ink,
       paper,
-      texts.map((t) => [t.text, Math.round(t.x * 64), Math.round(t.y * 64), t.opacity]),
+      texts.map((t) => [t.text, Math.round(t.x * 64), Math.round(t.y * 64), Math.round(t.opacity * 100), t.align]),
     ]);
 
     if (key !== this.copyKey) {
@@ -228,6 +300,7 @@ export class StagePainter {
       to.lineWidth = 3;
       to.strokeStyle = paper;
       for (const t of texts) {
+        to.textAlign = t.align;
         if (t.halo) to.strokeText(t.text, t.x, t.y);
         to.fillStyle = `rgba(${ink},${t.opacity})`;
         to.fillText(t.text, t.x, t.y);

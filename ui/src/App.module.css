@@ -14,11 +14,15 @@
 
 .label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-lighter);
+}
+
+.strong {
+  color: var(--ink);
 }
 
 .value {
@@ -30,46 +34,11 @@
   color: var(--ink);
 }
 
-/* ---- Map ---- */
-
-.map {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  display: block;
-  touch-action: none;
-}
-
-.map:focus {
-  outline: none;
-}
-
-.map:focus-visible {
-  outline: 1px solid var(--line-strong);
-  outline-offset: -1px;
-}
-
-/* ---- Side panel ---- */
-
-.panel {
-  width: 280px;
-  flex-shrink: 0;
-  overflow-y: auto;
-  border-left: 1px solid var(--line);
-}
-
-@media (max-width: 760px) {
-  .panel {
-    width: 240px;
-  }
-}
-
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--line);
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-lighter);
 }
 
 .row {
@@ -79,40 +48,42 @@
   gap: 8px;
 }
 
-/* Status chip - the website's .status, "soon" variant (ring, no pulse). */
-.status {
-  display: inline-flex;
+/* ---- Top bar: output, scene, room, settings ---- */
+
+.topBar {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-chip);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-lighter);
-  white-space: nowrap;
+  gap: 16px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--line);
 }
 
-.status::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: 1px solid currentColor;
+.group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-/* Scene chips - the website's .chip, as a segmented choice. */
-.chips {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 4px;
+.divider {
+  width: 1px;
+  height: 24px;
+  flex-shrink: 0;
+  background: var(--line);
+}
+
+/* Chips - the website's .chip; in a row they make a segmented choice. */
+.segments {
+  display: flex;
+  gap: 3px;
 }
 
 .chip {
   height: 26px;
-  padding: 0;
+  min-width: 24px;
+  padding: 0 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
   background: none;
@@ -128,23 +99,11 @@
   color: var(--ink);
 }
 
-.segments {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-}
-
-.segments .chip {
+.segment {
+  padding: 0 12px;
+  font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-size: 10px;
-}
-
-.note {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink-lighter);
 }
 
 /* A scene nothing is stored in yet: the website's dashed "not yet" state. */
@@ -167,9 +126,132 @@
   box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--ink);
 }
 
+/* Room size: - value + (it moves in 5 m steps). */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.step {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--ink-light);
+  cursor: pointer;
+}
+
+.step path {
+  stroke: currentColor;
+}
+
+.step:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.step:disabled {
+  border-style: dashed;
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.step:focus {
+  outline: none;
+}
+
+.step:focus-visible {
+  box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--ink);
+}
+
+.stepValue {
+  width: 48px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.settingsAnchor {
+  position: relative;
+  margin-left: auto;
+}
+
+.iconButton {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--ink-light);
+  cursor: pointer;
+}
+
+.iconButton path,
+.iconButton circle {
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.iconButton circle {
+  fill: var(--paper);
+}
+
+.iconButton:hover,
+.iconButton[aria-expanded="true"] {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.iconButton[aria-expanded="true"] {
+  background: var(--line);
+}
+
+.iconButton:focus {
+  outline: none;
+}
+
+.iconButton:focus-visible {
+  box-shadow: 0 0 0 1px var(--paper), 0 0 0 2px var(--ink);
+}
+
+/* Status chip - the website's .status, "soon" variant (ring, no pulse). */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-lighter);
+  white-space: nowrap;
+}
+
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+
 /* Live: the website's .status (ink dot breathing with ag-blink). */
 .status[data-status="live"] {
-  align-self: flex-start;
   border-color: var(--line-strong);
   color: var(--ink);
 }
@@ -178,10 +260,6 @@
   border: 0;
   background: var(--ink);
   animation: ag-blink 2.4s ease-in-out infinite;
-}
-
-.status[data-status="soon"] {
-  align-self: flex-start;
 }
 
 /* Head tracking not running: the chip starts the tracker. */
@@ -198,7 +276,72 @@ button.status:focus-visible {
   outline: none;
 }
 
-/* ---- Room size ---- */
+/* A narrow window: the bar keeps its controls and drops what they already say. */
+@media (max-width: 860px) {
+  .topBar {
+    gap: 10px;
+  }
+
+  .topBar .group > .label,
+  .statusText {
+    display: none;
+  }
+
+  .topBar .status {
+    padding: 0 9px;
+  }
+
+  .topBar .chip:not(.segment) {
+    min-width: 21px;
+    padding: 0 4px;
+  }
+}
+
+/* ---- Settings popover ---- */
+
+.popover {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 10;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 16px 40px rgba(var(--ink-rgb), 0.14);
+}
+
+.popoverHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.popoverSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.popoverSection.row {
+  flex-direction: row;
+  padding-block: 14px;
+}
+
+.popoverFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 18px 14px;
+}
+
+/* ---- Sliders (ParamSlider) ---- */
 
 .field {
   display: flex;
@@ -239,160 +382,15 @@ button.status:focus-visible {
   background: var(--ink);
 }
 
-/* ---- Selected node ---- */
-
-.nodeTitle,
-.nameInput {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: var(--ink);
-}
-
-.nameInput {
-  width: 100%;
-  margin: -3px -6px;
-  padding: 2px 6px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-input);
-  background: none;
-  outline: none;
-}
-
-.nameInput:hover {
-  border-color: var(--line);
-}
-
-.nameInput:focus {
-  border-color: var(--ink);
-  background: var(--surface);
-}
-
-.fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.numberField {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.input {
-  width: 100%;
-  min-width: 0;
-  padding: 7px 26px 7px 10px;
-  border: 1px solid var(--line-input);
-  border-radius: var(--radius-input);
-  background: var(--surface);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-/* Text that isn't a number: the dashed "not yet" outline until it is corrected. */
-.input[aria-invalid="true"] {
-  border-style: dashed;
-  border-color: var(--ink);
-}
-
-.input:focus {
-  border-color: var(--ink);
-}
-
-.unit {
-  position: absolute;
-  right: 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-lighter);
-  pointer-events: none;
-}
-
-.derived {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 16px;
-  margin: 4px 0 0;
-  align-items: baseline;
-}
-
-.derived dd {
-  margin: 0;
-  text-align: right;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-
-/* ---- Pro panel ---- */
-
-.pro {
-  display: flex;
-  flex-direction: column;
-}
-
-.proSummary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  list-style: none;
-  cursor: pointer;
-}
-
-.proSummary::-webkit-details-marker {
-  display: none;
-}
-
-/* Disclosure chevron after the label, drawn from the ink token. */
-.proSummary .label::after {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin: 0 0 2px 10px;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  transform: rotate(-45deg);
-}
-
-.pro[open] .proSummary .label::after {
-  transform: rotate(45deg);
-}
-
-.proSummary:focus {
-  outline: none;
-}
-
-.proSummary:focus-visible .label {
-  color: var(--ink);
-}
-
-.proBody {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding-top: 14px;
-}
-
-/* The website's ghost button (hard corners); a dashed outline when there's nothing to reset. */
+/* The website's ghost button (hard corners); a dashed outline when there's nothing to do. */
 .ghost {
   align-self: flex-start;
-  padding: 8px 16px;
+  padding: 7px 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-button);
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink);
@@ -416,6 +414,175 @@ button.status:focus-visible {
 
 .ghost:focus-visible {
   border-color: var(--ink);
+}
+
+/* ---- Players (left) ---- */
+
+.players {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+}
+
+.playersHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px 0 16px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 0 12px;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 12px 0 16px;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: none;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink-light);
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover,
+.item[data-editing] {
+  background: var(--line);
+}
+
+.item[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--line);
+}
+
+.item:focus {
+  outline: none;
+}
+
+.item:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.itemIcon {
+  flex-shrink: 0;
+  color: var(--ink-lighter);
+}
+
+.item[aria-pressed="true"] .itemIcon {
+  color: var(--ink);
+}
+
+.itemName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Host track colour, when the host sends one; otherwise a hairline. */
+.tick {
+  width: 3px;
+  height: 12px;
+  flex-shrink: 0;
+  background: var(--line-strong);
+}
+
+.you {
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-lighter);
+}
+
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  margin: 0 -6px;
+  padding: 3px 6px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-input);
+  background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+}
+
+/* Input level per player. */
+.meterTrack {
+  width: 96px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.meterTrack.listMeter {
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.meterFill {
+  --level: 0;
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transform: scaleX(var(--level));
+  transform-origin: left;
+  will-change: transform; /* its own layer: 30 changes a second must not repaint the panel */
+}
+
+/* ---- Map ---- */
+
+.mapArea {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.map {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.map:focus {
+  outline: none;
+}
+
+.map:focus-visible {
+  outline: 1px solid var(--line-strong);
+  outline-offset: -1px;
+}
+
+.viewSwitch {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 3px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
 }
 
 /* ---- Open in another window ---- */
@@ -445,127 +612,7 @@ button.status:focus-visible {
   color: var(--ink-light);
 }
 
-/* ---- Player list ---- */
-
-.list {
-  display: flex;
-  flex-direction: column;
-  margin: 0 -24px;
-  padding: 0;
-  list-style: none;
-}
-
-.item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 24px;
-  border: 0;
-  border-radius: var(--radius-button);
-  background: none;
-  font-family: var(--font-body);
-  font-size: 14px;
-  color: var(--ink-light);
-  text-align: left;
-  cursor: pointer;
-}
-
-.item:hover {
-  background: var(--line);
-}
-
-.item[aria-pressed="true"] {
-  color: var(--ink);
-  background: var(--line);
-}
-
-.item:focus {
-  outline: none;
-}
-
-.item:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-}
-
-/* Host track colour, when the host sends one; otherwise a hairline. */
-.tick {
-  width: 3px;
-  height: 12px;
-  flex-shrink: 0;
-  background: var(--line-strong);
-}
-
-.you {
-  margin-left: auto;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-lighter);
-}
-
-/* Input level per player; pushed right, after the "This track" badge when there is one. */
-.meterTrack.listMeter {
-  width: 40px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.you ~ .listMeter {
-  margin-left: 0;
-}
-
-/* ---- Footer ---- */
-
-.footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  /* Right padding keeps the meter clear of the resize grip. */
-  padding: 12px 36px 12px 24px;
-  border-top: 1px solid var(--line);
-}
-
-.meter {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Development monitoring (Footer): never wraps, gives way before the meter does. */
-.load {
-  margin-right: auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.meterName {
-  max-width: 220px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.meterTrack {
-  width: 96px;
-  height: 1px;
-  background: var(--line-strong);
-}
-
-.meterFill {
-  --level: 0;
-  display: block;
-  height: 100%;
-  background: var(--ink);
-  transform: scaleX(var(--level));
-  transform-origin: left;
-  will-change: transform; /* its own layer: 30 changes a second must not repaint the panel */
-}
+/* ---- Resize grip ---- */
 
 .grip {
   position: fixed;
