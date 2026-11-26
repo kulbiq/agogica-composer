@@ -8,8 +8,13 @@
 #
 # The zip holds the bundles at its root, to be copied to the per-user folders:
 #   Composer.vst3 -> ~/Library/Audio/Plug-Ins/VST3, Composer.component -> ~/Library/Audio/Plug-Ins/Components
+# and the licence texts next to them.
+# A tag with a suffix (v0.1.0-beta.1) makes a GitHub pre-release.
 # TRACKER=1 adds Agogica Tracker.app (-> ~/Applications). Off by default: the head-pose model's
-# weights have no stated licence yet (tracker/models/MODELS.md), so a build with them isn't published.
+# weights have no stated licence yet (tracker/models/MODELS.md), so a build with them isn't
+# published and its zip says so in its name.
+# COMPOSER_TELEMETRY_KEY: the key of the usage-data project (PRIVACY.md); without it the build
+# never asks and never sends.
 #
 # Signing: SIGN_IDENTITY, a "Developer ID Application: ..." identity from the Keychain
 # (hardened runtime, secure timestamp).
@@ -30,14 +35,14 @@ done
 TRACKER=${TRACKER:-0}
 
 # CMake takes the version from the nearest vX.Y.Z tag; a release must be built from exactly
-# that commit, so the zip name, the GitHub release and the plugin's own version agree.
-BUILT=$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+# that commit, so the zip name, the GitHub release and the plugin's own version agree (the
+# version CMake really built is checked again after the build).
 TAGGED=$(git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null | sed 's/^v//' || true)
 VERSION=${VERSION:-$TAGGED}
 [ -n "$VERSION" ] || { echo "HEAD has no vX.Y.Z tag; set VERSION=x.y.z for a test build" >&2; exit 1; }
 if [ $PUBLISH = 1 ]; then
-  [ "$VERSION" = "$TAGGED" ] && [ "$VERSION" = "$BUILT" ] || {
-    echo "Only a tagged commit is published: HEAD is not tagged v$VERSION (CMake builds $BUILT)." >&2
+  [ "$VERSION" = "$TAGGED" ] || {
+    echo "Only a tagged commit is published: HEAD is not tagged v$VERSION." >&2
     exit 1
   }
   [ -z "$(git status --porcelain)" ] || {
@@ -50,7 +55,7 @@ fi
 IDENTITY=${SIGN_IDENTITY:?set SIGN_IDENTITY to your \"Developer ID Application: ...\" identity}
 
 if [ $SKIP_BUILD = 0 ]; then
-  cmake --preset release
+  cmake --preset release "-DCOMPOSER_TELEMETRY_KEY=${COMPOSER_TELEMETRY_KEY:-}"
   if [ "$TRACKER" = 1 ]; then
     cmake --build --preset release --target Composer_VST3 Composer_AU ComposerTracker
   else
@@ -58,13 +63,24 @@ if [ $SKIP_BUILD = 0 ]; then
   fi
 fi
 
+# What the binaries say about themselves must be what the zip says.
+BUILT=$(cat build/release/version.txt 2>/dev/null || true)
+if [ $PUBLISH = 1 ] && [ "$BUILT" != "$VERSION" ]; then
+  echo "The build in build/release is version '$BUILT', not $VERSION: build again without --skip-build." >&2
+  exit 1
+fi
+VST3=build/release/Composer_artefacts/Release/VST3/Composer.vst3
+MINOS=$(otool -l "$VST3/Contents/MacOS/Composer" | awk '/LC_BUILD_VERSION/ { found = 1 } found && /minos/ { print $2; exit }')
+[ "$MINOS" = 11.0 ] || { echo "The plugin needs macOS $MINOS or newer, not 11.0 (CMAKE_OSX_DEPLOYMENT_TARGET)." >&2; exit 1; }
+
 OUT=build/dist
-NAME="Composer-$VERSION-macos-arm64"
+NAME="Composer-$VERSION-macos-$(uname -m)"
+[ "$TRACKER" = 0 ] || NAME="$NAME-with-tracker-DO-NOT-PUBLISH"
 STAGE="$OUT/$NAME"
 ZIP="$OUT/$NAME.zip"
 rm -rf "$STAGE" "$ZIP"
 mkdir -p "$STAGE"
-ditto build/release/Composer_artefacts/Release/VST3/Composer.vst3 "$STAGE/Composer.vst3"
+ditto "$VST3" "$STAGE/Composer.vst3"
 ditto build/release/Composer_artefacts/Release/AU/Composer.component "$STAGE/Composer.component"
 
 sign() { codesign --force --timestamp --options runtime --sign "$IDENTITY" "$@"; }
@@ -80,26 +96,38 @@ for b in "$STAGE"/*; do codesign --verify --deep --strict "$b"; done
 echo "  signed as $IDENTITY"
 
 if [ "${NOTARIZE:-1}" != 0 ]; then
+  # The credentials as separate arguments (a key path may have spaces in it).
   if [ -n "${APPLE_API_KEY:-}" ]; then
-    AUTH="--key ${APPLE_API_KEY_PATH:?} --key-id $APPLE_API_KEY --issuer ${APPLE_API_ISSUER:?}"
+    set -- --key "${APPLE_API_KEY_PATH:?}" --key-id "$APPLE_API_KEY" --issuer "${APPLE_API_ISSUER:?}"
   else
-    AUTH="--keychain-profile ${NOTARY_PROFILE:?set NOTARY_PROFILE (or APPLE_API_KEY...), or NOTARIZE=0 for a local test}"
+    set -- --keychain-profile "${NOTARY_PROFILE:?set NOTARY_PROFILE (or APPLE_API_KEY...), or NOTARIZE=0 for a local test}"
   fi
   ditto -c -k "$STAGE" "$OUT/notarize.zip"
-  # shellcheck disable=SC2086 # AUTH is a list of flags
-  RESULT=$(xcrun notarytool submit "$OUT/notarize.zip" $AUTH --wait --output-format json)
+  # Its own exit status is looked at below, with what it said: a refusal must show its reason.
+  RESULT=$(xcrun notarytool submit "$OUT/notarize.zip" "$@" --wait --output-format plist) || true
   rm -f "$OUT/notarize.zip"
-  echo "$RESULT" | grep -q '"status":"Accepted"' || {
-    echo "Notarization failed: $RESULT" >&2
+  STATUS=$(echo "$RESULT" | plutil -extract status raw -o - - 2>/dev/null || true)
+  [ "$STATUS" = Accepted ] || {
+    echo "Notarization failed (status '$STATUS'): $RESULT" >&2
     echo "Log: xcrun notarytool log <id> (same credentials)" >&2
     exit 1
   }
-  # Staple the ticket into each bundle so Gatekeeper can check it offline.
-  for b in "$STAGE"/*; do xcrun stapler staple -q "$b"; done
-  echo "  notarized and stapled"
+  # Staple the ticket into each bundle so Gatekeeper can check it offline, then ask Gatekeeper
+  # itself: what a user's Mac will say about each bundle.
+  for b in "$STAGE"/*; do
+    xcrun stapler staple -q "$b"
+    xcrun stapler validate -q "$b"
+    case "$b" in *.app) kind=execute ;; *) kind=install ;; esac
+    spctl --assess --type "$kind" "$b"
+  done
+  echo "  notarized, stapled and accepted by Gatekeeper"
 else
   echo "  NOT notarized (NOTARIZE=0) - fine for local tests, not for users"
 fi
+
+# The licence texts go with the binaries (after signing and stapling: they aren't code).
+cp LICENSE THIRD_PARTY_NOTICES.md Resources/hrir/SADIE-II-LICENSE.txt "$STAGE/"
+cp Resources/hrir/NOTICE "$STAGE/SADIE-II-NOTICE.txt"
 
 # No --keepParent: the bundles sit at the zip root.
 ditto -c -k --sequesterRsrc "$STAGE" "$ZIP"
@@ -112,12 +140,15 @@ echo "  version $VERSION  size $(stat -f %z "$ZIP")  sha256 $(cut -d' ' -f1 "$ZI
 if [ $PUBLISH = 1 ]; then
   # The Windows workflow may have made the release for this tag already.
   if ! gh release view "v$VERSION" > /dev/null 2>&1; then
-    gh release create "v$VERSION" --title "Composer $VERSION" --generate-notes || {
+    # A version with a suffix (0.1.0-beta.1) is a pre-release: it never becomes "Latest".
+    case "$VERSION" in *-*) PRE=--prerelease ;; *) PRE= ;; esac
+    # shellcheck disable=SC2086 # PRE is one flag or nothing
+    gh release create "v$VERSION" --title "Composer $VERSION" --generate-notes $PRE || {
       status=$?
       gh release view "v$VERSION" > /dev/null 2>&1 || exit "$status"
     }
   fi
-  gh release upload "v$VERSION" "$ZIP" "$ZIP.sha256"
+  gh release upload --clobber "v$VERSION" "$ZIP" "$ZIP.sha256"
   echo "  attached to the GitHub release v$VERSION"
 else
   echo "  not published (--publish attaches it to the GitHub release)"

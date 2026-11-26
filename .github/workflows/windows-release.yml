@@ -18,28 +18,35 @@ jobs:
         with:
           submodules: recursive # JUCE
           fetch-depth: 0 # CMake takes the version from the tag
+          persist-credentials: false # the build runs npm packages: no token left in .git/config
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       # JUCE links WebView2 statically on Windows and looks for the NuGet package.
       - run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
-      - run: cmake --preset release
+      # The key of the usage-data project (public, write-only; empty in forks: nothing is ever sent).
+      - run: cmake --preset release "-DCOMPOSER_TELEMETRY_KEY=${{ vars.COMPOSER_TELEMETRY_KEY }}"
       - run: cmake --build --preset release --target Composer_VST3 ComposerTests
       # The build that ships is tested too: the fast set and pluginval (strictness 10).
       - run: ctest --preset release -LE slow
       - shell: pwsh
+        run: scripts/pluginval.ps1 build/release/Composer_artefacts/Release/VST3/Composer.vst3
+      # Composer.vst3 at the zip root (copy it to %LOCALAPPDATA%\Programs\Common\VST3), with the
+      # licence texts next to it, and the zip's SHA-256 beside it like the macOS one.
+      - shell: pwsh
         run: |
-          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
-          Expand-Archive pluginval.zip -DestinationPath pluginval
-          $p = Start-Process pluginval/pluginval.exe -Wait -NoNewWindow -PassThru -ArgumentList `
-            '--strictness-level', '10', '--timeout-ms', '120000', '--validate', 'build/release/Composer_artefacts/Release/VST3/Composer.vst3'
-          exit $p.ExitCode
-      # Composer.vst3 at the zip root: copy it to %LOCALAPPDATA%\Programs\Common\VST3.
-      - run: tar -a -c -f Composer-windows-x64.zip -C build/release/Composer_artefacts/Release/VST3 Composer.vst3
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item -Recurse build/release/Composer_artefacts/Release/VST3/Composer.vst3 dist/
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, Resources/hrir/SADIE-II-LICENSE.txt dist/
+          Copy-Item Resources/hrir/NOTICE dist/SADIE-II-NOTICE.txt
+          tar -a -c -f Composer-windows-x64.zip -C dist Composer.vst3 LICENSE THIRD_PARTY_NOTICES.md SADIE-II-LICENSE.txt SADIE-II-NOTICE.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash Composer-windows-x64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  Composer-windows-x64.zip" | Out-File -Encoding ascii Composer-windows-x64.zip.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: composer-windows-x64
-          path: Composer-windows-x64.zip
+          path: Composer-windows-x64.zip*
       # The macOS script may have made the release for this tag already.
       - if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -47,9 +54,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --title "Composer ${GITHUB_REF_NAME#v}" --generate-notes || {
+            # A tag with a suffix (v0.1.0-beta.1) is a pre-release: it never becomes "Latest".
+            case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; *) pre= ;; esac
+            gh release create "$GITHUB_REF_NAME" --title "Composer ${GITHUB_REF_NAME#v}" --generate-notes $pre || {
               status=$?
               gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || exit "$status"
             }
           fi
-          gh release upload "$GITHUB_REF_NAME" Composer-windows-x64.zip
+          gh release upload --clobber "$GITHUB_REF_NAME" Composer-windows-x64.zip Composer-windows-x64.zip.sha256

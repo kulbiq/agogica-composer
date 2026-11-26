@@ -13,6 +13,9 @@ on:
   schedule:
     - cron: "0 3 * * *" # nightly: the [slow] tests too (fuzz, silence skip)
 
+permissions:
+  contents: read
+
 concurrency:
   group: check-${{ github.ref }}-${{ github.event_name }} # a push never cancels the nightly run
   cancel-in-progress: true
@@ -41,6 +44,9 @@ jobs:
         run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       - run: cmake --preset debug -DCOMPOSER_TRACKER_SKIP_MODELS=ON
       - run: cmake --build --preset debug --target ComposerTests
+      # The page's own tests (the build above installed its packages and type-checked it).
+      - run: npm test
+        working-directory: ui
       - run: ctest --preset debug ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
       # The Tracker has no other check on Windows: the owner builds on a Mac.
       - run: cmake --build --preset debug --target ComposerTracker
@@ -51,13 +57,7 @@ jobs:
         run: cmake --build --preset debug --target Composer_VST3
       - if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
-          Expand-Archive pluginval.zip -DestinationPath pluginval
-          # A GUI-subsystem exe: wait for it explicitly, or PowerShell moves on at once.
-          $p = Start-Process pluginval/pluginval.exe -Wait -NoNewWindow -PassThru -ArgumentList `
-            '--strictness-level', '10', '--timeout-ms', '120000', '--validate', 'build/debug/Composer_artefacts/Debug/VST3/Composer.vst3'
-          exit $p.ExitCode
+        run: scripts/pluginval.ps1 build/debug/Composer_artefacts/Debug/VST3/Composer.vst3
       - if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
