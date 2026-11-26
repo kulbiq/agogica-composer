@@ -4,10 +4,10 @@ import { getBuildInfo, setParams, useEvent, type BuildInfo, type Load, type Stag
 import ParamSlider from "./ParamSlider";
 import type { MapNames } from "./stagePainter";
 
-// proDistanceLaw (Source/Parameters.h): 0..20·log10(2) dB per doubling, none by default.
+// The defaults of Source/Parameters.h: proDistanceLaw 0..20·log10(2) dB per doubling (2.5);
+// proDelayFrom / proDelayTo, the physical delay stretched 1..4 times (1 and 3, dsp/DelayStretch.h).
 const lawMax = 6.0206;
-const lawNeutral = 0;
-// proDelayFrom / proDelayTo: the physical delay stretched 1..4 times (Source/dsp/DelayStretch.h).
+const defaults = { proDistanceLaw: 2.5, proDelayFrom: 1, proDelayTo: 3 };
 const stretchMax = 4;
 const formatStretch = (v: number) => `${v.toFixed(2)}×`;
 const minus = "−";
@@ -25,11 +25,14 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
   const [load, setLoad] = useState<Load>();
   // For us only: always in Debug builds; in Release, Alt+click the version to toggle.
   const [showLoad, setShowLoad] = useState(() => localStorage.getItem(loadKey) === "1");
-  const law = stage.pro.proDistanceLaw ?? lawNeutral;
-  const changed = Math.abs(law - lawNeutral) > 1e-3;
-  const stretchFrom = stage.pro.proDelayFrom ?? 1;
-  const stretchTo = stage.pro.proDelayTo ?? 1;
-  const stretched = stretchFrom > 1.001 || stretchTo > 1.001;
+  const law = stage.pro.proDistanceLaw ?? defaults.proDistanceLaw;
+  const stretchFrom = stage.pro.proDelayFrom ?? defaults.proDelayFrom;
+  const stretchTo = stage.pro.proDelayTo ?? defaults.proDelayTo;
+  const atDefaults =
+    Math.abs(law - defaults.proDistanceLaw) < 1e-3 &&
+    Math.abs(stretchFrom - defaults.proDelayFrom) < 1e-3 &&
+    Math.abs(stretchTo - defaults.proDelayTo) < 1e-3 &&
+    names === "selected";
 
   useEffect(() => {
     void getBuildInfo().then(setInfo);
@@ -97,10 +100,10 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
       <div className={styles.popoverSection}>
         <button
           className={styles.ghost}
-          disabled={!changed && !stretched && names === "selected"}
-          title="Distance level 0 dB, no delay stretch, names of the selected players only"
+          disabled={atDefaults}
+          title="Distance level −2.5 dB, delay stretch 1× to 3×, names of the selected players only"
           onClick={() => {
-            setParams(selfId, { proDistanceLaw: lawNeutral, proDelayFrom: 1, proDelayTo: 1 });
+            setParams(selfId, defaults);
             onNames("selected");
           }}
         >

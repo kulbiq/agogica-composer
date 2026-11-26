@@ -234,6 +234,7 @@ TEST_CASE ("processBlock: position from parameters, clamped to the room", "[inte
     set (p, "roomSize", 10.0f);
     set (p, "playerX", 20.0f); // clamped to the edge: x = 5
     set (p, "playerY", 5.0f);
+    set (p, "proDelayTo", 1.0f); // the physical delay
 
     constexpr double sampleRate = 48000.0;
     p.setPlayConfigDetails (2, 2, sampleRate, 512);
@@ -364,6 +365,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
     SECTION ("a silent track skips its work and resumes at the current position, without allocating")
     {
         constexpr double sampleRate = 48000.0;
+        set (p, "proDelayTo", 1.0f); // the physical delay
         p.setPlayConfigDetails (2, 2, sampleRate, 480);
         p.prepareToPlay (sampleRate, 480);
 
@@ -372,7 +374,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
         buffer.setSample (0, 0, 1.0f);
         p.processBlock (buffer, midi);
 
-        for (int block = 0; block < 100; ++block) // 1 s of silence (longer than the 0.5 s tail)
+        for (int block = 0; block < 100; ++block) // 1 s of silence (longer than the 0.85 s tail)
         {
             buffer.clear();
             p.processBlock (buffer, midi);
@@ -552,6 +554,7 @@ TEST_CASE ("a project saved in Binaural starts in Binaural: no fade from the ste
         set (p, "outputMode", 1.0f);
         set (p, "playerX", 0.0f);
         set (p, "playerY", 0.5f); // 0.5 m: the sound arrives within the first block
+        set (p, "proDelayTo", 1.0f); // no stretch: it would differ with the song's time
         p.prepareToPlay (48000.0, 256);
 
         juce::MidiBuffer midi;
@@ -678,7 +681,7 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK (p.isHeadTrackingOn()); // saved before the switch: on
         CHECK (p.getAudience().isEmpty()); // saved before the audience was painted: none
         CHECK_THAT (p.getParam ("proDistanceLaw"), WithinAbs (params::legacyDistanceLaw, 1e-4)); // as saved
-        CHECK_THAT (p.getParam ("proDelayTo"), WithinAbs (1.0, 1e-4)); // saved before the stretch: none
+        CHECK_THAT (p.getParam ("proDelayTo"), WithinAbs (1.0, 1e-4)); // saved before the stretch: none (not today's 3x)
         CHECK_THAT (p.getParam ("listenerYaw"), WithinAbs (0.0, 1e-4)); // saved before it existed: ahead
         CHECK (p.getScene() == "D");
         CHECK (p.isPlaced());

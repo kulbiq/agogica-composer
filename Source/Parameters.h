@@ -27,9 +27,14 @@ inline const juce::StringArray ofStage { roomSize, listenerX, listenerY, listene
 inline const juce::StringArray ofScene { roomSize, listenerX, listenerY, listenerYaw, playerX, playerY };
 
 inline const float dbPerDoublingFreeField = 20.0f * std::log10 (2.0f); // 6.02 dB
-// proDistanceLaw's default until 2026-11-26 (now 0: the user found any loss with distance
-// wrong); a project saved before the parameter existed is loaded with it.
+// proDistanceLaw's default until 2026-11-26 (-2 dB per doubling; now -2.5, user decision).
 inline const float legacyDistanceLaw = dbPerDoublingFreeField * geometry::distanceLawExponent;
+
+// What a project saved before these parameters existed had instead of today's defaults:
+// setStateInformation loads that, so an old project sounds as it did.
+inline const std::pair<const char*, float> asBeforeTheyExisted[] { { proDistanceLaw, legacyDistanceLaw },
+                                                                   { proDelayFrom, 1.0f },
+                                                                   { proDelayTo, 1.0f } };
 
 inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
@@ -60,7 +65,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         // Pro panel. No step (it once had to hold -20·log10(2)/3 dB per doubling exactly).
         std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { proDistanceLaw, 1 }, "Distance law",
                                                      juce::NormalisableRange<float> { 0.0f, dbPerDoublingFreeField },
-                                                     0.0f,
+                                                     2.5f,
                                                      juce::AudioParameterFloatAttributes{}.withLabel ("dB/doubling")),
 
         // Added after the first release: new parameters go at the end.
@@ -74,7 +79,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                      juce::AudioParameterFloatAttributes{}.withLabel ("x")),
         std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { proDelayTo, 1 }, "Delay stretch to",
                                                      juce::NormalisableRange<float> { 1.0f, 4.0f, 0.01f },
-                                                     1.0f,
+                                                     3.0f,
                                                      juce::AudioParameterFloatAttributes{}.withLabel ("x")),
     };
 }

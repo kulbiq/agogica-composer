@@ -46,14 +46,15 @@ std::vector<float> render (ComposerProcessor& p, int blocks)
 TEST_CASE ("Pro panel at the values it shipped with (no delay stretch): the direct sound exactly as before", "[integration]")
 {
     // The chain is the direct sound alone for now, so the processor must sound like the
-    // per-sample direct-path stage it shipped with (tests/LegacyDirectPath.h). The distance
-    // law's default has changed since (0 dB): the shipped law is set here.
+    // per-sample direct-path stage it shipped with (tests/LegacyDirectPath.h). The defaults have
+    // changed since (-2.5 dB, stretched 1-3x): the shipped values are set here.
     juce::ScopedJuceInitialiser_GUI juce;
 
     for (const auto mode : { 0, 1 })
     {
         ComposerProcessor p;
         set (p, "proDistanceLaw", params::legacyDistanceLaw);
+        set (p, "proDelayTo", 1.0f);
         set (p, "outputMode", (float) mode);
         set (p, "playerX", -4.0f);
         set (p, "playerY", 7.0f);
@@ -90,7 +91,7 @@ TEST_CASE ("Pro: the distance law in the derived values", "[integration]")
     ComposerProcessor p;
     set (p, "playerY", 2.0f);
 
-    CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["levelDb"], WithinAbs (0.0, 0.01)); // default: none
+    CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["levelDb"], WithinAbs (-2.5, 0.01)); // default
     set (p, "proDistanceLaw", params::legacyDistanceLaw);
     CHECK_THAT ((double) stage::snapshot (p)["players"][0]["derived"]["levelDb"], WithinAbs (-2.007, 0.01));
     set (p, "proDistanceLaw", 20.0f * std::log10 (2.0f));

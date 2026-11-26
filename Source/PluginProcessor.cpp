@@ -333,9 +333,10 @@ void ComposerProcessor::setStateInformation (const void* data, int sizeInBytes)
     {
         auto tree = juce::ValueTree::fromXml (*xml);
 
-        // Saved before the distance law was a parameter: it had the law that was built in.
-        if (! tree.getChildWithProperty ("id", params::proDistanceLaw).isValid())
-            tree.appendChild (juce::ValueTree ("PARAM", { { "id", params::proDistanceLaw }, { "value", params::legacyDistanceLaw } }), nullptr);
+        // Saved before a parameter whose default has changed: what it had then.
+        for (const auto& [paramId, value] : params::asBeforeTheyExisted)
+            if (! tree.getChildWithProperty ("id", paramId).isValid())
+                tree.appendChild (juce::ValueTree ("PARAM", { { "id", paramId }, { "value", value } }), nullptr);
 
         const juce::ScopedLock lock (stateTreeLock);
         state.replaceState (tree);
