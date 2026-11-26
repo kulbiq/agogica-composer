@@ -60,7 +60,6 @@ type Box = { x0: number; y0: number; x1: number; y1: number };
 export default function StageMap(props: Props) {
   const { stage, selfId, selected, selection, onSelect, view: mapView, names, in3d, onLeave3d, brush, spectate, top, fitRequest, onZoomed } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const textCopyRef = useRef<HTMLCanvasElement>(null);
   const [standing, setStanding] = useState(false);
 
   // The rAF loop reads the latest props through refs instead of restarting.
@@ -218,7 +217,6 @@ export default function StageMap(props: Props) {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
     let W = 0;
     let H = 0;
     let frame = 0;
@@ -240,26 +238,26 @@ export default function StageMap(props: Props) {
     theme.addEventListener("change", readTheme);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    let dpr = 0; // the pixel ratio the canvas was last sized for
+    let dpr = 0; // the pixel ratio the canvases are drawn for (the painter sizes them)
     let lastPaint = -Infinity;
     const resize = () => {
-      lastPaint = -Infinity; // sizing a canvas clears it: draw the next frame whatever the pace
+      lastPaint = -Infinity; // draw the next frame whatever the pace
       const r = canvas.getBoundingClientRect();
       dpr = window.devicePixelRatio || 1;
       W = r.width;
       H = r.height;
-      canvas.width = Math.round(W * dpr);
-      canvas.height = Math.round(H * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
-    const painter = new StagePainter(textCopyRef.current!);
-    // Levels arrive 30 times a second and the ring breathes slowly, so a resting map is drawn
-    // 30 times a second; anything being moved, by the user or by easing, gets every frame.
+    const painter = new StagePainter(canvas);
+    // Levels arrive 30 times a second and the ring breathes slowly, so a resting map is looked
+    // at 30 times a second (and drawn only if something in it changed); anything being moved,
+    // by the user or by easing, 60 times a second. Not every frame: a 120 Hz screen would draw
+    // twice as many, for motion the eye can't tell apart, at twice the cost.
     const restingFrameMs = 1000 / 30;
+    const movingFrameMs = 1000 / 60;
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -300,15 +298,16 @@ export default function StageMap(props: Props) {
         lookDrag.current ||
         held.current.size > 0 ||
         now - poked.current < 150;
-      if (!moving && now - lastPaint < restingFrameMs - 4) return; // 4 ms: frames don't arrive exactly on time
+      if (now - lastPaint < (moving ? movingFrameMs : restingFrameMs) - 4) return; // 4 ms: frames don't arrive exactly on time
       lastPaint = now;
       // The window moved to a screen with another pixel ratio: no resize event tells us.
       if ((window.devicePixelRatio || 1) !== dpr) resize();
       const head = s.headTracking.on ? headYaw.current : 0;
       const heard = s.outputMode === "binaural" ? yaw() + head : 0; // what the ears face
-      view.current = painter.paint(ctx, {
+      view.current = painter.paint({
         width: W,
         height: H,
+        dpr,
         seconds: (now - t0) / 1000,
         ...latest.current,
         audience: stroke.current?.seats ?? painted.current?.seats ?? latest.current.audience, // the stroke as it goes
@@ -334,6 +333,7 @@ export default function StageMap(props: Props) {
 
     return () => {
       cancelAnimationFrame(frame);
+      painter.dispose();
       ro.disconnect();
       theme.removeEventListener("change", readTheme);
     };
@@ -610,7 +610,6 @@ export default function StageMap(props: Props) {
 
   return (
     <>
-      <canvas ref={textCopyRef} hidden aria-hidden />
       <canvas
         ref={canvasRef}
         className={styles.map}

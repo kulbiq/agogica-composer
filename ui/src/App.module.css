@@ -1017,14 +1017,21 @@ button.status:focus-visible {
   flex-shrink: 0;
 }
 
-.meterFill {
-  --level: 0;
+/* The meters' levels, drawn over the list (LevelMeter.tsx, MeterLayer): stuck to the top of the
+   scrolling list, taking no room, its canvas as big as the visible list. */
+.meterLayer {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.meterLayer canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
   display: block;
-  height: 100%;
-  background: var(--ink);
-  transform: scaleX(var(--level));
-  transform-origin: left;
-  will-change: transform; /* its own layer: 30 changes a second must not repaint the panel */
 }
 
 /* ---- Map ---- */

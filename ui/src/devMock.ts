@@ -27,6 +27,17 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     ["Piano RH", "", 7, 5, "Piano"],
     ["Piano LH", "", 7, 5, "Piano"],
   ];
+  // ?players=64: that many tracks instead (a big score, for measuring the editor's cost), in
+  // rows of 8 in front of the listener, a pair sharing a player every 8 tracks.
+  const many = Number(new URLSearchParams(location.search).get("players") ?? 0);
+  if (many > 0) {
+    const palette = ["#d1495b", "#edae49", "#00798c", "#30638e", "#66a182", ""];
+    seats.length = 0;
+    for (let i = 0; i < many; i++) {
+      const pair = i % 8 === 1 ? `Desk ${i}` : i % 8 === 2 ? `Desk ${i - 1}` : undefined;
+      seats.push([`Track ${i + 1}`, palette[i % palette.length], ((i % 8) - 3.5) * 2, 2 + Math.floor(i / 8) * 1.5, pair]);
+    }
+  }
   const names = seats.map(([name]) => name);
   const scene = {
     scene: "A",
@@ -199,9 +210,21 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   }, 33);
 }
 
-// Rows behind the stage's centre with a middle aisle (?noaudience: nobody).
+// Rows behind the stage's centre with a middle aisle (?noaudience: nobody; ?audience=600: about
+// that many seats, rows filling the back of a big room, as a large project has them).
 function sampleAudience() {
   const seats = emptyAudience();
+  const many = Number(new URLSearchParams(location.search).get("audience") ?? 0);
+  if (many > 0) {
+    let n = 0;
+    for (let j = -2; j >= -30 && n < many; j--)
+      for (let i = 1; i <= 24 && n < many; i++) {
+        setSeat(seats, i, j, true);
+        setSeat(seats, -i, j, true);
+        n += 2;
+      }
+    return encodeAudience(seats);
+  }
   if (!location.search.includes("noaudience"))
     for (let j = -4; j >= -11; j--)
       for (let i = 2; i <= 9; i++) {

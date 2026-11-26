@@ -660,3 +660,49 @@ TEST_CASE ("snapshot names another instance whose editor is open", "[integration
     editor.reset();
     CHECK_FALSE (stage::snapshot (b).hasProperty ("openElsewhere"));
 }
+
+TEST_CASE ("CPU: what the editor's 30 Hz timer works out for 64 tracks", "[.perf]")
+{
+   #if JUCE_DEBUG
+    SKIP ("CPU figures apply to Release builds");
+   #else
+    // The host's message thread pays this 30 times a second while an editor is open
+    // (ComposerEditor::timerCallback): the stage snapshot, its JSON to compare with what the
+    // page last saw, and every track's level.
+    juce::ScopedJuceInitialiser_GUI juce;
+    std::vector<std::unique_ptr<ComposerProcessor>> tracks;
+    for (int i = 0; i < 64; ++i)
+        tracks.push_back (std::make_unique<ComposerProcessor>());
+    auto& self = *tracks.front();
+
+    constexpr int ticks = 300; // 10 s of ticks
+    double snapshotMs = 0, jsonMs = 0, levelsMs = 0;
+    size_t jsonBytes = 0;
+    for (int t = 0; t < ticks; ++t)
+    {
+        auto t0 = juce::Time::getMillisecondCounterHiRes();
+        const auto stage = stage::snapshot (self);
+        auto t1 = juce::Time::getMillisecondCounterHiRes();
+        const auto json = juce::JSON::toString (stage, true);
+        auto t2 = juce::Time::getMillisecondCounterHiRes();
+        auto levels = std::make_unique<juce::DynamicObject>();
+        const auto now = juce::Time::getMillisecondCounter();
+        self.registry->withMembers ([&] (const juce::Array<ComposerProcessor*>& members)
+        {
+            for (auto* p : members)
+                levels->setProperty (juce::String (p->id), juce::Decibels::gainToDecibels (p->readInputLevel (now), -60.0f));
+        });
+        const auto levelsJson = juce::JSON::toString (juce::var (levels.release()), true); // what the browser is sent
+        auto t3 = juce::Time::getMillisecondCounterHiRes();
+        snapshotMs += t1 - t0;
+        jsonMs += t2 - t1;
+        levelsMs += t3 - t2;
+        jsonBytes = (size_t) json.getNumBytesAsUTF8();
+    }
+    const auto perTick = (snapshotMs + jsonMs + levelsMs) / ticks;
+    UNSCOPED_INFO ("64 tracks, per tick: snapshot " << juce::String (snapshotMs / ticks, 3) << " ms, JSON " << juce::String (jsonMs / ticks, 3)
+                   << " ms (" << (int) jsonBytes << " bytes), levels " << juce::String (levelsMs / ticks, 3) << " ms; at 30 Hz "
+                   << juce::String (perTick * 30 / 10, 1) << " % of one core");
+    CHECK (perTick < 33.0);
+   #endif
+}
