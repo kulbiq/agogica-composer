@@ -84,6 +84,9 @@ if (import.meta.env.DEV && !window.__JUCE__) {
   // The plugin sends the stage from a timer, after the call that changed it has returned.
   const emitStageSoon = () => setTimeout(() => emit("stage", snapshot()), 33);
   const gestures = new GestureLedger();
+  // For checking by hand (or from a script) what a click or a drag told the host.
+  const edits: string[] = [];
+  Object.assign(window, { composerMock: { gestures, edits } });
   const tracksOf = (id: number) => {
     const key = scene.players.find((p) => p.id === id)?.player;
     return scene.players.filter((p) => p.id === id || (key && p.player === key));
@@ -109,6 +112,7 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     reportError: (message: string, stack: string, where: string) => console.warn("reportError", where, message, stack),
     edit: (e: Edit) => {
       gestures.record(e.phase, e.target, e.param);
+      edits.push(`${e.phase} ${e.target}/${e.param}`);
       if (e.phase !== "change") return;
       const p = scene.players.find((pl) => pl.id === e.target);
       const tracks = tracksOf(e.target);

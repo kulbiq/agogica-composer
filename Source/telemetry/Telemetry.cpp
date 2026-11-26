@@ -108,8 +108,18 @@ void HttpPoster::cancel()
 
 // ---- Telemetry ------------------------------------------------------------------------
 
+// AGOGICA_COMPOSER_SETTINGS_FILE: another file (development: trying the question in a host
+// without touching one's own answer).
+static juce::File userSettingsFile()
+{
+    if (const auto other = juce::SystemStats::getEnvironmentVariable ("AGOGICA_COMPOSER_SETTINGS_FILE", {}); other.isNotEmpty())
+        return juce::File (other);
+
+    return agogicaFolder().getChildFile ("Composer.settings");
+}
+
 Telemetry::Telemetry()
-    : Telemetry (COMPOSER_TELEMETRY_KEY, agogicaFolder().getChildFile ("Composer.settings"), {}, {}, doNotTrackIsSet())
+    : Telemetry (COMPOSER_TELEMETRY_KEY, userSettingsFile(), {}, {}, doNotTrackIsSet())
 {
     const auto poster = std::make_shared<HttpPoster> (endpoint);
     post = [poster] (const juce::String& body) { return poster->post (body); };

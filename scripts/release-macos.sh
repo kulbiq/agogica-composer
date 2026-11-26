@@ -14,7 +14,7 @@
 # weights have no stated licence yet (tracker/models/MODELS.md), so a build with them isn't
 # published and its zip says so in its name.
 # COMPOSER_TELEMETRY_KEY: the key of the usage-data project (PRIVACY.md); without it the build
-# never asks and never sends.
+# never asks and never sends (--publish wants it, or NO_TELEMETRY=1 said out loud).
 #
 # Signing: SIGN_IDENTITY, a "Developer ID Application: ..." identity from the Keychain
 # (hardened runtime, secure timestamp).
@@ -51,6 +51,11 @@ if [ $PUBLISH = 1 ]; then
   }
   [ "${NOTARIZE:-1}" != 0 ] || { echo "NOTARIZE=0 builds are for local tests only, never published" >&2; exit 1; }
   [ "$TRACKER" = 0 ] || { echo "TRACKER=1 builds aren't published: the head-pose weights have no licence yet" >&2; exit 1; }
+  # A release without the key would never ask about usage data, and nobody would notice.
+  [ -n "${COMPOSER_TELEMETRY_KEY:-}" ] || [ "${NO_TELEMETRY:-0}" = 1 ] || {
+    echo "Set COMPOSER_TELEMETRY_KEY (the usage-data project's key), or NO_TELEMETRY=1 for a release that never asks." >&2
+    exit 1
+  }
 fi
 IDENTITY=${SIGN_IDENTITY:?set SIGN_IDENTITY to your \"Developer ID Application: ...\" identity}
 
@@ -126,8 +131,8 @@ else
 fi
 
 # The licence texts go with the binaries (after signing and stapling: they aren't code).
-cp LICENSE THIRD_PARTY_NOTICES.md Resources/hrir/SADIE-II-LICENSE.txt "$STAGE/"
-cp Resources/hrir/NOTICE "$STAGE/SADIE-II-NOTICE.txt"
+cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE/"
+scripts/third-party-licences.sh "$STAGE/THIRD_PARTY_LICENSES.txt"
 
 # No --keepParent: the bundles sit at the zip root.
 ditto -c -k --sequesterRsrc "$STAGE" "$ZIP"

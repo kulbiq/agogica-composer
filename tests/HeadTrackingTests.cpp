@@ -136,6 +136,7 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
         CHECK_THAT (read->yaw, WithinAbs (7.0, 0.0));
     }
 
+   #if ! JUCE_WINDOWS // Windows doesn't let a file be emptied while the writer has it mapped
     SECTION ("a file emptied under the reader (a sync tool, a stray shell redirect) is no head, not a crash")
     {
         const auto file = tempFile ("emptied");
@@ -154,6 +155,7 @@ TEST_CASE ("head tracking file: round trip, replaced file picked up, missing/sho
 
         CHECK_FALSE (reader.read (1001).has_value());
     }
+   #endif
 
     SECTION ("missing, short and foreign files are ignored")
     {

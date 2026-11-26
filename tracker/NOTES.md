@@ -62,3 +62,17 @@ Measurements name the model and machine they were taken with: several predate th
 - Windows build: a folder (`Agogica Tracker.exe`, `onnxruntime.dll`, `ui\`, `models\`), WebView2 profile in `%LOCALAPPDATA%\Agogica\Tracker\WebView2`; it runs from the build folder - install folder and `startTracker` on Windows are still to do.
 - Every build installs it per user to `~/Applications/Agogica Tracker.app`; Composer's panel (Binaural, not live) shows a "Start head tracking" chip (`HeadTracking::startTracker`: the installed copy first, then `open -b com.agogica.tracker`).
   After rebuilding, quit a running tracker first: `open` only re-activates a running instance.
+
+## Before the Tracker ships (review of 2026-11-27, not fixed: the Tracker is in no release yet)
+
+Found by reading the code, not reproduced: each needs its reproduction first.
+
+- Closing a camera can hold up the window for seconds: `CameraSource_mac.mm` stops the session with `dispatch_sync` on the capture queue, on which a slow `startRunning` (a phone camera) may still be waiting. Reached from choosing another camera, the 10 s "no picture" fallback and quitting.
+- A denied camera permission shows only "No picture" after 10 s: check `authorizationStatusForMediaType` and say where to allow it.
+- The tracking thread has one autorelease pool for its whole life (JUCE's `Thread::run`): whatever ONNX Runtime's CoreML provider autoreleases per frame stays until the thread ends. Wrap the loop body in a pool and watch memory over 30 minutes.
+- Windows: the settings file is in the roaming `%APPDATA%\Agogica`, everything else of Agogica's in `%LOCALAPPDATA%` (`Source/stage/AgogicaFolder.h`); camera ids and window places shouldn't roam.
+- `Tracker-crash.log` grows without limit, and a backtrace names the user's folders: it must never be sent anywhere.
+- The page: the plot's drawing loop runs while the debug view is hidden, and Pause is always off after the page reloads.
+- Windows: the camera menu binds every camera filter each time it opens (may disturb the one in use).
+- The head-tracking file: on Windows nothing stops a second writer (macOS: `flock` in `headtracking::Writer`).
+- The weights of the head-pose model still have no licence (`tracker/models/MODELS.md`): the reason the Tracker is in no release.

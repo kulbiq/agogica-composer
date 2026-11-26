@@ -79,7 +79,7 @@ public:
     // Posts one JSON body; true when the server took it. May block for a few seconds.
     using Post = std::function<bool (const juce::String& body)>;
 
-    Telemetry(); // this build's key, the user's settings file, HTTPS to the project
+    Telemetry(); // this build's key, the user's settings file (Telemetry.cpp: userSettingsFile), HTTPS to the project
     // `cancelPost`: called when the process is closing, to let go of a request that is waiting.
     Telemetry (juce::String projectKey, juce::File settingsFile, Post post, std::function<void()> cancelPost = {}, bool doNotTrack = false);
     ~Telemetry() override;

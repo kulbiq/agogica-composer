@@ -53,8 +53,9 @@ After rebuilding, quit the DAW completely (Dorico's audio engine keeps the old p
 
 ## Requirements
 
-macOS 11 or newer on Apple Silicon (VST3 and Audio Unit), Windows 10 or 11 (VST3).
-Tested in Dorico 6, MuseScore 4 and Ableton Live 12.
+macOS on Apple Silicon (VST3 and Audio Unit), Windows 10 or 11 (VST3).
+The macOS plugins are built to load on macOS 11 and newer, and have been tried on macOS 26 only so far.
+Development is checked in Dorico 6, MuseScore 4 and Ableton Live 12.
 
 ## Privacy
 

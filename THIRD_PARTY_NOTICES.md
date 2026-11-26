@@ -2,6 +2,7 @@
 
 Composer is licensed under the GNU Affero General Public License, version 3 (see `LICENSE`).
 The plugin binaries contain the works below.
+Their licence texts ship with every release in `THIRD_PARTY_LICENSES.txt` (gathered by `scripts/third-party-licences.sh`).
 The list follows what the build links and embeds: the JUCE modules in `CMakeLists.txt` (with `JUCE/JUCE.spdx.json` for what each bundles) and the npm packages that end up in `ui/dist`.
 Agogica Tracker is not part of the released plugin and is not covered here (see `tracker/models/MODELS.md`).
 
@@ -30,7 +31,7 @@ Agogica Tracker is not part of the released plugin and is not covered here (see 
 
 | Work | Licence | Text |
 |---|---|---|
-| Microsoft Edge WebView2 SDK (the loader, linked statically) | BSD-3-Clause | `LICENSE.txt` in the `Microsoft.Web.WebView2` NuGet package |
+| Microsoft Edge WebView2 SDK (the loader, linked statically) | BSD-3-Clause (as published; to be confirmed from the package on the first Windows release build, which copies its text) | `LICENSE.txt` in the `Microsoft.Web.WebView2` NuGet package |
 
 ## Sound data
 
