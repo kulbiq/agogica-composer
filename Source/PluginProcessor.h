@@ -17,7 +17,7 @@ public:
     ComposerProcessor();
     ~ComposerProcessor() override;
 
-    void prepareToPlay (double sampleRate, int) override;
+    void prepareToPlay (double hostRate, int) override;
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;

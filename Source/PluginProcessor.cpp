@@ -302,8 +302,11 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     }
 }
 
-void ComposerProcessor::prepareToPlay (double sampleRate, int)
+void ComposerProcessor::prepareToPlay (double hostRate, int)
 {
+    // Whatever the host says, a rate the delays and HRIR tables can be made for: zero or a NaN
+    // gives sound that isn't a number, a huge one tables that take minutes to resample.
+    const auto sampleRate = std::isfinite (hostRate) ? std::clamp (hostRate, 8000.0, 384000.0) : 48000.0;
     preparedRate = sampleRate;
     history.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
     directPath.prepare (sampleRate);

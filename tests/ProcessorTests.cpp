@@ -620,6 +620,32 @@ TEST_CASE ("bypass: the dry sound on both channels, and nothing old when it ends
     }
 }
 
+TEST_CASE ("a host that names no usable sample rate gets sound that is a number, not a crash", "[integration]")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const auto rate = GENERATE (0.0, -48000.0, std::numeric_limits<double>::quiet_NaN(), 1.0, 1.0e9);
+    CAPTURE (rate);
+
+    ComposerProcessor p;
+    set (p, "outputMode", 1.0f); // Binaural: the HRIR tables are made for the rate
+    p.setPlayConfigDetails (2, 2, rate, 64);
+    p.prepareToPlay (rate, 64);
+
+    juce::Random rng (3);
+    juce::AudioBuffer<float> buffer (2, 64);
+    juce::MidiBuffer midi;
+
+    for (int block = 0; block < 8; ++block)
+    {
+        fillNoise (buffer, rng);
+        p.processBlock (buffer, midi);
+
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 64; ++i)
+                REQUIRE (std::isfinite (buffer.getSample (ch, i)));
+    }
+}
+
 TEST_CASE ("bus layouts: mono or stereo in, stereo out only", "[integration]")
 {
     juce::ScopedJuceInitialiser_GUI juce;
