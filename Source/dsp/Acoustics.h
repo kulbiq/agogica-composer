@@ -19,4 +19,9 @@ struct Acoustics
     // Which way the listener's head points, degrees clockwise (turned right). Binaural only -
     // the processor sets 0 in stereo; the tracked part of it only in realtime.
     float headYaw = 0.0f;
+
+    // The physical delay times this (dsp/DelayStretch.h); `delayJump`: it changed in a pause,
+    // so the delay jumps to it instead of fading.
+    float delayScale = 1.0f;
+    bool delayJump = false;
 };

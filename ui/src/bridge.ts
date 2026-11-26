@@ -36,7 +36,7 @@ export type Stage = {
 };
 
 export type Param = "roomSize" | "listenerX" | "listenerY" | "listenerYaw" | "playerX" | "playerY" | "outputMode"
-  | "proDistanceLaw";
+  | "proDistanceLaw" | "proDelayFrom" | "proDelayTo";
 
 export type BuildInfo = { version: string; format: string; host: string; credits?: string; debug?: boolean };
 

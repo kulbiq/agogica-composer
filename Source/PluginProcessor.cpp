@@ -209,8 +209,18 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     {
         history.clear();
         directPath.clear();
+        delayStretch.prepare (preparedRate);
         silentFor = 0;
     }
+
+    // The song's time (for the delay stretch's field): the host's, else counted since
+    // prepareToPlay.
+    auto songSeconds = (double) samplesPlayed / preparedRate;
+    if (auto* head = getPlayHead())
+        if (const auto position = head->getPosition())
+            if (const auto seconds = position->getTimeInSeconds())
+                songSeconds = *seconds;
+    samplesPlayed += buffer.getNumSamples();
 
     // Audio depends only on this instance's own parameters (never on UI pushes or other
     // instances), so offline bounces and ahead-of-time rendering stay correct.
@@ -233,6 +243,15 @@ void ComposerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
     auto& adjust = acoustics.adjust;
     adjust.distanceExponent = audioParams.proDistanceLaw->load() / params::dbPerDoublingFreeField;
+
+    // The delay stretched (dsp/DelayStretch.h); a new multiplier only after a pause, and then
+    // the delay jumps to it.
+    const auto stretchFrom = audioParams.proDelayFrom->load(), stretchTo = audioParams.proDelayTo->load();
+    const auto heldScale = delayStretch.multiplier (stretchFrom, stretchTo);
+    const auto took = delayStretch.update (peak, buffer.getNumSamples(), acoustics.player, songSeconds,
+                                           geometry::delayMs (acoustics.player, acoustics.listener) / 1000.0f, stretchFrom, stretchTo);
+    acoustics.delayScale = delayStretch.multiplier (stretchFrom, stretchTo);
+    acoustics.delayJump = took && ! juce::exactlyEqual (acoustics.delayScale, heldScale);
 
     // A track silent for longer than the tail produces silence: skip all the work. When
     // sound returns, everything inside is silent too, so the path jumps straight to the
@@ -285,6 +304,8 @@ void ComposerProcessor::prepareToPlay (double sampleRate, int)
     preparedRate = sampleRate;
     history.prepare ((int) std::ceil (History::maxDelaySeconds * sampleRate));
     directPath.prepare (sampleRate);
+    delayStretch.prepare (sampleRate);
+    samplesPlayed = 0;
     skipAfter = (int) (tailSeconds * sampleRate);
     silentFor = 0;
 }
@@ -310,8 +331,14 @@ void ComposerProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (state.state.getType()))
     {
+        auto tree = juce::ValueTree::fromXml (*xml);
+
+        // Saved before the distance law was a parameter: it had the law that was built in.
+        if (! tree.getChildWithProperty ("id", params::proDistanceLaw).isValid())
+            tree.appendChild (juce::ValueTree ("PARAM", { { "id", params::proDistanceLaw }, { "value", params::legacyDistanceLaw } }), nullptr);
+
         const juce::ScopedLock lock (stateTreeLock);
-        state.replaceState (juce::ValueTree::fromXml (*xml));
+        state.replaceState (tree);
         headTrackingOn = (bool) state.state.getProperty ("headTracking", true);
     }
 }

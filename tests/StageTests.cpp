@@ -567,6 +567,8 @@ TEST_CASE ("stage-wide settings: shared, saved, adopted by new inserts; the room
         { "outputMode", 1.0f, 0.0f, false, juce::var ("binaural") },
         { "roomSize", 35.0f, 10.0f, true, juce::var() },
         { "proDistanceLaw", 3.0f, 1.0f, false, juce::var() },
+        { "proDelayFrom", 2.0f, 1.5f, false, juce::var() },
+        { "proDelayTo", 3.5f, 2.5f, false, juce::var() },
     }));
     CAPTURE (id);
 

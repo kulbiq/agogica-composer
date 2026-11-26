@@ -7,6 +7,7 @@
 #include "Parameters.h"
 #include "stage/StageRegistry.h"
 #include "stage/HeadTracking.h"
+#include "dsp/DelayStretch.h"
 #include "dsp/DirectPath.h"
 #include "dsp/LoadMeter.h"
 
@@ -145,6 +146,8 @@ private:
         std::atomic<float>* playerY;
         std::atomic<float>* outputMode;
         std::atomic<float>* proDistanceLaw;
+        std::atomic<float>* proDelayFrom;
+        std::atomic<float>* proDelayTo;
     };
 
     const AudioParams audioParams { state.getRawParameterValue (params::roomSize),
@@ -154,11 +157,15 @@ private:
                                     state.getRawParameterValue (params::playerX),
                                     state.getRawParameterValue (params::playerY),
                                     state.getRawParameterValue (params::outputMode),
-                                    state.getRawParameterValue (params::proDistanceLaw) };
+                                    state.getRawParameterValue (params::proDistanceLaw),
+                                    state.getRawParameterValue (params::proDelayFrom),
+                                    state.getRawParameterValue (params::proDelayTo) };
 
     // The player's mono input, and the sound's way from it to the listener's two ears.
     History history;
     DirectPath directPath;
+    DelayStretch delayStretch;
+    juce::int64 samplesPlayed = 0; // the song's time when the host doesn't say (since prepareToPlay)
 
     // Samples of silent input so far; a track silent for longer than the tail skips all work.
     int silentFor = 0, skipAfter = 0;

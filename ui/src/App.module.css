@@ -307,11 +307,17 @@ button.status:focus-visible {
   right: 0;
   z-index: 10;
   width: 300px;
+  max-height: calc(100vh - 60px); /* a short window scrolls it */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line-strong);
   box-shadow: 0 16px 40px rgba(var(--ink-rgb), 0.14);
+}
+
+.popover > * {
+  flex-shrink: 0;
 }
 
 .popoverHead {

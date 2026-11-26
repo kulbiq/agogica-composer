@@ -33,7 +33,9 @@ if (import.meta.env.DEV && !window.__JUCE__) {
     scenes: ["A", "B"],
     headTracking: { live: location.search.includes("binaural") && !location.search.includes("notlive"), canStart: true, on: true },
     pro: {
-      proDistanceLaw: 6.0206 / 3,
+      proDistanceLaw: 0,
+      proDelayFrom: 1,
+      proDelayTo: 1,
     } as Record<string, number>,
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,

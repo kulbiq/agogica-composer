@@ -4,10 +4,12 @@ import { getBuildInfo, setParams, useEvent, type BuildInfo, type Load, type Stag
 import ParamSlider from "./ParamSlider";
 import type { MapNames } from "./stagePainter";
 
-// proDistanceLaw (Source/Parameters.h): 0..20·log10(2) dB per doubling; the default,
-// a third of it, is the built-in law (-2 dB per doubling).
+// proDistanceLaw (Source/Parameters.h): 0..20·log10(2) dB per doubling, none by default.
 const lawMax = 6.0206;
-const lawNeutral = lawMax / 3;
+const lawNeutral = 0;
+// proDelayFrom / proDelayTo: the physical delay stretched 1..4 times (Source/dsp/DelayStretch.h).
+const stretchMax = 4;
+const formatStretch = (v: number) => `${v.toFixed(2)}×`;
 const minus = "−";
 const formatLaw = (v: number) => `${v > 0.05 ? minus : ""}${Math.abs(v).toFixed(1)} dB / 2×`;
 
@@ -25,6 +27,9 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
   const [showLoad, setShowLoad] = useState(() => localStorage.getItem(loadKey) === "1");
   const law = stage.pro.proDistanceLaw ?? lawNeutral;
   const changed = Math.abs(law - lawNeutral) > 1e-3;
+  const stretchFrom = stage.pro.proDelayFrom ?? 1;
+  const stretchTo = stage.pro.proDelayTo ?? 1;
+  const stretched = stretchFrom > 1.001 || stretchTo > 1.001;
 
   useEffect(() => {
     void getBuildInfo().then(setInfo);
@@ -75,6 +80,15 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
         </button>
       </div>
 
+      <div className={styles.popoverSection}>
+        <ParamSlider param="proDelayFrom" label="Delay stretch from" value={stretchFrom} min={1} max={stretchMax} step={0.01} format={formatStretch} selfId={selfId} />
+        <ParamSlider param="proDelayTo" label="Delay stretch to" value={stretchTo} min={1} max={stretchMax} step={0.01} format={formatStretch} selfId={selfId} />
+        <p className={styles.note}>Far players arrive later than physics says: nearby places stretch alike, each player anew after a pause.</p>
+        <button className={styles.ghost} disabled={!stretched} onClick={() => setParams(selfId, { proDelayFrom: 1, proDelayTo: 1 })}>
+          Reset
+        </button>
+      </div>
+
       <div className={`${styles.popoverSection} ${styles.row}`}>
         <span className={styles.label}>Names on map</span>
         <div className={styles.segments} role="radiogroup" aria-label="Names on map">
@@ -84,6 +98,20 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
             </button>
           ))}
         </div>
+      </div>
+
+      <div className={styles.popoverSection}>
+        <button
+          className={styles.ghost}
+          disabled={!changed && !stretched && names === "selected"}
+          title="Distance level 0 dB, no delay stretch, names of the selected players only"
+          onClick={() => {
+            setParams(selfId, { proDistanceLaw: lawNeutral, proDelayFrom: 1, proDelayTo: 1 });
+            onNames("selected");
+          }}
+        >
+          Reset all settings
+        </button>
       </div>
 
       <div className={styles.popoverFoot}>

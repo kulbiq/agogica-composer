@@ -309,6 +309,13 @@ TEST_CASE ("processBlock never allocates (both modes, Pro, moves and mode switch
     set (p, "proDistanceLaw", 6.0f);
     play (2);
 
+    set (p, "proDelayTo", 4.0f); // stretched: a new multiplier after a pause, the delay jumps
+    play (2);
+    buffer.clear();
+    for (int b = 0; b < 100; ++b)
+        total += allocationsDuring ([&] { p.processBlock (buffer, midi); });
+    play (2);
+
     set (p, "outputMode", 1.0f); // a mode switch mid-stream
     play (2);
 
@@ -321,11 +328,14 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
     ComposerProcessor p;
     juce::MidiBuffer midi;
 
-    SECTION ("the longest delay (opposite corners of the largest room) is never cut")
+    SECTION ("the longest delay (opposite corners of the largest room, stretched the most) is never cut")
     {
-        // The direct sound alone: the output ends with the longest delay (70.7 m, 0.21 s), well
-        // inside the 0.5 s the track keeps processing after its input stops.
+        // The direct sound alone: the output ends with the longest delay (70.7 m, 0.21 s, up to
+        // 4x stretched: 0.82 s), inside the 0.85 s the track keeps processing after its input stops.
         constexpr double sampleRate = 48000.0;
+        const auto stretch = GENERATE (1.0f, 4.0f);
+        set (p, "proDelayFrom", stretch);
+        set (p, "proDelayTo", stretch);
         set (p, "roomSize", 50.0f);
         set (p, "playerX", 25.0f);
         set (p, "playerY", 25.0f);
@@ -345,7 +355,7 @@ TEST_CASE ("silence skip: never cuts the longest tail, resumes at the current po
             left.insert (left.end(), buffer.getReadPointer (0), buffer.getReadPointer (0) + 480);
         }
 
-        const auto arrival = std::hypot (50.0, 50.0) / 343.0 * sampleRate;
+        const auto arrival = std::hypot (50.0, 50.0) / 343.0 * sampleRate * stretch;
         REQUIRE (arrival < ComposerProcessor::tailSeconds * sampleRate);
         CHECK (std::abs ((double) peakIndex (left) - arrival) <= 1.0);
         CHECK (std::abs (left[peakIndex (left)]) > 0.01f);
@@ -667,6 +677,8 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
         CHECK (p.getIcon().isEmpty()); // saved before icons: automatic
         CHECK (p.isHeadTrackingOn()); // saved before the switch: on
         CHECK (p.getAudience().isEmpty()); // saved before the audience was painted: none
+        CHECK_THAT (p.getParam ("proDistanceLaw"), WithinAbs (params::legacyDistanceLaw, 1e-4)); // as saved
+        CHECK_THAT (p.getParam ("proDelayTo"), WithinAbs (1.0, 1e-4)); // saved before the stretch: none
         CHECK_THAT (p.getParam ("listenerYaw"), WithinAbs (0.0, 1e-4)); // saved before it existed: ahead
         CHECK (p.getScene() == "D");
         CHECK (p.isPlaced());
@@ -690,6 +702,14 @@ TEST_CASE ("state: a saved project restores, unknown parameters keep defaults, j
 
         CHECK_THAT (p.getParam ("outputMode"), WithinAbs (0.0, 1e-4));
         CHECK_THAT (p.getParam ("roomSize"), WithinAbs (35.0, 1e-4));
+
+        // Saved before the distance law was a parameter: the law that was built in then, not
+        // today's default.
+        xml->removeChildElement (xml->getChildByAttribute ("id", "proDistanceLaw"), true);
+        juce::MemoryBlock oldest;
+        juce::AudioProcessor::copyXmlToBinary (*xml, oldest);
+        load (p, oldest);
+        CHECK_THAT (p.getParam ("proDistanceLaw"), WithinAbs (params::legacyDistanceLaw, 1e-4));
     }
 
     SECTION ("empty, garbage, truncated or foreign data leaves the state untouched")
