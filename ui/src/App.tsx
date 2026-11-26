@@ -5,12 +5,13 @@ import { seat } from "./players";
 import PlayersPanel from "./PlayersPanel";
 import { useNumberPref, usePref } from "./prefs";
 import ResizeGrip from "./ResizeGrip";
-import StageMap, { type Brush, type MapNames, type MapView, type NodeKey, type Tool } from "./StageMap";
+import StageMap, { type MapNames, type MapView, type NodeKey, type SeatTool, type Tool } from "./StageMap";
 import TopBar from "./TopBar";
 
 const views = ["grid", "azimuth"] as const satisfies readonly MapView[];
 const nameModes = ["selected", "all"] as const satisfies readonly MapNames[];
 const pointerTools = ["select", "drag"] as const satisfies readonly Tool[];
+const seatTools = ["select", "paint", "erase"] as const satisfies readonly SeatTool[];
 
 export default function App() {
   const snapshot = useStage();
@@ -21,7 +22,9 @@ export default function App() {
   const [names, setNames] = usePref<MapNames>("mapNames", "selected", nameModes);
   const [in3d, setIn3d] = useState(false); // not saved: the editor always opens on the map
   const [tool, setTool] = useState<Tool>("drag"); // not saved: the editor always opens on Drag
-  const [brush, setBrush] = useState<Brush | null>(null); // editing the audience
+  const [seatTool, setSeatTool] = useState<SeatTool | null>(null); // editing the audience, with what
+  const [seatsPicked, setSeatsPicked] = useState(0);
+  const [eraseRequest, setEraseRequest] = useState(0);
   const [zoomed, setZoomed] = useState(false);
   const [fitRequest, setFitRequest] = useState(0);
 
@@ -85,7 +88,9 @@ export default function App() {
                 in3d={in3d}
                 onLeave3d={() => setIn3d(false)}
                 tool={tool}
-                brush={brush}
+                seatTool={seatTool}
+                eraseRequest={eraseRequest}
+                onSeatsPicked={setSeatsPicked}
                 top={toolsBottom + 10} // the gap the map has always had under one row
                 fitRequest={fitRequest}
                 onZoomed={setZoomed}
@@ -113,13 +118,13 @@ export default function App() {
                     title="Walk the room at the listener's eyes"
                     onClick={() => {
                       setIn3d(true);
-                      setBrush(null); // the audience is edited on the map
+                      setSeatTool(null); // the audience is edited on the map
                     }}
                   >
                     3D
                   </button>
                 </div>
-                {!in3d && !brush && (
+                {!in3d && !seatTool && (
                   <div className={styles.segments} role="radiogroup" aria-label="Pointer">
                     {pointerTools.map((t) => (
                       <button
@@ -146,27 +151,40 @@ export default function App() {
                 )}
                 {!in3d && (
                   <div className={`${styles.segments} ${styles.toolsEnd}`}>
-                    {brush && (
-                      <div className={styles.segments} role="radiogroup" aria-label="Brush">
-                        {(["paint", "erase"] as const).map((b) => (
-                          <button
-                            key={b}
-                            className={`${styles.chip} ${styles.segment}`}
-                            role="radio"
-                            aria-checked={brush === b}
-                            title={b === "paint" ? "Drag to seat the audience; Shift: a wider brush, Alt: rub out" : "Drag to take seats away; Shift: a wider brush"}
-                            onClick={() => setBrush(b)}
-                          >
-                            {b === "paint" ? "Paint" : "Erase"}
-                          </button>
-                        ))}
+                    {seatTool && (
+                      // The audience's tools. With seats selected, Erase takes exactly those away
+                      // (and says how many); otherwise it is the brush that rubs seats out.
+                      <div className={styles.segments} role="radiogroup" aria-label="Audience tool">
+                        {seatTools.map((t) => {
+                          const eraseSelected = t === "erase" && seatsPicked > 0;
+                          return (
+                            <button
+                              key={t}
+                              className={`${styles.chip} ${styles.segment}`}
+                              role="radio"
+                              aria-checked={seatTool === t && !eraseSelected}
+                              title={
+                                t === "select"
+                                  ? "Drag a rectangle (or click) to select seats; Shift adds. Erase or Delete takes them away"
+                                  : t === "paint"
+                                    ? "Drag to seat the audience; Shift: a wider brush, Alt: rub out"
+                                    : eraseSelected
+                                      ? `Take away the ${seatsPicked} selected seats (Delete)`
+                                      : "Drag to take seats away; Shift: a wider brush"
+                              }
+                              onClick={() => (eraseSelected ? setEraseRequest((n) => n + 1) : setSeatTool(t))}
+                            >
+                              {t === "select" ? "Select" : t === "paint" ? "Paint" : eraseSelected ? `Erase ${seatsPicked}` : "Erase"}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                     <button
                       className={`${styles.chip} ${styles.segment}`}
-                      aria-pressed={brush !== null}
-                      title={brush ? "Done with the audience" : "Paint where the audience sits"}
-                      onClick={() => setBrush(brush ? null : "paint")}
+                      aria-pressed={seatTool !== null}
+                      title={seatTool ? "Done with the audience" : "Edit where the audience sits"}
+                      onClick={() => setSeatTool(seatTool ? null : "paint")}
                     >
                       Audience
                     </button>

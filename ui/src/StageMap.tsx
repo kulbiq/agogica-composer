@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { cellOf, decodeAudience, encodeAudience, seatPitch, setSeat, type Audience } from "./audience";
+import { cellOf, decodeAudience, emptyAudience, encodeAudience, hasSeat, seatPitch, setSeat, type Audience } from "./audience";
 import { beginGesture, setAudience, setParams, useEvent, type Gesture, type Point } from "./bridge";
 import type { SeatedStage } from "./players";
 import styles from "./App.module.css";
@@ -23,19 +23,24 @@ type Props = {
   in3d: boolean; // the room at the listener's eyes instead of the map
   onLeave3d: () => void;
   tool: Tool;
-  brush: Brush | null; // editing the audience: a drag paints seats or rubs them out (Alt: the other one)
+  seatTool: SeatTool | null; // editing the audience (see SeatTool), or not
+  eraseRequest: number; // changes when the selected seats should go
+  onSeatsPicked: (count: number) => void;
   top: number; // px of tools over the map's top edge
   fitRequest: number; // changes when the whole room should be shown again
   onZoomed: (zoomed: boolean) => void;
 };
 
-// What a drag on the map does. Drag: a node moves (all of the selected, when it is one of
-// them), empty space pans, Shift draws a rectangle that selects. Select: a drag always draws a
-// rectangle that selects the players inside it; a click selects. Shift, Cmd or Ctrl add to the
-// selection in both. While the audience is edited, the brush takes the drag instead.
+// What a drag on the map does to the players. Drag: a node moves (all of the selected, when it
+// is one of them), empty space pans, Shift draws a rectangle that selects. Select: a drag always
+// draws a rectangle that selects the players inside it; a click selects. Shift, Cmd or Ctrl add
+// to the selection in both.
 export type Tool = "drag" | "select";
 
-export type Brush = "paint" | "erase";
+// What a drag does while the audience is edited. Select: a rectangle (or a click) selects seats,
+// Shift, Cmd or Ctrl add; the selected ones go with Erase or Delete. Paint and Erase: brushes
+// that seat the audience or take seats away (Alt: the other one; Shift: 3 x 3 seats).
+export type SeatTool = "select" | "paint" | "erase";
 
 // On the map: W A S D (Shift faster) move the listener.
 const mapWalkKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight"]);
@@ -59,7 +64,7 @@ const lookDegreesPerPixel = 0.25;
 
 // A press on the map: on empty space it pans the view, or draws a rectangle that selects
 // (Shift, or the Select tool); a press on a selected node of several moves them all.
-// `base`: what was selected before (kept when adding), `hit`: the node under it.
+// `base` and `seatBase`: what was selected before (kept when adding), `hit`: the node under it.
 type MapPress = {
   pointerId: number;
   kind: "pan" | "box";
@@ -69,13 +74,15 @@ type MapPress = {
   y: number;
   moved: boolean;
   base: readonly NodeKey[];
+  seats: boolean; // the rectangle selects seats, not players
+  seatBase: Audience;
   hit: NodeKey | null;
 };
 type Moving = { pointerId: number; key: NodeKey; from: Point; moved: boolean; nodes: Map<NodeKey, { gesture: Gesture; start: Point }> };
 type Box = { x0: number; y0: number; x1: number; y1: number };
 
 export default function StageMap(props: Props) {
-  const { stage, selfId, selected, selection, onSelect, view: mapView, names, in3d, onLeave3d, tool, brush, top, fitRequest, onZoomed } = props;
+  const { stage, selfId, selected, selection, onSelect, view: mapView, names, in3d, onLeave3d, tool, seatTool, eraseRequest, onSeatsPicked, top, fitRequest, onZoomed } = props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [standing, setStanding] = useState(false);
 
@@ -88,8 +95,20 @@ export default function StageMap(props: Props) {
   if (painted.current && painted.current.sent === stage.audience) painted.current = null;
   const audience = stroke.current?.seats ?? painted.current?.seats ?? saved;
 
-  const latest = useRef({ stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: brush !== null, top });
-  latest.current = { stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: brush !== null, top };
+  // Seats selected while the audience is edited (drawn stronger; Erase or Delete takes them away).
+  const picked = useRef<Audience>(emptyAudience());
+  const pickedCount = useRef(0);
+  const pick = (seats: Audience) => {
+    picked.current = seats;
+    let n = 0;
+    for (const b of seats) for (let v = b; v; v &= v - 1) n++;
+    pickedCount.current = n;
+    onSeatsPicked(n);
+    poked.current = performance.now();
+  };
+
+  const latest = useRef({ stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top });
+  latest.current = { stage, selected, selection, view: mapView, names, in3d, standing, audience, painting: seatTool !== null, top };
 
   // Nodes the user is moving are drawn from here (exactly under the pointer)
   // until C++ reports the new position back.
@@ -194,6 +213,15 @@ export default function StageMap(props: Props) {
     else endAll();
     return endAll;
   }, [in3d]); // endAll touches refs only
+
+  // Selected seats stay selected only while the Select tool is on them.
+  useEffect(() => {
+    if (seatTool !== "select" && pickedCount.current) pick(emptyAudience());
+  }, [seatTool]);
+
+  useEffect(() => {
+    if (eraseRequest) erasePicked();
+  }, [eraseRequest]);
 
   useEffect(() => {
     if (fitRequest) zoomTo(fitted);
@@ -306,6 +334,7 @@ export default function StageMap(props: Props) {
         seconds: (now - t0) / 1000,
         ...latest.current,
         audience: stroke.current?.seats ?? painted.current?.seats ?? latest.current.audience, // the stroke as it goes
+        picked: pickedCount.current ? picked.current : undefined,
         overrides: overrides.current,
         zoom: zoom.current,
         levels: levels.current,
@@ -397,24 +426,26 @@ export default function StageMap(props: Props) {
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
-    if (brush) {
+    if (seatTool === "paint" || seatTool === "erase") {
       // Alt (Option) rubs out with the paint brush and paints with the eraser; Shift: 3 x 3 seats.
       const at = pointerMetres(e);
-      stroke.current = { pointerId: e.pointerId, seats: audience.slice(), on: (brush === "paint") !== e.altKey, big: e.shiftKey, last: at };
+      stroke.current = { pointerId: e.pointerId, seats: audience.slice(), on: (seatTool === "paint") !== e.altKey, big: e.shiftKey, last: at };
       paintTo(stroke.current, at);
       return;
     }
     const extend = e.shiftKey || e.metaKey || e.ctrlKey;
-    if (key === null || tool === "select") {
+    if (key === null || tool === "select" || seatTool === "select") {
       const at = { x: e.clientX, y: e.clientY };
       press.current = {
         pointerId: e.pointerId,
-        kind: tool === "select" || e.shiftKey ? "box" : "pan",
+        kind: tool === "select" || seatTool === "select" || e.shiftKey ? "box" : "pan",
         x0: at.x,
         y0: at.y,
         ...at,
         moved: false,
         base: extend ? selection : [],
+        seats: seatTool === "select",
+        seatBase: extend ? picked.current.slice() : emptyAudience(),
         hit: key,
       };
       return;
@@ -479,15 +510,45 @@ export default function StageMap(props: Props) {
         const a = { x: p.x0 - r.left, y: p.y0 - r.top };
         const b = { x: e.clientX - r.left, y: e.clientY - r.top };
         setBox({ x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) });
-        const inside = within(view.current.hits, a, b);
-        onSelect([...p.base.filter((k) => !inside.includes(k as number)), ...inside]);
+        if (p.seats) pick(seatsWithin(p.seatBase, { clientX: p.x0, clientY: p.y0 }, e));
+        else {
+          const inside = within(view.current.hits, a, b);
+          onSelect([...p.base.filter((k) => !inside.includes(k as number)), ...inside]);
+        }
       }
       p.x = e.clientX;
       p.y = e.clientY;
       return;
     }
 
-    if (!in3d) e.currentTarget.style.cursor = brush || tool === "select" ? "crosshair" : hitTest(e) !== null ? "grab" : "";
+    if (!in3d) e.currentTarget.style.cursor = seatTool || tool === "select" ? "crosshair" : hitTest(e) !== null ? "grab" : "";
+  };
+
+  // The seats between two pointer positions (a rectangle on the map), added to `base`.
+  const seatsWithin = (base: Audience, from: { clientX: number; clientY: number }, to: { clientX: number; clientY: number }) => {
+    const out = base.slice();
+    const a = pointerMetres(from);
+    const b = pointerMetres(to);
+    const i0 = Math.ceil(Math.min(a.x, b.x) / seatPitch - 0.5);
+    const i1 = Math.floor(Math.max(a.x, b.x) / seatPitch + 0.5);
+    const j0 = Math.ceil(Math.min(a.y, b.y) / seatPitch - 0.5);
+    const j1 = Math.floor(Math.max(a.y, b.y) / seatPitch + 0.5);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (hasSeat(audience, i, j)) setSeat(out, i, j, true);
+    return out;
+  };
+
+  // Takes the selected seats away (one edit), and none stays selected.
+  const erasePicked = () => {
+    if (!pickedCount.current) return;
+    const seats = audience.slice();
+    const gone = picked.current;
+    for (let k = 0; k < seats.length; k++) seats[k] &= ~gone[k];
+    pick(emptyAudience());
+    const sent = encodeAudience(seats);
+    if (sent !== (painted.current?.sent ?? stage.audience)) {
+      painted.current = { seats, sent };
+      void setAudience(sent);
+    }
   };
 
   // Paints (or rubs out) every seat the pointer passed over since the last move.
@@ -541,7 +602,13 @@ export default function StageMap(props: Props) {
       e.currentTarget.style.cursor = "";
       if (p.moved || e.type !== "pointerup") return;
       const extend = e.shiftKey || e.metaKey || e.ctrlKey;
-      if (p.hit !== null) onSelect(extend ? toggle(selection, p.hit) : [p.hit]); // the Select tool's click
+      if (p.seats) {
+        // A click selects the seat under it (Shift, Cmd or Ctrl: adds it or takes it out); on no seat, none.
+        const cell = cellOf(pointerMetres(e));
+        const next = extend ? picked.current.slice() : emptyAudience();
+        if (cell && hasSeat(audience, cell[0], cell[1])) setSeat(next, cell[0], cell[1], !(extend && hasSeat(picked.current, cell[0], cell[1])));
+        pick(next);
+      } else if (p.hit !== null) onSelect(extend ? toggle(selection, p.hit) : [p.hit]); // the Select tool's click
       // A click on empty space: back to the leading node alone.
       else if (p.base.length === 0 && selected !== null) onSelect([selected]);
     }
@@ -552,6 +619,18 @@ export default function StageMap(props: Props) {
       // The host's and the system's shortcuts. macOS sends no keyup for keys released while
       // Cmd is down, so nothing stays held.
       held.current.clear();
+      return;
+    }
+
+    // Delete or Backspace: the selected seats go; Escape: none selected.
+    if (!in3d && pickedCount.current && (e.code === "Delete" || e.code === "Backspace")) {
+      e.preventDefault();
+      erasePicked();
+      return;
+    }
+    if (!in3d && pickedCount.current && e.code === "Escape") {
+      e.preventDefault();
+      pick(emptyAudience());
       return;
     }
 
@@ -622,7 +701,7 @@ export default function StageMap(props: Props) {
         aria-label={
           in3d
             ? "The room at the listener's eyes. W A S D walk, Shift faster, drag or arrow keys to look around, R to face the front, Space to stand up or sit down, Escape for the map."
-            : "Stage map. W A S D move the listener, arrow keys move the selected nodes, Shift for 1 m steps. Shift-click selects several, Shift-drag or the Select tool selects in a rectangle, the wheel zooms. Q and E turn the listener in Binaural, R faces it front."
+            : "Stage map. W A S D move the listener, arrow keys move the selected nodes, Shift for 1 m steps. Shift-click selects several, Shift-drag or the Select tool selects in a rectangle (seats while editing the audience, Delete takes them away), the wheel zooms. Q and E turn the listener in Binaural, R faces it front."
         }
         style={in3d ? { cursor: "grab" } : undefined}
         onPointerDown={onPointerDown}
