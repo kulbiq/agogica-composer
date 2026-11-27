@@ -84,7 +84,7 @@ jobs:
 
   # Agogica Tracker compiles and links on both systems, without its models (it can't track
   # here; its pure code is in the test set). Its own job, not required for merging: it needs
-  # ONNX Runtime's download, which is not ours to keep working.
+  # ONNX Runtime's download (150 MB from NuGet), which is not ours to keep working.
   tracker:
     strategy:
       fail-fast: false

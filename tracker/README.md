@@ -114,7 +114,7 @@ python3 tracker/models/fetch_models.py                  # only if the build coul
 ```
 
 Windows has no `python3` by default: put the two `.onnx` files from `models/models.json` into `tracker/models` by hand; the build checks their hashes.
-The Tracker is built only when CMake is configured with `-DCOMPOSER_BUILD_TRACKER=ON` (it fetches ONNX Runtime).
+The Tracker is built only when CMake is configured with `-DCOMPOSER_BUILD_TRACKER=ON` (it fetches ONNX Runtime, about 150 MB, from NuGet).
 `-DCOMPOSER_TRACKER_SKIP_MODELS=ON` then builds without models (CI does this to compile and link on both systems).
 Quit a running tracker before starting a rebuilt one.
 
