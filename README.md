@@ -51,12 +51,12 @@ The Windows build is not signed yet, so Windows may ask before running it.
 
 ## Build from source
 
-You need CMake 3.22 or newer, Node.js 22, Python 3, and Xcode (macOS) or Visual Studio 2022 with the C++ workload (Windows).
+You need CMake 3.22 or newer, Node.js 22, and Xcode (macOS) or Visual Studio 2022 with the C++ workload (Windows).
 
 ```sh
 git clone --recurse-submodules https://github.com/kulbiq/agogica-composer.git
 cd agogica-composer
-cmake --preset debug -DCOMPOSER_TRACKER_SKIP_MODELS=ON
+cmake --preset debug
 cmake --build --preset debug
 ```
 
@@ -68,7 +68,7 @@ nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\
 
 The build makes the VST3, the Audio Unit (macOS) and a Standalone app, builds the editor's page, and installs the plugins per user, without admin rights, into the folders above.
 After rebuilding, quit the host completely before trying the new plugin (Dorico's audio engine keeps the old one loaded).
-`-DCOMPOSER_TRACKER_SKIP_MODELS=ON` builds the Tracker without downloading its models; leave it out to build a Tracker that can track (macOS: it is installed to `~/Applications`).
+The Tracker is not built unless you ask for it: add `-DCOMPOSER_BUILD_TRACKER=ON` to the first command (it needs Python 3 and downloads ONNX Runtime and the models; on macOS the app is installed to `~/Applications`).
 
 ### Tests
 

@@ -56,7 +56,8 @@ IDENTITY=${SIGN_IDENTITY:?set SIGN_IDENTITY to your \"Developer ID Application: 
 
 [ -n "${COMPOSER_TELEMETRY_KEY:-}" ] || echo "  no COMPOSER_TELEMETRY_KEY: this build has no usage data at all"
 if [ $SKIP_BUILD = 0 ]; then
-  cmake --preset release "-DCOMPOSER_TELEMETRY_KEY=${COMPOSER_TELEMETRY_KEY:-}"
+  [ "$TRACKER" = 1 ] && WITH_TRACKER=ON || WITH_TRACKER=OFF
+  cmake --preset release "-DCOMPOSER_TELEMETRY_KEY=${COMPOSER_TELEMETRY_KEY:-}" "-DCOMPOSER_BUILD_TRACKER=$WITH_TRACKER"
   if [ "$TRACKER" = 1 ]; then
     cmake --build --preset release --target Composer_VST3 Composer_AU ComposerTracker
   else

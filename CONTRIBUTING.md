@@ -15,7 +15,7 @@ Composer is free software under the GNU Affero General Public License, version 3
 ```sh
 git clone --recurse-submodules https://github.com/kulbiq/agogica-composer.git
 cd agogica-composer
-cmake --preset debug -DCOMPOSER_TRACKER_SKIP_MODELS=ON
+cmake --preset debug
 cmake --build --preset debug
 ctest --preset debug -LE slow        # the fast C++ tests
 (cd ui && npm test)                  # the page's tests
