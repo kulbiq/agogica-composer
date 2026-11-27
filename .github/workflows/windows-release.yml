@@ -7,10 +7,6 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-# npm gives up after two tries by default; a dropped connection has failed a build here twice.
-env:
-  NPM_CONFIG_FETCH_RETRIES: 5
-
 jobs:
   vst3:
     runs-on: windows-latest

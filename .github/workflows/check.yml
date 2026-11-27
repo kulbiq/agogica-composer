@@ -21,10 +21,9 @@ concurrency:
   group: check-${{ github.ref }}-${{ github.event_name }} # a push never cancels the nightly run
   cancel-in-progress: true
 
-# npm gives up after two tries by default; a dropped connection has failed a build here twice.
-env:
-  NPM_CONFIG_FETCH_RETRIES: 5
-
+# Builds here say --parallel 4: the presets leave the number of jobs to make, which then starts
+# every compilation at once. On a runner that stalled the sanitizer build for minutes, and the
+# package install running beside it lost its connection.
 jobs:
   # Memory and undefined behaviour (ASan + UBSan) on every run; data races (TSan) nightly, with
   # the [slow] cases. macOS only: the presets' flags are clang's.
@@ -45,7 +44,7 @@ jobs:
           cache: npm # the packages come from the cache: a build doesn't hang on the registry
           cache-dependency-path: "**/package-lock.json"
       - run: cmake --preset ${{ matrix.preset }}
-      - run: cmake --build --preset ${{ matrix.preset }}
+      - run: cmake --build --preset ${{ matrix.preset }} --parallel 4
       - run: ctest --preset ${{ matrix.preset }} ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
 
   tests:
@@ -72,16 +71,16 @@ jobs:
       - if: runner.os == 'Windows'
         run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       - run: cmake --preset debug
-      - run: cmake --build --preset debug --target ComposerTests
+      - run: cmake --build --preset debug --parallel 4 --target ComposerTests
       # The page's own tests (the build above installed its packages and type-checked it).
       - run: npm test
         working-directory: ui
       - run: ctest --preset debug ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
       # pluginval (strictness 10): loading, state, parameters, bus layouts, threading and the DSP.
       - if: runner.os == 'macOS'
-        run: cmake --build --preset debug --target Composer_VST3 Composer_AU && scripts/pluginval.sh
+        run: cmake --build --preset debug --parallel 4 --target Composer_VST3 Composer_AU && scripts/pluginval.sh
       - if: runner.os == 'Windows'
-        run: cmake --build --preset debug --target Composer_VST3
+        run: cmake --build --preset debug --parallel 4 --target Composer_VST3
       - if: runner.os == 'Windows'
         shell: pwsh
         run: scripts/pluginval.ps1 build/debug/Composer_artefacts/Debug/VST3/Composer.vst3
@@ -113,4 +112,4 @@ jobs:
       - if: runner.os == 'Windows'
         run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       - run: cmake --preset debug -DCOMPOSER_BUILD_TRACKER=ON -DCOMPOSER_TRACKER_SKIP_MODELS=ON
-      - run: cmake --build --preset debug --target ComposerTracker
+      - run: cmake --build --preset debug --parallel 4 --target ComposerTracker
