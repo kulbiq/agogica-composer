@@ -7,25 +7,26 @@
 option(COMPOSER_TRACKER_SKIP_MODELS "Build the Tracker without its models" OFF)
 
 # --- ONNX Runtime (MIT): runs the models; never linked into the plugin ------------------------
-# ponytail: macOS arm64 only - ONNX Runtime ships no universal macOS build; Intel Macs need a
-# source build.
+# From NuGet (Microsoft.ML.OnnxRuntime): one package with the headers and the libraries for both
+# systems. A .nupkg is a zip; DOWNLOAD_NAME says so to CMake. Until 2026-11 the build took the
+# release archives from github.com/microsoft/onnxruntime, which stopped being there.
+# ponytail: macOS arm64 only - the package's osx-x64 library isn't used; Intel Macs: add it here.
 set(ONNXRUNTIME_VERSION 1.30.0)
 # That build of ONNX Runtime needs macOS 14, so the Tracker does too (the plugin: 11.0).
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0)
 include(FetchContent)
-if(APPLE)
-    FetchContent_Declare(onnxruntime
-        URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-osx-arm64-${ONNXRUNTIME_VERSION}.tgz
-        URL_HASH SHA256=6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-else()
-    FetchContent_Declare(onnxruntime
-        URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip
-        URL_HASH SHA256=c6ba983baf5681af108599675d2a89c2d145512d02de28aed0bff177cd0ba949
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-endif()
+FetchContent_Declare(onnxruntime
+    URL https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ONNXRUNTIME_VERSION}/microsoft.ml.onnxruntime.${ONNXRUNTIME_VERSION}.nupkg
+    URL_HASH SHA256=30df119bd9164eaa187666d93147448fdd4a9a1a3caf83f1505daf7af2d1c5d2
+    DOWNLOAD_NAME onnxruntime-${ONNXRUNTIME_VERSION}.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 FetchContent_MakeAvailable(onnxruntime)
-set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/lib)
+set(ONNXRUNTIME_INCLUDE ${onnxruntime_SOURCE_DIR}/build/native/include)
+if(APPLE)
+    set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/runtimes/osx-arm64/native)
+else()
+    set(ONNXRUNTIME_LIB ${onnxruntime_SOURCE_DIR}/runtimes/win-x64/native)
+endif()
 
 # --- The app --------------------------------------------------------------------------------------
 juce_add_gui_app(ComposerTracker
@@ -52,9 +53,9 @@ target_sources(ComposerTracker PRIVATE
     vision/ImageTensor.cpp
     vision/OnnxModel.cpp
     ${CMAKE_SOURCE_DIR}/Source/stage/HeadTrackingFile.cpp) # the file shared with the plugin
-target_include_directories(ComposerTracker SYSTEM PRIVATE ${onnxruntime_SOURCE_DIR}/include) # third-party warnings off
+target_include_directories(ComposerTracker SYSTEM PRIVATE ${ONNXRUNTIME_INCLUDE}) # third-party warnings off
 if(APPLE)
-    target_link_libraries(ComposerTracker PRIVATE ${ONNXRUNTIME_LIB}/libonnxruntime.1.dylib
+    target_link_libraries(ComposerTracker PRIVATE ${ONNXRUNTIME_LIB}/libonnxruntime.dylib # its install name: @rpath/libonnxruntime.1.dylib
         "-framework AVFoundation" "-framework CoreMedia" "-framework CoreVideo") # tracking/CameraSource_mac.mm
     set_target_properties(ComposerTracker PROPERTIES BUILD_RPATH "@executable_path/../Frameworks" INSTALL_RPATH "@executable_path/../Frameworks")
 else()
@@ -154,7 +155,7 @@ set_target_properties(ComposerTracker PROPERTIES LINK_DEPENDS "${TRACKER_RELINK_
 if(APPLE)
     add_custom_command(TARGET ComposerTracker POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks"
-        COMMAND ${CMAKE_COMMAND} -E copy ${ONNXRUNTIME_LIB}/libonnxruntime.${ONNXRUNTIME_VERSION}.dylib "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks/libonnxruntime.1.dylib"
+        COMMAND ${CMAKE_COMMAND} -E copy ${ONNXRUNTIME_LIB}/libonnxruntime.dylib "$<TARGET_BUNDLE_CONTENT_DIR:ComposerTracker>/Frameworks/libonnxruntime.1.dylib"
         VERBATIM)
 
     # Installed per user (no admin), like the plugins: Composer's "Start head tracking" starts
