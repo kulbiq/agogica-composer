@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive # JUCE
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm # the packages come from the cache: a build doesn't hang on the registry
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive # JUCE
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm # the packages come from the cache: a build doesn't hang on the registry
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive # JUCE
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm # the packages come from the cache: a build doesn't hang on the registry
