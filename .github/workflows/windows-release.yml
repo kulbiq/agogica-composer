@@ -1,5 +1,5 @@
 # The Windows release build of the plug-in, on every vX.Y.Z tag and by hand. A tag attaches the
-# zip (unsigned) to that tag's GitHub release; scripts/release-macos.sh adds the macOS zip there.
+# zip (unsigned) to that tag's GitHub release; macos-release.yml adds the macOS zip and installer there.
 name: Windows build
 
 on:
