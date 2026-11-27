@@ -1,4 +1,4 @@
-/* Bundled offline - weights mirror the Agogica website app/layout.tsx. Latin and Latin Extended: track
+/* Bundled offline - the weights of the Agogica design system. Latin and Latin Extended: track
    and player names are the user's (ł, ą, ę, ő, ř…); each file is fetched only when one of its
    characters is on screen. */
 @import "@fontsource/space-grotesk/latin-400.css";
