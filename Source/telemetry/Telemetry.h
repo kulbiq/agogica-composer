@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <juce_core/juce_core.h>
 
@@ -70,7 +71,7 @@ private:
     const juce::String url;
     juce::CriticalSection lock;
     juce::WebInputStream* waiting = nullptr;
-    bool cancelled = false;
+    std::atomic<bool> cancelled { false };
 };
 
 class Telemetry final : private juce::Thread

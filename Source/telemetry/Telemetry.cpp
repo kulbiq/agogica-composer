@@ -90,7 +90,16 @@ bool HttpPoster::post (const juce::String& body)
         waiting = &stream;
     }
 
-    const auto taken = stream.connect (nullptr) && stream.getStatusCode() == 200;
+    // The stream asks this while it sends and (macOS) every millisecond while it waits for the
+    // answer: a cancel() that arrives before the stream has its connection is not lost.
+    struct StopWhenCancelled final : juce::WebInputStream::Listener
+    {
+        explicit StopWhenCancelled (const std::atomic<bool>& c) : stop (c) {}
+        bool postDataSendProgress (juce::WebInputStream&, int, int) override { return ! stop; }
+        const std::atomic<bool>& stop;
+    } listener (cancelled);
+
+    const auto taken = stream.connect (&listener) && stream.getStatusCode() == 200;
 
     const juce::ScopedLock sl (lock);
     waiting = nullptr;

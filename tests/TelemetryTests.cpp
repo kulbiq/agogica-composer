@@ -334,15 +334,18 @@ TEST_CASE ("usage data: a server that never answers doesn't hold the host up whe
     Settings (file).answer (true);
     const auto poster = std::make_shared<HttpPoster> ("http://127.0.0.1:" + juce::String (listener.getBoundPort()) + "/");
 
+    // Closing at any moment of the request: before it is out (a cancel that arrives while the
+    // stream is still making its connection must not be lost), and while it waits.
+    const auto delay = GENERATE (0, 1, 2, 3, 5, 9, 20, 300);
     const auto start = juce::Time::getMillisecondCounter();
     {
         Telemetry t ("key", file, [poster] (const juce::String& body) { return poster->post (body); }, [poster] { poster->cancel(); });
         t.editorOpened ("0.1.0", "VST3", "Dorico");
-        juce::Thread::sleep (300); // the request is out, waiting
+        juce::Thread::sleep (delay);
     }
     const auto took = juce::Time::getMillisecondCounter() - start;
 
-    CHECK (took < 2000); // let go at once, not after the request's own 3 s
+    CHECK (took < (juce::uint32) delay + 1500); // let go at once, not after the request's own 3 s
 
     done = true;
     silent.join();
