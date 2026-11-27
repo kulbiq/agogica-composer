@@ -1,0 +1,15 @@
+# Monthly updates of the page's packages and of the workflows' actions.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: monthly
+  - package-ecosystem: npm
+    directory: /tracker/ui
+    schedule:
+      interval: monthly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

@@ -1,0 +1,46 @@
+name: Bug
+description: Something in Composer does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: A security problem is not reported here but privately, see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From a new project if possible. How many tracks carry Composer?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Composer version and format
+      description: Shown at the bottom of the settings (the sliders icon), for example "v0.1.0-beta.1 · VST3".
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host and its version
+      placeholder: Dorico 6.1, MuseScore 4.5, Ableton Live 12.2 ...
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: macOS 15.2 on Apple Silicon, Windows 11 ...
+    validations:
+      required: true
+  - type: dropdown
+    id: output
+    attributes:
+      label: Output
+      options: [Stereo, Binaural, Binaural with head tracking, Not about sound]

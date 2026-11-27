@@ -1,0 +1,15 @@
+name: Idea
+description: Something Composer could do
+labels: [idea]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would you like to do that you cannot do now?
+      description: The musical or practical need first; how it could look comes second.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Host, kind of music, anything else that helps

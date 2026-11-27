@@ -41,7 +41,7 @@ The data is used only to see which hosts and systems Composer runs in, how it pe
 
 Turning sharing off deletes the random id and anything not yet sent from your computer, at once, for every host.
 The id is shown under "About & privacy" in the settings while sharing is on.
-To have what was already sent under your id deleted, send that id to Agogica (contact: see the README).
+To have what was already sent under your id deleted, send that id through the repository's private report form (<https://github.com/kulbiq/agogica-composer/security/advisories/new>), which only the maintainers can read.
 
 ## Builds that never ask
 
