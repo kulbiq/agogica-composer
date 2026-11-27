@@ -6,11 +6,6 @@ import { usePref } from "./prefs";
 import type { MapNames } from "./stagePainter";
 import { neverShared, whatIsShared } from "./TelemetryConsent";
 
-// The defaults of Source/Parameters.h: proDistanceLaw 0..20·log10(2) dB per doubling (2.5);
-// proDelayFrom / proDelayTo, the physical delay stretched 1..4 times (1 and 3, dsp/DelayStretch.h).
-const lawMax = 6.0206;
-const defaults = { proDistanceLaw: 2.5, proDelayFrom: 1, proDelayTo: 3 };
-const stretchMax = 4;
 const formatStretch = (v: number) => `${v.toFixed(2)}×`;
 const minus = "−";
 const formatLaw = (v: number) => `${v > 0.05 ? minus : ""}${Math.abs(v).toFixed(1)} dB / 2×`;
@@ -27,9 +22,12 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
   const [load, setLoad] = useState<Load>();
   // For us only: always in Debug builds; in Release, Alt+click the version to toggle.
   const [showLoad, setShowLoad] = usePref(loadKey, "0", ["0", "1"] as const);
-  const law = stage.pro.proDistanceLaw ?? defaults.proDistanceLaw;
-  const stretchFrom = stage.pro.proDelayFrom ?? defaults.proDelayFrom;
-  const stretchTo = stage.pro.proDelayTo ?? defaults.proDelayTo;
+  // Values, ranges and defaults all come from C++ (stage.pro, stage.ranges).
+  const { proDistanceLaw: lawRange, proDelayFrom: fromRange, proDelayTo: toRange } = stage.ranges;
+  const law = stage.pro.proDistanceLaw;
+  const stretchFrom = stage.pro.proDelayFrom;
+  const stretchTo = stage.pro.proDelayTo;
+  const defaults = { proDistanceLaw: lawRange.default, proDelayFrom: fromRange.default, proDelayTo: toRange.default };
   const atDefaults =
     Math.abs(law - defaults.proDistanceLaw) < 1e-3 &&
     Math.abs(stretchFrom - defaults.proDelayFrom) < 1e-3 &&
@@ -74,8 +72,8 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
           param="proDistanceLaw"
           label="Distance level"
           value={law}
-          min={0}
-          max={lawMax}
+          min={lawRange.min}
+          max={lawRange.max}
           format={(v) => formatLaw(v)}
           selfId={selfId}
         />
@@ -83,8 +81,8 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
       </div>
 
       <div className={styles.popoverSection}>
-        <ParamSlider param="proDelayFrom" label="Delay stretch from" value={stretchFrom} min={1} max={stretchMax} step={0.01} format={formatStretch} selfId={selfId} />
-        <ParamSlider param="proDelayTo" label="Delay stretch to" value={stretchTo} min={1} max={stretchMax} step={0.01} format={formatStretch} selfId={selfId} />
+        <ParamSlider param="proDelayFrom" label="Delay stretch from" value={stretchFrom} min={fromRange.min} max={fromRange.max} step={fromRange.step} format={formatStretch} selfId={selfId} />
+        <ParamSlider param="proDelayTo" label="Delay stretch to" value={stretchTo} min={toRange.min} max={toRange.max} step={toRange.step} format={formatStretch} selfId={selfId} />
         <p className={styles.note}>Far players arrive later than physics says: nearby places stretch alike, each player anew after a pause.</p>
       </div>
 
@@ -117,7 +115,7 @@ export default function SettingsPopover({ stage, selfId, names, onNames, onClose
         <button
           className={styles.ghost}
           disabled={atDefaults}
-          title="Distance level −2.5 dB, delay stretch 1× to 3×, names of the selected players only"
+          title={`Distance level ${formatLaw(defaults.proDistanceLaw)}, delay stretch ${formatStretch(defaults.proDelayFrom)} to ${formatStretch(defaults.proDelayTo)}, names of the selected players only`}
           onClick={() => {
             setParams(selfId, defaults);
             onNames("selected");

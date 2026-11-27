@@ -20,8 +20,13 @@ export default function EditPlayer({ player, others, onSplit, onAdd, onBack }: P
   const [adding, setAdding] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
+  // Sent once: leaving the field and "Done" both come here before C++ has reported the new name.
+  const sent = useRef(player.name);
   const commitName = () => {
-    if (draft.trim() !== player.name) void setName(player.id, draft.trim());
+    const name = draft.trim();
+    if (name === sent.current) return;
+    sent.current = name;
+    void setName(player.id, name);
   };
   const close = () => {
     commitName();

@@ -96,6 +96,25 @@ juce::var snapshot (ComposerProcessor& self)
             pro->setProperty (id, self.getParam (id));
     o->setProperty ("pro", pro.release());
     o->setProperty ("room", roomSize);
+
+    // What those values may be, and what Reset goes back to: the parameters' own ranges and
+    // defaults (Parameters.h), so the page keeps no copy of them.
+    auto ranges = std::make_unique<juce::DynamicObject>();
+    for (const auto& id : params::ofStage)
+    {
+        if (id != params::roomSize && ! id.startsWith ("pro"))
+            continue;
+
+        auto* param = self.state.getParameter (id);
+        const auto& range = param->getNormalisableRange();
+        auto r = std::make_unique<juce::DynamicObject>();
+        r->setProperty ("min", range.start);
+        r->setProperty ("max", range.end);
+        r->setProperty ("step", range.interval);
+        r->setProperty ("default", param->convertFrom0to1 (param->getDefaultValue()));
+        ranges->setProperty (id, r.release());
+    }
+    o->setProperty ("ranges", ranges.release());
     // Anonymous usage data: whether to ask, and the answer (one per user of this computer).
     switch (self.telemetry->consent())
     {

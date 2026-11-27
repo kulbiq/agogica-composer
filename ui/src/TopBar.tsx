@@ -1,19 +1,20 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import styles from "./App.module.css";
 import { setHeadTracking, setParams, setScene, startTracker, type Stage } from "./bridge";
 import type { MapNames } from "./stagePainter";
 import SettingsPopover from "./SettingsPopover";
 
 const scenes = ["A", "B", "C", "D", "E", "F", "G", "H"];
-const roomStep = 5; // roomSize's step and range (Source/Parameters.h)
-const roomMin = 5;
-const roomMax = 50;
 
 type Props = { stage: Stage; selfId: number; names: MapNames; onNames: (names: MapNames) => void };
 
 // Everything that applies to the whole stage, in one line: output, scene, room size, settings.
 export default function TopBar({ stage, selfId, names, onNames }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The same function every time: the popover listens on the document while it is open, and
+  // would start listening again with every stage event otherwise.
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const { min: roomMin, max: roomMax, step: roomStep } = stage.ranges.roomSize;
 
   return (
     <header className={styles.topBar}>
@@ -105,7 +106,7 @@ export default function TopBar({ stage, selfId, names, onNames }: Props) {
           </svg>
         </button>
         {settingsOpen && (
-          <SettingsPopover stage={stage} selfId={selfId} names={names} onNames={onNames} onClose={() => setSettingsOpen(false)} />
+          <SettingsPopover stage={stage} selfId={selfId} names={names} onNames={onNames} onClose={closeSettings} />
         )}
       </div>
     </header>

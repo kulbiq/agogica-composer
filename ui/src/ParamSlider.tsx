@@ -55,7 +55,7 @@ export default function ParamSlider({ param, label, value, min, max, step, forma
         type="range"
         min={min}
         max={max}
-        step={step ?? "any"}
+        step={step || "any"}
         value={shown}
         onPointerDown={begin}
         onPointerUp={end}

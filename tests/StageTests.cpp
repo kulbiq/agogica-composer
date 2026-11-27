@@ -350,6 +350,16 @@ TEST_CASE ("snapshot: drawn clamped to the room, stored value kept, no float res
     CHECK_THAT ((double) self["x"], WithinAbs (5.0, 1e-4));             // drawn at the edge
     CHECK_THAT (p.getParam ("playerX"), WithinAbs (20.0, 1e-4));        // stored value kept
     CHECK_THAT ((double) self["y"], WithinAbs (5.0, 1e-4));
+
+    // The page keeps no ranges or defaults of its own: these are the parameters'.
+    CHECK_THAT ((double) s["ranges"]["roomSize"]["min"], WithinAbs (5.0, 1e-6));
+    CHECK_THAT ((double) s["ranges"]["roomSize"]["max"], WithinAbs (50.0, 1e-6));
+    CHECK_THAT ((double) s["ranges"]["roomSize"]["step"], WithinAbs (5.0, 1e-6));
+    CHECK_THAT ((double) s["ranges"]["roomSize"]["default"], WithinAbs (20.0, 1e-4));
+    CHECK_THAT ((double) s["ranges"]["proDistanceLaw"]["max"], WithinAbs (params::dbPerDoublingFreeField, 1e-4));
+    CHECK_THAT ((double) s["ranges"]["proDistanceLaw"]["default"], WithinAbs (2.5, 1e-4));
+    CHECK_THAT ((double) s["ranges"]["proDelayTo"]["default"], WithinAbs (3.0, 1e-4));
+    CHECK_FALSE (s["ranges"].hasProperty ("listenerX")); // only what the page has controls for
 }
 
 TEST_CASE ("state round-trip: parameters, names, icon, player, scenes, placed", "[integration]")

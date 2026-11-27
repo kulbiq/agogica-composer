@@ -48,6 +48,13 @@ if (import.meta.env.DEV && !window.__JUCE__) {
       proDelayFrom: 1,
       proDelayTo: 3,
     } as Record<string, number>,
+    // As Source/Parameters.h has them (the plugin sends its own).
+    ranges: {
+      roomSize: { min: 5, max: 50, step: 5, default: 20 },
+      proDistanceLaw: { min: 0, max: 6.0206, step: 0, default: 2.5 },
+      proDelayFrom: { min: 1, max: 4, step: 0.01, default: 1 },
+      proDelayTo: { min: 1, max: 4, step: 0.01, default: 3 },
+    },
     outputMode: (location.search.includes("binaural") ? "binaural" : "stereo") as "stereo" | "binaural",
     alone: false,
     // ?elsewhere: another track's window is open (the "open here anyway" screen).

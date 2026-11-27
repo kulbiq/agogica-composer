@@ -24,6 +24,9 @@ export type Stage = {
   scenes: string[]; // scenes that hold a layout (the active one included)
   outputMode: "stereo" | "binaural";
   pro: Record<string, number>; // Pro panel parameter values (project-wide)
+  // For roomSize and the Pro parameters: what they may be and their defaults, from C++
+  // (Source/Parameters.h); `step` 0 = any value.
+  ranges: Record<string, { min: number; max: number; step: number; default: number }>;
   // on: whether the head turns the sound (and the 3D view); the yaw comes as its own "headYaw"
   // event (degrees clockwise).
   headTracking: { live: boolean; canStart: boolean; on: boolean };
