@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm # the packages come from the cache: a build doesn't hang on the registry
+          cache-dependency-path: "**/package-lock.json"
       # JUCE links WebView2 statically on Windows and looks for the NuGet package.
       - run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
       # The key of the usage-data project (public, write-only). Not set: the build has no usage data at all - no question, no request.
