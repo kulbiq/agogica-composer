@@ -79,7 +79,7 @@ jobs:
         shell: pwsh
         run: scripts/pluginval.ps1 build/debug/Composer_artefacts/Debug/VST3/Composer.vst3
       - if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Composer-vst3-windows-debug
           path: build/debug/Composer_artefacts/Debug/VST3 # the folder, so the zip root is Composer.vst3
