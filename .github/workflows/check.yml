@@ -21,6 +21,10 @@ concurrency:
   group: check-${{ github.ref }}-${{ github.event_name }} # a push never cancels the nightly run
   cancel-in-progress: true
 
+# npm gives up after two tries by default; a dropped connection has failed a build here twice.
+env:
+  NPM_CONFIG_FETCH_RETRIES: 5
+
 jobs:
   # Memory and undefined behaviour (ASan + UBSan) on every run; data races (TSan) nightly, with
   # the [slow] cases. macOS only: the presets' flags are clang's.
