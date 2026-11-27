@@ -14,10 +14,6 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-# npm gives up after two tries by default; a dropped connection has failed a build here twice.
-env:
-  NPM_CONFIG_FETCH_RETRIES: 5
-
 jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -61,7 +57,7 @@ jobs:
           printf '%s\n' "$API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
       # The key of the usage-data project (public, write-only). Not set: the build has no usage data at all.
       - run: cmake --preset release "-DCOMPOSER_TELEMETRY_KEY=${{ vars.COMPOSER_TELEMETRY_KEY }}" -DCOMPOSER_BUILD_TRACKER=OFF
-      - run: cmake --build --preset release --target Composer_VST3 Composer_AU ComposerTests
+      - run: cmake --build --preset release --parallel 4 --target Composer_VST3 Composer_AU ComposerTests
       # The build that ships is tested too: the fast set, auval and pluginval (strictness 10).
       - run: ctest --preset release -LE slow
       - run: scripts/pluginval.sh
