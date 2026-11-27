@@ -1,4 +1,5 @@
-# Pull request and branch checks: the fast test set (`ctest --preset debug -LE slow`; everything
+# Checks of main, on every push to it (not on pull requests: the macOS and Windows machines
+# are slow and scarce; a branch is checked by hand with "Run workflow"): the fast test set (`ctest --preset debug -LE slow`; everything
 # nightly) and pluginval, built the way a developer builds it, on macOS and on Windows. The
 # Tracker is compiled and linked on both, without its models (it can't track here; its pure
 # code is in the test set). The Windows job also uploads the Debug VST3 for trying on a Windows
@@ -9,7 +10,7 @@ name: Check
 on:
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch: # by hand, on any branch
   schedule:
     - cron: "0 3 * * *" # nightly: the [slow] tests too (fuzz, silence skip)
 

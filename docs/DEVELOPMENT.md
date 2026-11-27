@@ -212,7 +212,7 @@ Solutions may differ - these are the failure modes to design against, not fixed 
 - After rebuilding, quit the host completely (Dorico's audio engine keeps the old plugin loaded).
 
 ## Release & CI
-- `.github/workflows/check.yml` builds `ComposerTests` and runs `ctest --preset debug -LE slow` on every push and pull request (everything, `[slow]` included, nightly), then pluginval 10 (and auval on macOS), on macOS and Windows; nothing is signed.
+- `.github/workflows/check.yml` builds `ComposerTests` and runs `ctest --preset debug -LE slow` on every push to `main` (everything, `[slow]` included, nightly; on a branch only when started by hand, "Run workflow"), then pluginval 10 (and auval on macOS), on macOS and Windows; nothing is signed.
   The Tracker is compiled and linked without its models in a job of its own (`tracker`), which is not required for merging: it depends on ONNX Runtime's download (the NuGet package, which holds the headers and both systems' libraries).
   The Windows job uploads the Debug VST3 for trying on a PC.
 - Releases: tag `vX.Y.Z` (a suffix such as `-beta.1` makes a GitHub pre-release); `.github/workflows/windows-release.yml` builds the Release VST3 zip on the tag and attaches it (unsigned) to the GitHub release; `scripts/release-macos.sh --publish`, run on a Mac with the Developer ID, adds the signed and notarized macOS zip from the clean, tagged commit.
@@ -220,4 +220,4 @@ Solutions may differ - these are the failure modes to design against, not fixed 
 - Later: macOS universal (arm64 + x86_64); Authenticode signing on Windows.
 
 - Both release zips carry `LICENSE`, `THIRD_PARTY_NOTICES.md` and `THIRD_PARTY_LICENSES.txt` (gathered by `scripts/third-party-licences.sh`).
-- `check.yml` also runs the page's tests (`npm test` in `ui/`), ASan + UBSan on every run and TSan nightly, and `dco.yml` checks every commit of a pull request for its sign-off.
+- `check.yml` also runs the page's tests (`npm test` in `ui/`), ASan + UBSan on every run and TSan nightly, and `dco.yml`, the one check a pull request must pass before merging, looks at every commit for its sign-off.
