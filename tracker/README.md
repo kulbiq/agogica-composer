@@ -4,7 +4,7 @@ A small desktop app (macOS, Windows) that follows the listener's head with the c
 No network: the page and the models are the app's own files, and video never leaves the computer.
 
 CMake target `ComposerTracker`; the build is `tracker/CMakeLists.txt`.
-History and measurements: `NOTES.md`.
+History and measurements: `docs/tracker-history.md`.
 Model sources and licences: `models/MODELS.md` (the pose model's weights have no stated licence: check before shipping).
 
 ## How a frame becomes sound
@@ -67,7 +67,7 @@ A pose is written when a frame has been processed or a button was pressed.
 
 `Source/stage/HeadTrackingFile.h` is the contract; the plugin's reader and `tools/fake_tracker.py` use the same one.
 
-- 64 bytes, memory-mapped, at `~/Library/Application Support/Agogica/head-tracking` (Windows: `%LOCALAPPDATA%\Agogica\head-tracking`); `AGOGICA_HEAD_TRACKING_FILE` overrides it.
+- 64 bytes (the Tracker maps it and writes in place; Composer copies it out with ordinary reads), at `~/Library/Application Support/Agogica/head-tracking` (Windows: `%LOCALAPPDATA%\Agogica\head-tracking`); `AGOGICA_HEAD_TRACKING_FILE` overrides it.
 - A seqlock: the sequence number is odd while a write is in progress.
 - One writer at a time (so not the app and `fake_tracker.py` together).
 - Created once at its final size and then only written in place.

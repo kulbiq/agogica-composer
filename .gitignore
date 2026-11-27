@@ -21,3 +21,6 @@ SAMPLE_SCORES/
 *.p8
 *.pem
 *.mobileprovision
+
+# Editor settings are each developer's own
+.vscode/

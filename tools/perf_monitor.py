@@ -23,7 +23,7 @@ Ctrl+C (or --seconds N) stops it and appends one line with those figures to --cs
 one line per reading instead.
 
 It cannot split the host's numbers into "the host" and "Composer's audio": for that, the
-plugin's own load readout (Alt+click the version in the editor footer) and
+plugin's own load readout (Alt+click the version in the editor's settings) and
 `build/release/ComposerTests "[perf]" -s` are the tools. Compare runs of the same project
 with and without the thing you changed, each for a minute or more: single 30 s readings
 of the same setup differed by several points.

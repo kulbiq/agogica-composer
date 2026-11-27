@@ -4,7 +4,8 @@
 
 namespace stage
 {
-// Everything the map needs, as a JSON-able var. Positions are clamped to the room;
-// derived values (distance, azimuth, pan, delay) come from dsp/Geometry.h.
+// Everything the page draws, as a JSON-able var: positions clamped to the room, names, scenes,
+// and the ranges and defaults of the settings it has controls for. No acoustic values: the
+// page does no audio maths and shows none.
 juce::var snapshot (ComposerProcessor& self);
 } // namespace stage
