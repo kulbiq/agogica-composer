@@ -24,9 +24,7 @@ jobs:
           node-version: 22
       # JUCE links WebView2 statically on Windows and looks for the NuGet package.
       - run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
-      # The key of the usage-data project (public, write-only; empty in forks: nothing is ever sent).
-      - if: vars.COMPOSER_TELEMETRY_KEY == ''
-        run: echo "::warning::COMPOSER_TELEMETRY_KEY (a repository variable) is not set - this build never asks about usage data and never sends any."
+      # The key of the usage-data project (public, write-only). Not set: the build has no usage data at all - no question, no request.
       - run: cmake --preset release "-DCOMPOSER_TELEMETRY_KEY=${{ vars.COMPOSER_TELEMETRY_KEY }}"
       - run: cmake --build --preset release --target Composer_VST3 ComposerTests
       # The build that ships is tested too: the fast set and pluginval (strictness 10).
