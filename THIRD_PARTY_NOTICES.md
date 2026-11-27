@@ -31,7 +31,7 @@ Agogica Tracker is not part of the released plugin and is not covered here (see 
 
 | Work | Licence | Text |
 |---|---|---|
-| Microsoft Edge WebView2 SDK (the loader, linked statically) | BSD-3-Clause (as published; to be confirmed from the package on the first Windows release build, which copies its text) | `LICENSE.txt` in the `Microsoft.Web.WebView2` NuGet package |
+| Microsoft Edge WebView2 SDK (the loader, linked statically) | BSD-3-Clause | `LICENSE.txt` in the `Microsoft.Web.WebView2` NuGet package |
 
 ## Sound data
 
