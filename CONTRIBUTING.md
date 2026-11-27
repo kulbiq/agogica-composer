@@ -21,7 +21,7 @@ ctest --preset debug -LE slow        # the fast C++ tests
 (cd ui && npm test)                  # the page's tests
 ```
 
-Before a pull request, also run what touches your change:
+The macOS and Windows checks run on `main` after merging, not on pull requests, so run what touches your change yourself before a pull request:
 - `ctest --preset debug` (everything, the slow cases included);
 - `cmake --preset asan && cmake --build --preset asan && ctest --preset asan` (and `tsan`) for C++ changes;
 - `scripts/pluginval.sh` on macOS (auval and pluginval at strictness 10) for anything in the plugin;
