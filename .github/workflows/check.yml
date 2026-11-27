@@ -37,7 +37,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: cmake --preset ${{ matrix.preset }} -DCOMPOSER_TRACKER_SKIP_MODELS=ON
+      - run: cmake --preset ${{ matrix.preset }}
       - run: cmake --build --preset ${{ matrix.preset }}
       - run: ctest --preset ${{ matrix.preset }} ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
 
@@ -62,14 +62,12 @@ jobs:
       # JUCE links WebView2 statically on Windows and looks for the NuGet package.
       - if: runner.os == 'Windows'
         run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
-      - run: cmake --preset debug -DCOMPOSER_TRACKER_SKIP_MODELS=ON
+      - run: cmake --preset debug
       - run: cmake --build --preset debug --target ComposerTests
       # The page's own tests (the build above installed its packages and type-checked it).
       - run: npm test
         working-directory: ui
       - run: ctest --preset debug ${{ github.event_name == 'schedule' && ' ' || '-LE slow' }}
-      # The Tracker has no other check on Windows: the owner builds on a Mac.
-      - run: cmake --build --preset debug --target ComposerTracker
       # pluginval (strictness 10): loading, state, parameters, bus layouts, threading and the DSP.
       - if: runner.os == 'macOS'
         run: cmake --build --preset debug --target Composer_VST3 Composer_AU && scripts/pluginval.sh
@@ -83,3 +81,25 @@ jobs:
         with:
           name: Composer-vst3-windows-debug
           path: build/debug/Composer_artefacts/Debug/VST3 # the folder, so the zip root is Composer.vst3
+
+  # Agogica Tracker compiles and links on both systems, without its models (it can't track
+  # here; its pure code is in the test set). Its own job, not required for merging: it needs
+  # ONNX Runtime's download, which is not ours to keep working.
+  tracker:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # JUCE
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: runner.os == 'Windows'
+        run: nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"
+      - run: cmake --preset debug -DCOMPOSER_BUILD_TRACKER=ON -DCOMPOSER_TRACKER_SKIP_MODELS=ON
+      - run: cmake --build --preset debug --target ComposerTracker

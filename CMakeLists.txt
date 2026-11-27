@@ -200,6 +200,10 @@ if(COMPOSER_BUILD_TESTS)
 endif()
 
 # --- Agogica Tracker (head tracking companion app): tracker/CMakeLists.txt ----
-if(APPLE OR WIN32)
+# Off by default: the plugin is the product and builds with nothing downloaded but Catch2; the
+# Tracker fetches ONNX Runtime (and its models, unless COMPOSER_TRACKER_SKIP_MODELS).
+option(COMPOSER_BUILD_TRACKER "Also build Agogica Tracker (fetches ONNX Runtime and the models)" OFF)
+
+if(COMPOSER_BUILD_TRACKER AND (APPLE OR WIN32))
     add_subdirectory(tracker)
 endif()

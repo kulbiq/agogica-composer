@@ -199,6 +199,7 @@ Solutions may differ - these are the failure modes to design against, not fixed 
 ## Dev workflow
 - `ui/`: `npm run dev` serves on localhost; configuring with `-DCOMPOSER_UI_DEV_SERVER=ON` makes Debug builds load the page from the Vite dev server (hot reload inside the plugin/Standalone).
   Release builds always use the embedded zip.
+- The Tracker is built only with `-DCOMPOSER_BUILD_TRACKER=ON` (it fetches ONNX Runtime, and its models unless `-DCOMPOSER_TRACKER_SKIP_MODELS=ON`); the plugin's build downloads nothing but Catch2.
 - `cmake --preset debug && cmake --build --preset debug` builds Standalone + VST3 + AU and rebuilds the UI zip when `ui/` changes; run in AudioPluginHost and at least one real DAW before calling a feature done.
 - Install to **per-user plugin folders** (no admin): macOS `~/Library/Audio/Plug-Ins/VST3` and `/Components`, Windows `%LOCALAPPDATA%\Programs\Common\VST3`. The Tracker installs itself only on macOS (`~/Applications`); on Windows it runs from the build folder for now. The MSVC runtime is linked statically. Building on Windows needs the WebView2 SDK NuGet package where JUCE looks for it: `nuget install Microsoft.Web.WebView2 -OutputDirectory "$env:USERPROFILE\AppData\Local\PackageManagement\NuGet\Packages"`. `COPY_PLUGIN_AFTER_BUILD` does this.
 
@@ -211,7 +212,8 @@ Solutions may differ - these are the failure modes to design against, not fixed 
 - After rebuilding, quit the host completely (Dorico's audio engine keeps the old plugin loaded).
 
 ## Release & CI
-- `.github/workflows/check.yml` builds `ComposerTests` and runs `ctest --preset debug -LE slow` on every push and pull request (everything, `[slow]` included, nightly), then pluginval 10 (and auval on macOS), on macOS and Windows; the Tracker is compiled and linked there without its models (`COMPOSER_TRACKER_SKIP_MODELS`), nothing is signed.
+- `.github/workflows/check.yml` builds `ComposerTests` and runs `ctest --preset debug -LE slow` on every push and pull request (everything, `[slow]` included, nightly), then pluginval 10 (and auval on macOS), on macOS and Windows; nothing is signed.
+  The Tracker is compiled and linked without its models in a job of its own (`tracker`), which is not required for merging: it depends on ONNX Runtime's download.
   The Windows job uploads the Debug VST3 for trying on a PC.
 - Releases: tag `vX.Y.Z` (a suffix such as `-beta.1` makes a GitHub pre-release); `.github/workflows/windows-release.yml` builds the Release VST3 zip on the tag and attaches it (unsigned) to the GitHub release; `scripts/release-macos.sh --publish`, run on a Mac with the Developer ID, adds the signed and notarized macOS zip from the clean, tagged commit.
   Keep `ui/src/devMock.ts` able to show a full stage: the README's screenshot (`docs/images/composer.png`) is made from it.
