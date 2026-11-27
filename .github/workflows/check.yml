@@ -36,7 +36,7 @@ jobs:
       matrix:
         preset: ${{ github.event_name == 'schedule' && fromJSON('["asan", "tsan"]') || fromJSON('["asan"]') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive # JUCE
       - uses: actions/setup-node@v4
@@ -54,7 +54,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive # JUCE
       - uses: actions/setup-node@v4
@@ -98,7 +98,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive # JUCE
       - uses: actions/setup-node@v4
