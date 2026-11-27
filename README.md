@@ -32,7 +32,9 @@ Dorico and MuseScore cannot give an instrument's name to an effect plugin (Doric
 ## Install
 
 Releases are on the [releases page](https://github.com/kulbiq/agogica-composer/releases).
-Unzip, then copy:
+
+On macOS, open the installer (`.pkg`): it puts the VST3 and the Audio Unit into your own plug-in folders, and asks for no password.
+Or take the zip, on either system; unzip, then copy:
 
 | | File | To |
 |---|---|---|
@@ -41,7 +43,7 @@ Unzip, then copy:
 | Windows | `Composer.vst3` | `%LOCALAPPDATA%\Programs\Common\VST3` |
 
 Then restart the host and add Composer as an insert effect on every track that should stand on the stage.
-The Windows build is not signed yet, so Windows may ask before running it.
+The macOS builds are signed and notarized; the Windows build is not signed yet, so Windows may ask before running it.
 
 ### Requirements
 

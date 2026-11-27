@@ -1,5 +1,6 @@
 #!/bin/sh
-# Builds the signed, notarized macOS zip and, when asked, attaches it to the GitHub release.
+# Builds the signed, notarized macOS zip and installer and, when asked, attaches them to the
+# GitHub release.
 #
 #   scripts/release-macos.sh                 # version from the vX.Y.Z tag on HEAD; builds the zip
 #   scripts/release-macos.sh --publish       # also uploads it to the GitHub release of that tag
@@ -9,6 +10,8 @@
 # The zip holds the bundles at its root, to be copied to the per-user folders:
 #   Composer.vst3 -> ~/Library/Audio/Plug-Ins/VST3, Composer.component -> ~/Library/Audio/Plug-Ins/Components
 # and the licence texts next to them.
+# The installer (.pkg, made by scripts/macos-pkg.sh when INSTALLER_IDENTITY is set) puts the same
+# bundles into those folders for the current user, without an admin password.
 # A tag with a suffix (v0.1.0-beta.1) makes a GitHub pre-release.
 # TRACKER=1 adds Agogica Tracker.app (-> ~/Applications). Off by default: the head-pose model's
 # weights have no stated licence yet (tracker/models/MODELS.md), so a build with them isn't
@@ -18,6 +21,8 @@
 #
 # Signing: SIGN_IDENTITY, a "Developer ID Application: ..." identity from the Keychain
 # (hardened runtime, secure timestamp).
+# INSTALLER_IDENTITY, a "Developer ID Installer: ..." identity, signs the installer; without it
+# only the zip is made.
 # Notarization: APPLE_API_KEY + APPLE_API_ISSUER + APPLE_API_KEY_PATH, else NOTARY_PROFILE
 # (a `notarytool store-credentials` profile); NOTARIZE=0 skips it for a local test build.
 set -eu
@@ -104,16 +109,19 @@ if [ "${NOTARIZE:-1}" != 0 ]; then
   else
     set -- --keychain-profile "${NOTARY_PROFILE:?set NOTARY_PROFILE (or APPLE_API_KEY...), or NOTARIZE=0 for a local test}"
   fi
-  ditto -c -k "$STAGE" "$OUT/notarize.zip"
-  # Its own exit status is looked at below, with what it said: a refusal must show its reason.
-  RESULT=$(xcrun notarytool submit "$OUT/notarize.zip" "$@" --wait --output-format plist) || true
-  rm -f "$OUT/notarize.zip"
-  STATUS=$(echo "$RESULT" | plutil -extract status raw -o - - 2>/dev/null || true)
-  [ "$STATUS" = Accepted ] || {
-    echo "Notarization failed (status '$STATUS'): $RESULT" >&2
-    echo "Log: xcrun notarytool log <id> (same credentials)" >&2
-    exit 1
+  notarize() { # <file> <credentials...>
+    # Its own exit status is looked at below, with what it said: a refusal must show its reason.
+    RESULT=$(xcrun notarytool submit "$@" --wait --output-format plist) || true
+    STATUS=$(echo "$RESULT" | plutil -extract status raw -o - - 2>/dev/null || true)
+    [ "$STATUS" = Accepted ] || {
+      echo "Notarization of $1 failed (status '$STATUS'): $RESULT" >&2
+      echo "Log: xcrun notarytool log <id> (same credentials)" >&2
+      exit 1
+    }
   }
+  ditto -c -k "$STAGE" "$OUT/notarize.zip"
+  notarize "$OUT/notarize.zip" "$@"
+  rm -f "$OUT/notarize.zip"
   # Staple the ticket into each bundle so Gatekeeper can check it offline, then ask Gatekeeper
   # itself: what a user's Mac will say about each bundle.
   for b in "$STAGE"/*; do
@@ -130,6 +138,24 @@ fi
 # The licence texts go with the binaries (after signing and stapling: they aren't code).
 cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE/"
 scripts/third-party-licences.sh "$STAGE/THIRD_PARTY_LICENSES.txt"
+
+# The installer carries the stapled bundles and the licence texts; it is notarized and stapled
+# itself, and Gatekeeper is asked about it too.
+PKG="$OUT/$NAME.pkg"
+rm -f "$PKG" "$PKG.sha256"
+if [ -n "${INSTALLER_IDENTITY:-}" ] && [ "$TRACKER" = 0 ]; then
+  scripts/macos-pkg.sh "$STAGE" "$PKG" "$VERSION" "$INSTALLER_IDENTITY"
+  if [ "${NOTARIZE:-1}" != 0 ]; then
+    notarize "$PKG" "$@"
+    xcrun stapler staple -q "$PKG"
+    xcrun stapler validate -q "$PKG"
+    spctl --assess --type install "$PKG"
+  fi
+  (cd "$OUT" && shasum -a 256 "$NAME.pkg" > "$NAME.pkg.sha256")
+  echo "$PKG"
+else
+  echo "  no installer (INSTALLER_IDENTITY is not set, or TRACKER=1)"
+fi
 
 # No --keepParent: the bundles sit at the zip root.
 ditto -c -k --sequesterRsrc "$STAGE" "$ZIP"
@@ -151,6 +177,7 @@ if [ $PUBLISH = 1 ]; then
     }
   fi
   gh release upload --clobber "v$VERSION" "$ZIP" "$ZIP.sha256"
+  [ ! -f "$PKG" ] || gh release upload --clobber "v$VERSION" "$PKG" "$PKG.sha256"
   echo "  attached to the GitHub release v$VERSION"
 else
   echo "  not published (--publish attaches it to the GitHub release)"
