@@ -64,7 +64,7 @@ jobs:
           node-version: 22
           cache: npm # the packages come from the cache: a build doesn't hang on the registry
           cache-dependency-path: "**/package-lock.json"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: build/debug/_deps
           key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'tracker/CMakeLists.txt') }}
