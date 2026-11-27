@@ -25,7 +25,7 @@ Measurements name the model and machine they were taken with: several predate th
 - First model load on an M4 Pro took 7.6 s (CoreML compiling), later loads about 1.5 s; the first frame another 2.5 s.
 - Open: the timestamp in the file is the time of writing.
   Making it the frame's capture time would let Composer see latency, but shipped plugins call a pose stale after 500 ms, and a slow PC (about 9 frames a second) would come close to that; measure on Windows first.
-- `COMPOSER_TRACKER_DIRECTML` (ONNX Runtime 1.24.4 + DirectML) was removed; it is in git history (last in 4c7a5b4).
+- `COMPOSER_TRACKER_DIRECTML` (ONNX Runtime 1.24.4 + DirectML) was removed; it is in git history.
 
 ## Before the restructuring (moved from CLAUDE.md as it stood; file and class names are the old ones)
 

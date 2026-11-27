@@ -55,7 +55,7 @@ What is true today is in [DEVELOPMENT.md](DEVELOPMENT.md).
 - **Stage 1 of the CPU work (2026-11-14): the chain is `DirectPath` alone.**
   32 binaural players at 96 kHz took 7 of 8 cores of the Windows laptop in REAPER, and reflections + tail were most of it.
   Then (2026-11-15) everything unused went too: `EarlyReflections` (10 image sources, diffused and filtered per surface), `ReverbTail` (8-line FDN), the `hall` parameter and its UI picker, the Pro reflection/reverb parameters and sliders, the short HRIRs, and their tests.
-  Git history has them (last in b8c85d8) for when reflections come back, rebuilt for CPU; a project saved with them still loads (unknown parameters are ignored).
+  Git history has them for when reflections come back, rebuilt for CPU; a project saved with them still loads (unknown parameters are ignored).
   The tail is now the longest delay (`History::maxDelaySeconds`, 0.85 s: the largest room's diagonal stretched 4x); with the reverb it was 10 s (Church at Pro decay x2).
   CPU before this (whole chain, release, `ComposerTests "[perf]" -s`): 32 players ≈ 11 % stereo / 22 % binaural of one core at 48 kHz; a turning head ~1.5x in binaural: 33 % at 48 kHz, 104 % at 96 kHz (M4 Pro, 2026-11-12).
   Windows (i5-10210U laptop on mains power, 2026-11-14, median of 3): 40 % stereo / 75 % binaural / 128 % binaural with a turning head at 48 kHz, 81 / 212 / 375 % at 96 kHz.
@@ -74,10 +74,10 @@ What is true today is in [DEVELOPMENT.md](DEVELOPMENT.md).
   Composer's own path is fast: the UI's `edit` round trip took 0.7 ms with 32 instances, the map showed the change ~25 ms later (editor timer), and the sound turns within 20 ms.
 
 ## Milestones as they were reached
-- M0 done (commit 5d6b2ae): CMake skeleton, VST3/AU/Standalone, embedded UI zip, auval + pluginval 10 pass, checked in Dorico 6 and Ableton Live 12.
-- M1 done (commit 54680de): `roomSize` param ↔ UI slider, native `getBuildInfo`, C++ → UI `inputLevel` event (atomic peak, 30 Hz timer started on `pageFinishedLoading`), dev-server mode, Catch2 tests.
+- M0 done: CMake skeleton, VST3/AU/Standalone, embedded UI zip, auval + pluginval 10 pass, checked in Dorico 6 and Ableton Live 12.
+- M1 done: `roomSize` param ↔ UI slider, native `getBuildInfo`, C++ → UI `inputLevel` event (atomic peak, 30 Hz timer started on `pageFinishedLoading`), dev-server mode, Catch2 tests.
   Checked in Dorico 6 (bridge, level); after a rebuild, DAWs must be fully quit - Dorico's VSTAudioEngine keeps the old binary loaded.
-- M2b done (commit 75b60ca).
-- M3 done (commit fbe128b).
-- M3b done (commit fcbb509).
-- M2a done (commit 23b230f): stage map (`ui/src/StageMap.tsx`) + side panel for this instance's player, listener and room; `dsp/Geometry.h` derived values; `npm run dev` in a plain browser uses `ui/src/devMock.ts` (6 fake players).
+- M2b done.
+- M3 done.
+- M3b done.
+- M2a done: stage map (`ui/src/StageMap.tsx`) + side panel for this instance's player, listener and room; `dsp/Geometry.h` derived values; `npm run dev` in a plain browser uses `ui/src/devMock.ts` (6 fake players).
