@@ -133,7 +133,7 @@ endif()
 function(composer_npm_ci dir)
     add_custom_command(
         OUTPUT ${dir}/node_modules/.package-lock.json
-        COMMAND ${NPM} ci --no-audit --no-fund
+        COMMAND ${NPM} ci --no-audit --no-fund --prefer-offline
         COMMAND ${CMAKE_COMMAND} -E touch ${dir}/node_modules/.package-lock.json
         WORKING_DIRECTORY ${dir}
         DEPENDS ${dir}/package.json ${dir}/package-lock.json

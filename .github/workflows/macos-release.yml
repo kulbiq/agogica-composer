@@ -34,6 +34,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm # the packages come from the cache: a build doesn't hang on the registry
+          cache-dependency-path: "**/package-lock.json"
       # The certificates go into a keychain that exists for this run only.
       - name: Signing keys
         env:
